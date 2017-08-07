@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "allowUnreachableCode": false,
+    // "isolatedModules": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    // "noUnusedLocals": true,
+    // "noUnusedParameters": true,
+    "preserveConstEnums": true,
+    // "removeComments": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "alwaysStrict": true,
+    "allowSyntheticDefaultImports": true,
+
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "newLine": "LF",
+    "target": "es2017",
+    "sourceMap": true,
+    "lib": [
+      "dom",
+      "es2017"
+    ],
+    "baseUrl": "src",
+    "outDir": "out",
+    "pretty": true
+  },
+  "include": [
+    "src/**/*.ts"
+  ]
+}

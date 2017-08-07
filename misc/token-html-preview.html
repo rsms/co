@@ -1,0 +1,563 @@
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Scanner</title>
+    <style type="text/css" id="token-names"></style>
+    <style type="text/css">
+
+body {
+  font: 13px/1.2 -ui-system, -system, sans-serif;
+  background: #666;
+  color: #111;
+  margin:0;
+  padding:0;
+}
+
+h2 {
+  font-size: inherit;
+}
+
+#files {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: space-evenly;
+  align-items: flex-start;
+  margin:1em 0;
+}
+
+.file {
+  flex:0 1 48%;
+  min-width:320px;
+  margin-bottom: 1em;
+  /*box-sizing: border-box;
+  border-left: 10px solid #eee;*/
+  background: white;
+  border-radius:4px;
+  overflow: hidden;
+}
+
+.file > * {
+  margin: 0 0;
+}
+
+.file h2 {
+  /*border-bottom: 2px solid #ccc;
+  padding-bottom:0.5em;*/
+  background: #222;
+  color: white;
+  padding: 0.5em;
+}
+
+.file .errors {
+  /*padding:1em 1em 1px 1em;*/
+  display: flex;
+  flex-direction: column;
+}
+.file .errors a {
+  margin-top:2px;
+  display: flex;
+  justify-content: space-between;
+  color: inherit;
+  text-decoration: inherit;
+  padding: 1em;
+  background: rgba(255,40,0,0.3);
+}
+.file .errors a:hover {
+  background: rgba(255,40,0,0.4);
+}
+
+.file .errors .pos {
+  margin-left:1em;
+  font-family: Inconsolata, Consolas, SF Mono, monospace;
+}
+
+.file code {
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  justify-content: flex-start;
+  align-items: center;
+  font-family: Inconsolata, Consolas, SF Mono, monospace;
+}
+.file code > .newline {
+  height:1px;
+  background: #eee;
+  flex: 1 0 100%;
+  width: 100%;
+}
+.file code > .newline:last-child {
+  display: none;
+}
+.file code > .newline.implicit {
+  visibility: hidden;
+}
+
+.file code > span {
+  display: inline-block;
+  white-space: pre;
+  padding: 0.1em 0.3em;
+  margin: 0.2em;
+  /*background: #ddd;*/
+  border-radius:2px;
+}
+
+.tok-COMMENT {
+  color: rgba(0,0,0,0.4);
+  background: #eee;
+}
+
+.tok-ILLEGAL {
+  color: white;
+  background: #ee1100;
+}
+
+.tok.implicit, .tok-SEMICOLON {
+  color: rgba(0,0,0,0.4);
+  background: none;
+  box-sizing: border-box;
+  border: 1px dotted #aaa;
+}
+.tok-SEMICOLON {
+  border: none;
+}
+
+.tok.keyword {
+  font-weight:bold;
+  /*color: white;
+  background: #00A0FF;*/
+}
+
+.tok-endline {
+  align-self: flex-end;
+  flex: 1 1 auto;
+  text-align: right;
+}
+
+    </style>
+  </head>
+  <body>
+    <div id="files"></div>
+<script>
+
+let filesEl = document.querySelector('#files')
+let lastVersion = ''
+
+let tokenTypes = new Set()
+let tokenColors = new Map()
+let tokenColorsInv = new Map()
+
+function colorForTokenName(tokenName) {
+  let cssVal = tokenColors.get(tokenName)
+  if (cssVal) {
+    return cssVal
+  }
+  
+  let c, hash = fnv1a(tokenName)
+  while (true) {
+    c = htmlColors[hash % htmlColors.length]
+    if (!tokenColorsInv.has(c[0])) {
+      break
+    }
+    hash++
+  }
+  tokenColorsInv.set(c[0], tokenName)
+
+  let rgbstr = c[1]
+  let [h, s, l] = rgbToHsl(
+    parseInt(rgbstr.substr(1,2), 16),
+    parseInt(rgbstr.substr(3,2), 16),
+    parseInt(rgbstr.substr(5,2), 16),
+  )
+
+  // clamp saturation and lightness
+  s = Math.max(0.2, Math.min(s, 0.7))
+  l = Math.max(0.85, Math.min(l, 0.92))
+
+  cssVal = `hsl(${(h * 359).toFixed(2)}, ${s * 100}%, ${l * 100}%)`
+  console.log('color', tokenName, '=>', c[0], cssVal)
+  tokenColors.set(tokenName, cssVal)
+  return cssVal
+}
+
+function utf8encodestr(cp) {
+  if (cp < 0x10000) {
+    return String.fromCharCode(cp)
+  }
+  cp -= 0x10000
+  return String.fromCharCode((cp >> 10) + 0xD800, (cp % 0x400) + 0xDC00)
+}
+
+function reprstr(s) {
+  s = JSON.stringify(s)
+  return s.substr(1, s.length - 2)
+}
+
+function update(files) {
+  console.log('update files', files)
+
+  let newTokenTypes = new Set()
+  filesEl.innerText = ''
+  filesEl.display = 'none'
+
+  for (const file of files) {
+    let fileEl = document.createElement("div")
+    fileEl.className = 'file'
+    filesEl.appendChild(fileEl)
+
+    let h2El = document.createElement("h2")
+    h2El.innerText = file.name
+    fileEl.appendChild(h2El)
+
+    if (file.errors && file.errors.length) {
+      let errorsEl = document.createElement("div")
+      errorsEl.className = 'errors'
+      for (const e of file.errors) {
+        let errorEl = document.createElement("a")
+        errorEl.href = '#T' + e.posstr
+
+        let errorMsgEl = document.createElement("span")
+        errorMsgEl.className = 'msg'
+        errorMsgEl.innerText = e.message
+        errorEl.appendChild(errorMsgEl)
+        
+        let errorPosEl = document.createElement("span")
+        errorPosEl.className = 'pos'
+        errorPosEl.innerText = e.posstr
+        errorEl.appendChild(errorPosEl)
+        
+        errorsEl.appendChild(errorEl)
+      }
+      fileEl.appendChild(errorsEl)
+    }
+
+    let codeEl = document.createElement("code")
+    fileEl.appendChild(codeEl)
+
+    for (let t of file.tokens) {
+
+      let isImplicit = false
+
+      if (t.type == 'SEMICOLON') {
+        if (t.value) {
+          isImplicit = true
+        }
+        if (t.value == '\n') {
+          t.value = ';\n'
+        } else {
+          t.value = ';'
+        }
+      } else if (t.type == 'COMMENT' && t.value.startsWith('//')) {
+        t.value += '\n'
+      }
+
+      let insertNewlines = 0
+
+      if (t.value !== null && t.value !== undefined) {
+        if (t.type.includes('STRING')) {
+          t.value = reprstr(t.value)
+        } else if (typeof t.value == 'number') {
+          t.value = reprstr(utf8encodestr(t.value))
+        } else {
+          t.value = t.value.replace(/^\n+|\n+$/g, (a, b, c) => {
+            ++insertNewlines
+            return ''
+          })
+          if (t.type.startsWith('SEMICOLON')) {
+            t.value = t.value.trim('\n')
+          }
+        }
+      }
+
+      let tokEl = document.createElement("span")
+      tokEl.innerText = t.value || t.name
+      tokEl.className = 'tok tok-' + t.type
+      if (isImplicit) {
+        tokEl.className += ' implicit'
+      }
+      if (t.isKeyword) {
+        tokEl.className += ' keyword'
+      }
+      tokEl.id = 'T' + t.posstr
+      tokEl.title = (
+        t.type + ' ' +
+        (isImplicit ? '(implicit) ' : '') +
+        (t.position.line ? `${t.position.line}:${t.position.column}` : '?')
+      )
+      codeEl.appendChild(tokEl)
+
+      if ((t.type == 'SEMICOLON' && !isImplicit) ||
+          (t.type == 'COMMENT' && t.value.includes('\n')))
+      {
+        let nlEl = document.createElement("div")
+        nlEl.className = 'newline implicit'
+        codeEl.appendChild(nlEl)
+      }
+
+      // if (insertNewlines) {
+      //   let endlineTokEl = document.createElement("span")
+      //   endlineTokEl.className = 'tok tok-endline'
+      //   let lineLabel = ''
+      //   if (t.position.filename != file.name) {
+      //     lineLabel = t.position.filename
+      //   }
+      //   if (t.position.line) {
+      //     if (lineLabel) {
+      //       lineLabel += ':'
+      //     }
+      //     lineLabel += t.position.line.toString()
+      //   }
+      //   endlineTokEl.innerText = lineLabel
+      //   codeEl.appendChild(endlineTokEl)
+
+      //   let nlEl = document.createElement("div")
+      //   nlEl.className = 'newline'
+      //   nlEl.id = 'L' + lineLabel
+      //   codeEl.appendChild(nlEl)
+      // }
+
+      if (!tokenTypes.has(t.type)) {
+        tokenTypes.add(t.type)
+        newTokenTypes.add(t.type)
+      }
+    }
+  }
+
+  filesEl.display = null
+
+  if (newTokenTypes.size) {
+    let s = document.querySelector('style#token-names').sheet
+    let index = s.cssRules.length
+    // const names = Array.from(tokenTypes).sort()
+    for (const tokenName of newTokenTypes) {
+      let color = colorForTokenName(tokenName)
+      s.insertRule(`
+        .tok-${tokenName} {
+          background-color: ${color};
+        }
+      `, index++)
+    }
+  }
+}
+
+function poll(rebuild) {
+  const url = `/poll?version=${lastVersion}`
+  fetch(url).then(r => r.json()).then(r => {
+    if (r) {
+      lastVersion = r.version
+      try {
+        update(r.files)
+      } catch (err) {
+        console.error(err.stack || err)
+      }
+    }
+    setTimeout(poll, 500)
+  }).catch(_ => {
+    setTimeout(poll, 500)
+  })
+}
+
+function idColor(str, hue_count, sat_count) {
+  return indexColor(fnv1a(str), hue_count, sat_count)
+}
+
+function indexColor(index, size=400, sat_count=100) {
+  const brightness = 0.9
+  const sat_strength = 0.2
+  const sat_base = 0.4
+
+  const hue = (index % size) / size
+  const sat = (((index % sat_count) / sat_count) * sat_strength) + sat_base
+
+  return `hsl(${hue * 359}, ${sat * 100}%, ${brightness * 100}%)`
+}
+
+function rgbToHsl(r, g, b) {
+  r /= 255, g /= 255, b /= 255;
+  var max = Math.max(r, g, b), min = Math.min(r, g, b);
+  var h, s, l = (max + min) / 2;
+
+  if (max == min) {
+    h = s = 0; // achromatic
+  } else {
+    var d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+
+    switch (max) {
+      case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+      case g: h = (b - r) / d + 2; break;
+      case b: h = (r - g) / d + 4; break;
+    }
+
+    h /= 6;
+  }
+
+  return [ h, s, l ];
+}
+
+const htmlColors = [
+  ['aliceblue', '#f0f8ff'],
+  ['antiquewhite', '#faebd7'],
+  ['aqua', '#00ffff'],
+  ['aquamarine', '#7fffd4'],
+  ['azure', '#f0ffff'],
+  ['beige', '#f5f5dc'],
+  ['bisque', '#ffe4c4'],
+  ['black', '#000000'],
+  ['blanchedalmond', '#ffebcd'],
+  ['blue', '#0000ff'],
+  ['blueviolet', '#8a2be2'],
+  ['brown', '#a52a2a'],
+  ['burlywood', '#deb887'],
+  ['cadetblue', '#5f9ea0'],
+  ['chartreuse', '#7fff00'],
+  ['chocolate', '#d2691e'],
+  ['coral', '#ff7f50'],
+  ['cornflowerblue', '#6495ed'],
+  ['cornsilk', '#fff8dc'],
+  ['crimson', '#dc143c'],
+  ['cyan', '#00ffff'],
+  ['darkblue', '#00008b'],
+  ['darkcyan', '#008b8b'],
+  ['darkgoldenrod', '#b8860b'],
+  ['darkgray', '#a9a9a9'],
+  ['darkgrey', '#a9a9a9'],
+  ['darkgreen', '#006400'],
+  ['darkkhaki', '#bdb76b'],
+  ['darkmagenta', '#8b008b'],
+  ['darkolivegreen', '#556b2f'],
+  ['darkorange', '#ff8c00'],
+  ['darkorchid', '#9932cc'],
+  ['darkred', '#8b0000'],
+  ['darksalmon', '#e9967a'],
+  ['darkseagreen', '#8fbc8f'],
+  ['darkslateblue', '#483d8b'],
+  ['darkslategray', '#2f4f4f'],
+  ['darkslategrey', '#2f4f4f'],
+  ['darkturquoise', '#00ced1'],
+  ['darkviolet', '#9400d3'],
+  ['deeppink', '#ff1493'],
+  ['deepskyblue', '#00bfff'],
+  ['dimgray', '#696969'],
+  ['dimgrey', '#696969'],
+  ['dodgerblue', '#1e90ff'],
+  ['firebrick', '#b22222'],
+  ['floralwhite', '#fffaf0'],
+  ['forestgreen', '#228b22'],
+  ['fuchsia', '#ff00ff'],
+  ['gainsboro', '#dcdcdc'],
+  ['ghostwhite', '#f8f8ff'],
+  ['gold', '#ffd700'],
+  ['goldenrod', '#daa520'],
+  ['gray', '#808080'],
+  ['grey', '#808080'],
+  ['green', '#008000'],
+  ['greenyellow', '#adff2f'],
+  ['honeydew', '#f0fff0'],
+  ['hotpink', '#ff69b4'],
+  ['indianred', '#cd5c5c'],
+  ['indigo', '#4b0082'],
+  ['ivory', '#fffff0'],
+  ['khaki', '#f0e68c'],
+  ['lavender', '#e6e6fa'],
+  ['lavenderblush', '#fff0f5'],
+  ['lawngreen', '#7cfc00'],
+  ['lemonchiffon', '#fffacd'],
+  ['lightblue', '#add8e6'],
+  ['lightcoral', '#f08080'],
+  ['lightcyan', '#e0ffff'],
+  ['lightgoldenrodyellow', '#fafad2'],
+  ['lightgray', '#d3d3d3'],
+  ['lightgrey', '#d3d3d3'],
+  ['lightgreen', '#90ee90'],
+  ['lightpink', '#ffb6c1'],
+  ['lightsalmon', '#ffa07a'],
+  ['lightseagreen', '#20b2aa'],
+  ['lightskyblue', '#87cefa'],
+  ['lightslategray', '#778899'],
+  ['lightslategrey', '#778899'],
+  ['lightsteelblue', '#b0c4de'],
+  ['lightyellow', '#ffffe0'],
+  ['lime', '#00ff00'],
+  ['limegreen', '#32cd32'],
+  ['linen', '#faf0e6'],
+  ['magenta', '#ff00ff'],
+  ['maroon', '#800000'],
+  ['mediumaquamarine', '#66cdaa'],
+  ['mediumblue', '#0000cd'],
+  ['mediumorchid', '#ba55d3'],
+  ['mediumpurple', '#9370db'],
+  ['mediumseagreen', '#3cb371'],
+  ['mediumslateblue', '#7b68ee'],
+  ['mediumspringgreen', '#00fa9a'],
+  ['mediumturquoise', '#48d1cc'],
+  ['mediumvioletred', '#c71585'],
+  ['midnightblue', '#191970'],
+  ['mintcream', '#f5fffa'],
+  ['mistyrose', '#ffe4e1'],
+  ['moccasin', '#ffe4b5'],
+  ['navajowhite', '#ffdead'],
+  ['navy', '#000080'],
+  ['oldlace', '#fdf5e6'],
+  ['olive', '#808000'],
+  ['olivedrab', '#6b8e23'],
+  ['orange', '#ffa500'],
+  ['orangered', '#ff4500'],
+  ['orchid', '#da70d6'],
+  ['palegoldenrod', '#eee8aa'],
+  ['palegreen', '#98fb98'],
+  ['paleturquoise', '#afeeee'],
+  ['palevioletred', '#db7093'],
+  ['papayawhip', '#ffefd5'],
+  ['peachpuff', '#ffdab9'],
+  ['peru', '#cd853f'],
+  ['pink', '#ffc0cb'],
+  ['plum', '#dda0dd'],
+  ['powderblue', '#b0e0e6'],
+  ['purple', '#800080'],
+  ['rebeccapurple', '#663399'],
+  ['red', '#ff0000'],
+  ['rosybrown', '#bc8f8f'],
+  ['royalblue', '#4169e1'],
+  ['saddlebrown', '#8b4513'],
+  ['salmon', '#fa8072'],
+  ['sandybrown', '#f4a460'],
+  ['seagreen', '#2e8b57'],
+  ['seashell', '#fff5ee'],
+  ['sienna', '#a0522d'],
+  ['silver', '#c0c0c0'],
+  ['skyblue', '#87ceeb'],
+  ['slateblue', '#6a5acd'],
+  ['slategray', '#708090'],
+  ['slategrey', '#708090'],
+  ['snow', '#fffafa'],
+  ['springgreen', '#00ff7f'],
+  ['steelblue', '#4682b4'],
+  ['tan', '#d2b48c'],
+  ['teal', '#008080'],
+  ['thistle', '#d8bfd8'],
+  ['tomato', '#ff6347'],
+  ['turquoise', '#40e0d0'],
+  ['violet', '#ee82ee'],
+  ['wheat', '#f5deb3'],
+  ['white', '#ffffff'],
+  ['whitesmoke', '#f5f5f5'],
+  ['yellow', '#ffff00'],
+  ['yellowgreen', '#9acd32'],
+]
+
+function fnv1a( str ) {
+  var FNV1_32A_INIT = 0x811c9dc5;
+  var hval = FNV1_32A_INIT;
+  for ( var i = 0; i < str.length; ++i ) {
+    hval ^= str.charCodeAt(i);
+    hval += (hval << 1) + (hval << 4) + (hval << 7) + (hval << 8) + (hval << 24);
+  }
+  return hval >>> 0;
+}
+
+poll()
+
+</script>
+</body>
+</html>

@@ -1,0 +1,8 @@
+*.o
+*.a
+*.d
+*.gz
+_local
+out
+.DS_Store
+node_modules
