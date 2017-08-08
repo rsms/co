@@ -9,9 +9,7 @@
 //   return p == -1 ? ['.', path] : [path.substr(0, p), path.substr(p+1)]
 // }
 
-import { decodeToString } from './utf8'
-
-export function Search(n :number, f :(n:number)=>bool) :int {
+export function search(n :number, f :(n:number)=>bool) :int {
   // Define f(-1) == false and f(n) == true.
   // Invariant: f(i-1) == false, f(j) == true.
   let i = 0, j = n
@@ -51,15 +49,37 @@ export function str8buf(s :string) :Uint8Array {
 
 
 // bufcmp compares two arrays of bytes
-// 
-export let bufcmp :(
+//
+export function bufcmp(
   a       :ArrayLike<byte>,
   b       :ArrayLike<byte>,
-  aStart? :int|undefined,
-  aEnd?   :int|undefined,
-  bStart? :int|undefined,
-  bEnd?   :int|undefined,
-) => int
+  aStart  :int = 0,
+  aEnd    :int = a.length,
+  bStart  :int = 0,
+  bEnd    :int = b.length,
+) :int {
+  if (a === b) {
+    return 0
+  }
+  const aL = aEnd - aStart,
+        bL = bEnd - bStart
+        // end = (aEnd < bEnd ? aEnd : bEnd)
+  // if (aStart == bStart) {
+  //   for (let i = aStart; i != end; ++i) {
+  //     if (a[i] < b[i]) { return -1 }
+  //     if (b[i] < a[i]) { return 1 }
+  //   }
+  // } else {
+  for (let ai = aStart, bi = bStart; ai != aEnd && bi != bEnd; ++ai, ++bi) {
+    if (a[ai] < b[bi]) { return -1 }
+    if (b[bi] < a[ai]) { return 1 }
+  }
+  return (
+    aL < bL ? -1 :
+    bL < aL ? 1 :
+    0
+  )
+}
 
 
 // asbuf returns a byte buffer for a
@@ -93,34 +113,34 @@ if (typeof Buffer != 'undefined') {
     return buf as Uint8Array
   }
 
-  function asnodebuf(a :ArrayLike<byte>) :Buffer {
-    return (a instanceof Buffer) ? a : new Buffer(asbuf(a))
-  }
+  // function asnodebuf(a :ArrayLike<byte>) :Buffer {
+  //   return (a instanceof Buffer) ? a : new Buffer(asbuf(a))
+  // }
 
-  bufcmp = (a, b, aStart, aEnd, bStart, bEnd) => {
-    if (a === b) {
-      return 0
-    }
+  // bufcmp1 = (a, b, aStart, aEnd, bStart, bEnd) => {
+  //   if (a === b) {
+  //     return 0
+  //   }
 
-    // Note: although TS type decarations may say that Buffer.compare
-    // only accepts a Buffer, in fact it also accepts a Uint8Array.
-    if (a instanceof Buffer &&
-        (b instanceof Buffer || b instanceof Uint8Array))
-    {
-      return a.compare(b as Buffer, bStart, bEnd, aStart, aEnd)
-    }
+  //   // Note: although TS type decarations may say that Buffer.compare
+  //   // only accepts a Buffer, in fact it also accepts a Uint8Array.
+  //   if (a instanceof Buffer &&
+  //       (b instanceof Buffer || b instanceof Uint8Array))
+  //   {
+  //     return a.compare(b as Buffer, bStart, bEnd, aStart, aEnd)
+  //   }
 
-    if (b instanceof Buffer &&
-        (a instanceof Buffer || a instanceof Uint8Array))
-    {
-      return b.compare(a as Buffer, aStart, aEnd, bStart, bEnd)
-    }
+  //   if (b instanceof Buffer &&
+  //       (a instanceof Buffer || a instanceof Uint8Array))
+  //   {
+  //     return b.compare(a as Buffer, aStart, aEnd, bStart, bEnd)
+  //   }
 
-    const abuf = asnodebuf(a)
-    const bbuf = asbuf(b) as Buffer
+  //   const abuf = asnodebuf(a)
+  //   const bbuf = asbuf(b) as Buffer
 
-    return abuf.compare(bbuf, bStart, bEnd, aStart, aEnd)
-  }
+  //   return abuf.compare(bbuf, bStart, bEnd, aStart, aEnd)
+  // }
 }
 
 

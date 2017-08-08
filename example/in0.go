@@ -3,13 +3,15 @@ d  1234
 h  0x9f
 o  0o67;
 b  0b1001
-f  12.34 12e9  1.2e9
 r  22/7
+// 0x3fg7bh  invalid hex number
 
-0.
+0. // == 0.0
+0.0
 72.40
 072.40  // == 72.40
 2.71828
+//!line foo:123
 1.e+0
 6.67428e-11
 1E6
@@ -28,10 +30,10 @@ $foo case switch if enum break
 "x \${y} z"
 "multi
  line" -> <-
+9 //bob
 "cool cat 😎"
 "cool \"cat\" 😎"
 "cool \"cat\" abcd"
-
 
 'c' 'B' 'a'
 '\n' '\t' '\f'

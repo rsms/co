@@ -104,12 +104,33 @@ h2 {
 
 .tok-COMMENT {
   color: rgba(0,0,0,0.4);
-  background: #eee;
+  /*background: #eee;*/
+  background:none;
+  box-shadow: inset 0px 0px 0px 0.51px rgba(0,0,0,0.3);
 }
 
 .tok-ILLEGAL {
   color: white;
   background: #ee1100;
+}
+
+.tok::before, .tok::after {
+  color: rgba(0,0,0,0.3);
+}
+.tok-STRING::before, .tok-STRING_PIECE::before {
+  content: '"';
+}
+.tok-STRING::after, .tok-STRING_PIECE::after {
+  content: '"';
+}
+.tok-CHAR::before {
+  content: "'";
+}
+.tok-CHAR::after {
+  content: "'";
+}
+.tok-IDENTAT::before {
+  content: '@';
 }
 
 .tok.implicit, .tok-SEMICOLON {
@@ -145,36 +166,40 @@ let lastVersion = ''
 
 let tokenTypes = new Set()
 let tokenColors = new Map()
-let tokenColorsInv = new Map()
+let tokenColorHues = new Map()
 
 function colorForTokenName(tokenName) {
   let cssVal = tokenColors.get(tokenName)
   if (cssVal) {
     return cssVal
   }
+
+  // this is really inefficient but it doesn't matter since
+  // it's used very infrequently.
   
   let c, hash = fnv1a(tokenName)
-  while (true) {
+  let hue = 0, s = 0, l = 0
+  let countLimit = htmlColors.length
+  while (countLimit--) {
     c = htmlColors[hash % htmlColors.length]
-    if (!tokenColorsInv.has(c[0])) {
+    let rgbstr = c[1]
+    ;[hue, s, l] = rgbToHsl(
+      parseInt(rgbstr.substr(1,2), 16),
+      parseInt(rgbstr.substr(3,2), 16),
+      parseInt(rgbstr.substr(5,2), 16),
+    )
+    if (!tokenColorHues.has(hue.toFixed(2))) {
+      tokenColorHues.set(hue.toFixed(2), tokenName)
       break
     }
     hash++
   }
-  tokenColorsInv.set(c[0], tokenName)
-
-  let rgbstr = c[1]
-  let [h, s, l] = rgbToHsl(
-    parseInt(rgbstr.substr(1,2), 16),
-    parseInt(rgbstr.substr(3,2), 16),
-    parseInt(rgbstr.substr(5,2), 16),
-  )
 
   // clamp saturation and lightness
   s = Math.max(0.2, Math.min(s, 0.7))
   l = Math.max(0.85, Math.min(l, 0.92))
 
-  cssVal = `hsl(${(h * 359).toFixed(2)}, ${s * 100}%, ${l * 100}%)`
+  cssVal = `hsl(${(hue * 359).toFixed(2)}, ${s * 100}%, ${l * 100}%)`
   console.log('color', tokenName, '=>', c[0], cssVal)
   tokenColors.set(tokenName, cssVal)
   return cssVal
@@ -272,6 +297,12 @@ function update(files) {
       let tokEl = document.createElement("span")
       tokEl.innerText = t.value || t.name
       tokEl.className = 'tok tok-' + t.type
+      if (!t.value) {
+        tokEl.className += ' empty'
+        if (t.name.startsWith('STRING') || t.name == 'CHAR') {
+          tokEl.innerText = ''
+        }
+      }
       if (isImplicit) {
         tokEl.className += ' implicit'
       }
@@ -287,7 +318,9 @@ function update(files) {
       codeEl.appendChild(tokEl)
 
       if ((t.type == 'SEMICOLON' && !isImplicit) ||
-          (t.type == 'COMMENT' && t.value.includes('\n')))
+          (t.type == 'COMMENT' && (
+            t.value.includes('\n') || t.value.startsWith('//')
+          )))
       {
         let nlEl = document.createElement("div")
         nlEl.className = 'newline implicit'

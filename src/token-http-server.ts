@@ -1,6 +1,6 @@
 import './global'
 import * as scanner from './scanner'
-import { Position, File, FileSet } from './pos'
+import { Position, FileSet } from './pos'
 import * as utf8 from './utf8'
 import { token, hasByteValue, hasIntValue, tokIsKeyword, tokstr } from './token'
 import * as fs from 'fs'

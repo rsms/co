@@ -1,8 +1,9 @@
 import './global'
 import * as scanner from './scanner'
-import { Position, File, FileSet } from './pos'
+import { Position, FileSet } from './pos'
 import { token, hasIntValue, hasByteValue, tokstr } from './token'
 import * as utf8 from './utf8'
+import * as unicode from './unicode'
 import * as fs from 'fs'
 
 function main() {
@@ -13,7 +14,7 @@ function main() {
 
   const fileSet = new FileSet()
 
-  const filename = 'in0.go'
+  const filename = 'example/in0.go'
   const src = new Uint8Array(fs.readFileSync(filename, {flag:'r'}))
   const file = fileSet.addFile(filename, src.length)
 
@@ -22,10 +23,12 @@ function main() {
   for (let t :token; (t = s.scan()) != token.EOF; ) {
 
     let srcStr = ''
-    if (hasByteValue(t)) {
-      srcStr = JSON.stringify(new Buffer(s.byteValue()).toString('utf8'))
+    if (t == token.CHAR) {
+      srcStr = unicode.repr(s.intval)
     } else if (hasIntValue(t)) {
       srcStr = s.intval.toString()
+    } else if (hasByteValue(t)) {
+      srcStr = JSON.stringify(utf8.decodeToString(s.byteValue()))
     }
 
     console.log(`${tokstr(t)}\t${srcStr}\tat ${file.position(s.pos)}`)

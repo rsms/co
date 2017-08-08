@@ -1,19 +1,22 @@
 export const
-  UniError  = 0xFFFD,   // the "error" Rune or "Unicode replacement character"
-  RuneSelf  = 0x80,     // characters below Runeself are represented as
-                        // themselves in a single byte.
-  MaxRune   = 0x10FFFF, // Maximum valid Unicode code point.
-  UTFMax    = 4         // Maximum number of bytes of a UTF8-encoded char
+  UniError = 0xFFFD,   // the "error" Rune or "Unicode replacement character"
+  UniSelf  = 0x80,     // characters below UniSelf are represented as
+                       // themselves in a single byte.
+  UTFMax   = 4         // Maximum number of bytes of a UTF8-encoded char
 
 const
-  rune1Max = 1<<7 - 1,
-  rune2Max = 1<<11 - 1,
-  rune3Max = 1<<16 - 1
+  maxCp        = 0x10FFFF, // Maximum valid Unicode code point.
+  // Code points in the surrogate range are not valid for UTF-8.
+  surrogateMin = 0xD800,
+  surrogateMax = 0xDFFF,
+  // rune1Max = 1<<8 - 1  // 0x80
+  rune2Max = 1<<11 - 1 // 0x400
+  // rune3Max = 1<<16 - 1  // 0x8000
 
 export function decode(src :ArrayLike<byte>, offset :int) :[int, int] {
   const r = src[offset]
 
-  if (r < RuneSelf) {
+  if (r < UniSelf) {
     return [isNaN(r) ? UniError : r, 1]
   }
 
@@ -70,15 +73,15 @@ declare class TextDecoder {
 }
 
 
-declare class TextEncoder  {
-  constructor() // since Firefox 48 and Chrome 53, only supports utf-8
-  encoding :string // always "utf-8"
-  encode(input? :string, options? :TextEncodeOptions) :Uint8Array
-}
+// declare class TextEncoder  {
+//   constructor() // since Firefox 48 and Chrome 53, only supports utf-8
+//   encoding :string // always "utf-8"
+//   encode(input? :string, options? :TextEncodeOptions) :Uint8Array
+// }
 
-interface TextEncodeOptions {
-  stream?: boolean
-}
+// interface TextEncodeOptions {
+//   stream?: boolean
+// }
 
 
 export let decodeToString :(src :ArrayLike<byte>) => string
@@ -122,12 +125,12 @@ if (typeof TextDecoder != 'undefined') {
 }
 
 
-// encode writes into p (which must be large enough) the UTF-8 encoding
+// encode writes into b (which must be large enough) the UTF-8 encoding
 // of the character. Never writes more than UTFMax bytes.
 // Returns the number of bytes written.
 //
 export function encode(b :Uint8Array, offs :int, cp :int) :int {
-  if (cp < 0x80) {
+  if (cp < UniSelf) {
     b[offs] = cp
     return 1
   }
@@ -135,6 +138,10 @@ export function encode(b :Uint8Array, offs :int, cp :int) :int {
     b[offs]   = (cp >> 6)   | 0xc0
     b[++offs] = (cp & 0x3f) | 0x80
     return 2
+  }
+  if (cp > maxCp || (surrogateMin <= cp && cp <= surrogateMax)) {
+    // invalid codepoint
+    cp = UniError
   }
   if (cp < 0x10000) {
     b[offs]   = (cp >> 12)         | 0xe0
@@ -158,13 +165,16 @@ export function byteSize(cp :int) :int {
   )
 }
 
-export function encodeAsString(cp :int) :string {
-  if (cp < 0 || cp > MaxRune) {
-    panic(`invalid rune ${cp}`)
+export function encodeToString(cp :int) :string {
+  if (cp < 0 || cp > maxCp) {
+    panic(`invalid unicode code point ${cp}`)
   }
   if (cp < 0x10000) {
     return String.fromCharCode(cp)
   }
   cp -= 0x10000
-  return String.fromCharCode((cp >> 10) + 0xD800, (cp % 0x400) + 0xDC00)
+  return String.fromCharCode(
+    (cp >> 10) + surrogateMin,
+    (cp % rune2Max) + 0xDC00
+  )
 }

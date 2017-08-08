@@ -2,7 +2,7 @@ import { AppendBuffer, bufcmp, str8buf } from './util'
 import { Pos, Position, File } from './pos'
 import * as utf8 from './utf8'
 import * as unicode from './unicode'
-import { Token, token, lookupKeyword } from './token'
+import { token, prec, lookupKeyword } from './token'
 import * as Path from 'path'
 
 // An ErrorHandler may be provided to Scanner.Init. If a syntax error is
@@ -61,10 +61,11 @@ export class Scanner {
   public endoffs   :int = 0  // token end offset
   public tok       :token = token.EOF
   public intval    :int = 0 // value for some tokens
+  public prec      :prec = prec.LOWEST // valid if tokIsOperator
 
   // sparse buffer state (not reset by s.init)
-  private sparsebuf  :Uint8Array|null = null // sparse buffer for small lits
-  private sparseoffs :int = 0 // write offset into sparsebuf
+  // private sparsebuf  :Uint8Array|null = null // sparse buffer for small lits
+  // private sparseoffs :int = 0 // write offset into sparsebuf
   private appendbuf  :AppendBuffer|null = null // for string literals
 
   // public state - ok to modify
@@ -127,9 +128,9 @@ export class Scanner {
         // uncommon case: non-ASCII character
         [r, w] = utf8.decode(s.src, s.rdOffset)
         if (r == 0) {
-          s.error('illegal character NUL', s.offset)
+          s.error('illegal NUL byte in input', s.offset)
         } else if (r == utf8.UniError) {
-          s.error('illegal UTF-8 encoding', s.offset)
+          s.error('invalid UTF-8 encoding', s.offset)
         }
       }
 
@@ -172,7 +173,8 @@ export class Scanner {
   //
   byteValue() :Uint8Array {
     const s = this
-    return s.byteval || s.src.subarray(s.startoffs, s.endoffs)
+    const end = s.endoffs == -1 ? s.offset : s.endoffs
+    return s.byteval || s.src.subarray(s.startoffs, end)
   }
 
   // takeByteValue returns a new byte buffer that is not referenced by
@@ -188,16 +190,16 @@ export class Scanner {
   // allocSparse ensures that s.sparsebuf has at least size available.
   // Returns the current write offset into sparsebuf.
   //
-  allocSparse(size :int) :Uint8Array {
-    const s = this
-    if (!s.sparsebuf || s.sparsebuf.length - s.sparseoffs < size) {
-      s.sparsebuf = new Uint8Array(128)
-      s.sparseoffs = 0
-    }
-    const offs = s.sparseoffs
-    s.sparseoffs += size
-    return s.sparsebuf.subarray(offs, s.sparseoffs)
-  }
+  // allocSparse(size :int) :Uint8Array {
+  //   const s = this
+  //   if (!s.sparsebuf || s.sparsebuf.length - s.sparseoffs < size) {
+  //     s.sparsebuf = new Uint8Array(128)
+  //     s.sparseoffs = 0
+  //   }
+  //   const offs = s.sparseoffs
+  //   s.sparseoffs += size
+  //   return s.sparsebuf.subarray(offs, s.sparseoffs)
+  // }
 
   // Increment errorCount and call any error handler
   //
@@ -235,12 +237,10 @@ export class Scanner {
         break
       }
 
-      case 0x30: // 0
-        s.scanNumber(/*enterAtZero*/true)
-        break
-      case 0x31: case 0x32: case 0x33: case 0x34: case 0x35:
-      case 0x36: case 0x37: case 0x38: case 0x39:
-        s.scanNumber(/*enterAtZero*/false)
+      case 0x30: case 0x31: case 0x32: case 0x33: case 0x34:
+      case 0x35: case 0x36: case 0x37: case 0x38: case 0x39:
+        // 0..9
+        s.scanNumber(ch)
         break
 
       case 0xA: { // \n
@@ -262,11 +262,12 @@ export class Scanner {
 
       case 0x3a: // :
         s.tok = s.switch2(token.COLON, token.DEFINE)
+        s.prec = prec.LOWEST
         s.insertSemi = false
         break
 
       case 0x2e: { // .
-        if (0x30 <= s.ch && s.ch <= 0x39) {
+        if (unicode.isDigit(s.ch)) {
           s.scanFloatNumber(/*seenDecimal*/true)
         } else {
           if (s.ch == 0x2e) { // .
@@ -286,9 +287,7 @@ export class Scanner {
       }
 
       case 0x40: // @
-        // TODO: read ident and combine
         s.scanIdentifier()
-        // s.tok = token.AT
         s.tok = token.IDENTAT
         s.startoffs++ // skip @
         s.insertSemi = true
@@ -367,26 +366,28 @@ export class Scanner {
         break
 
       case 0x2f: { // /
-        if (s.ch == 0x2f || s.ch == 0x2a) { // / *
-          if (s.insertSemi && (s.ch == 0x2f || s.findLineEnd())) { // /
-            // when 0x2f: //-comment always contains a newline
-            s.ch = 0x2f // /
-            s.offset = s.startoffs
-            s.rdOffset = s.offset + 1
-            // newline consumed
-            s.byteval = s.src.subarray(s.startoffs, s.startoffs + 2)
-            s.tok = token.SEMICOLON
-            s.insertSemi = false
-          } else {
-            const skipComment = !(s.mode & Mode.ScanComments)
-            s.scanComment(skipComment)
-            if (skipComment) {
-              // skip because s.mode does not contain Mode.ScanComments
-              s.insertSemi = false // newline consumed
-              continue
-            }
-            // else: intentionally not changing s.insertSemi
+        if (s.ch == 0x2f) { // /
+          s.scanLineComment()
+          if (!(s.mode & Mode.ScanComments)) {
+            continue
           }
+          // note: intentionally not changing s.insertSemi
+        } else if (s.ch == 0x2a) { // *
+          const CRcount = s.scanGeneralComment()
+          if (s.mode & Mode.ScanComments) {
+            s.tok = token.COMMENT
+            if (CRcount) {
+              // strip CR characters from comment
+              const v = s.src.subarray(
+                s.startoffs,
+                s.endoffs == -1 ? s.offset : s.endoffs
+              )
+              s.byteval = stripByte(v, 0xD, CRcount) // copy; no mutation
+            }
+          } else {
+            continue
+          }
+          // note: intentionally not changing s.insertSemi
         } else {
           s.tok = s.switch2(token.QUO, token.QUO_ASSIGN)
           s.insertSemi = false
@@ -449,7 +450,6 @@ export class Scanner {
       default: {
         if (isIdentStart(ch)) { // $
           s.scanIdentifier()
-          s.endoffs = s.offset // for s.byteValue
 
           if (s.offset - s.startoffs > 1) {
             // shortest keyword is 2
@@ -489,7 +489,7 @@ export class Scanner {
 
   scanIdentifier() {
     const s = this
-    while (isIdentStart(s.ch) || isDigit(s.ch)) {
+    while (isIdentStart(s.ch) || unicode.isDigit(s.ch)) {
       s.next()
     }
   }
@@ -599,7 +599,7 @@ export class Scanner {
 
           if (cp >= 0) {
             // Write unicode code point as UTF8 to value buffer
-            if (cp < utf8.RuneSelf) {
+            if (cp < utf8.UniSelf) {
               buf.append(cp)
             } else {
               buf.reserve(utf8.UTFMax)
@@ -649,7 +649,6 @@ export class Scanner {
   //
   scanEscape(quote :int) :int {
     const s = this
-    const offs = s.offset
 
     let n :int = 0
     let base :int = 0
@@ -719,76 +718,104 @@ export class Scanner {
     return cp
   }
 
-  scanNumber(enterAtZero :bool) {
+  scanNumber(c :int) {
     let s = this
     s.insertSemi = true
 
-    if (enterAtZero) {
-      switch (s.ch as int) {
+    if (c == 0x30) { // 0
+      switch (s.ch) {
 
-        case 0x78: case 0x58: // x, X
+        case 0x78: case 0x58: { // x, X
           s.tok = token.INT_HEX
-          return s.scanRadixInt(16)
+          s.next()
+          while (unicode.isHexDigit(s.ch)) {
+            s.next()
+          }
+          if (s.offset - s.startoffs <= 2 || unicode.isLetter(s.ch)) {
+            // only scanned "0x" or "0X" OR e.g. 0xfg
+            while (unicode.isLetter(s.ch) || unicode.isDigit(s.ch)) {
+              s.next() // consume invalid letters & digits
+            }
+            s.error("invalid hex number")
+          }
+          return
+        }
 
         case 0x6F: case 0x4F: // o, O
           s.tok = token.INT_OCT
-          return s.scanRadixInt(8)
+          return s.scanRadixInt8(8)
 
         case 0x62: case 0x42: // b, B
           s.tok = token.INT_BIN
-          return s.scanRadixInt(2)
+          return s.scanRadixInt8(2)
 
         case 0x2e: case 0x65: case 0x45:  // . e E
           return s.scanFloatNumber(/*seenDecimal*/false)
 
         case 0x2f:  // /
-          return s.scanRatioNumber()
-
-        default:
+          if (s.scanRatioNumber()) {
+            // i.e. 0/N
+            s.error("invalid zero ratio")
+            return
+          }
           break
       }
     }
 
-    // decimal int or float
-    s.scanMantissa(10)
-
-    switch (s.ch as int) {
-      case 0x2e: case 0x65: case 0x45:  // . e E
-        return s.scanFloatNumber(/*seenDecimal*/false)
-
-      case 0x2f:  // /
-        return s.scanRatioNumber()
-    }
-
-    s.tok = token.INT
-  }
-
-  scanMantissa(base :int) {
-    const s = this
-    while (digitVal(s.ch) < base) {
+    while (unicode.isDigit(s.ch)) {
       s.next()
     }
-  }
+    s.tok = token.INT
 
-  scanRadixInt(base :int) {
-    const s = this
-    s.next()
-    s.scanMantissa(base)
-    if (s.offset - s.startoffs <= 2) {
-      // only scanned "0x" or "0X"
-      s.error("illegal number")
+    switch (s.ch) {
+      case 0x2e: case 0x65: case 0x45:  // . e E
+        s.scanFloatNumber(/*seenDecimal*/false)
+        break
+
+      case 0x2f:  // /
+        s.scanRatioNumber()
+        break
     }
   }
 
-  scanRatioNumber() {
+  scanRadixInt8(base :int) {
+    // invariant: base = 8 | 2
+    const s = this
+    s.next()
+    let isInvalid = false
+    while (unicode.isDigit(s.ch)) {
+      if (s.ch - 0x30 >= base) {
+        // e.g. 0o678
+        isInvalid = true
+      }
+      s.next()
+    }
+    if (isInvalid || s.offset - s.startoffs <= 2) {
+      // isInvalid OR only scanned "0x"
+      s.error(`invalid ${base == 8 ? "octal" : "binary"} number`)
+    }
+  }
+
+  scanRatioNumber() :bool {
     // ratio_lit = decimals "/" decimals
     const s = this
-    s.tok = token.RATIO
-    s.next()
-    s.scanMantissa(10)
-    if (s.ch == 0x2e) { // .
-      s.error("illegal ratio")
+    const startoffs = s.offset
+    s.next() // consume /
+    while (unicode.isDigit(s.ch)) {
+      s.next()
     }
+    if (startoffs+1 == s.offset) {
+      // e.g. 43/* 43/= etc -- restore state
+      s.ch = 0x2f // /
+      s.offset = startoffs
+      s.rdOffset = s.offset + 1
+      return false
+    }
+    if (isIdentStart(s.ch) || s.ch == 0x2e) { // .
+      s.error("invalid ratio")
+    }
+    s.tok = token.RATIO
+    return true
   }
 
   scanFloatNumber(seenDecimal :bool) {
@@ -801,7 +828,9 @@ export class Scanner {
 
     if (seenDecimal || s.ch == 0x2e) { // .
       s.next()
-      s.scanMantissa(10)
+      while (unicode.isDigit(s.ch)) {
+        s.next()
+      }
     }
 
     if (s.ch == 0x65 || s.ch == 0x45) { // e E
@@ -809,10 +838,13 @@ export class Scanner {
       if ((s.ch as int) == 0x2d || (s.ch as int) == 0x2b) { // - +
         s.next()
       }
-      if (digitVal(s.ch) < 10) {
-        s.scanMantissa(10)
-      } else {
-        s.error("illegal floating-point exponent")
+      let valid = false
+      while (unicode.isDigit(s.ch)) {
+        valid = true
+        s.next()
+      }
+      if (!valid) {
+        s.error("invalid floating-point exponent")
       }
     }
 
@@ -822,12 +854,23 @@ export class Scanner {
 
   skipWhitespace() {
     const s = this
-    while ( s.ch == 0x20 /*space*/ ||
-            s.ch == 0x9  /*\t*/ ||
-            (s.ch == 0xA /*\n*/ && !s.insertSemi) ||
-            s.ch == 0xD  /*\r*/
-          )
-    {
+    while (true) {
+      switch (s.ch) {
+        case 0x20: // SP
+        case 0x9:  // \t
+        case 0xD:  // \r
+          break
+        case 0xA:  // \n
+          if (s.insertSemi) {
+            return
+          }
+          break
+        default:
+          if (s.ch < utf8.UniSelf || !unicode.isWhitespace(s.ch)) {
+            return
+          }
+          break
+      }
       s.next()
     }
   }
@@ -870,56 +913,83 @@ export class Scanner {
     return tok0
   }
 
-  scanComment(skip :bool) {
+  scanLineComment() {
     const s = this
-    // initial '/' already consumed; s.ch == '/' || s.ch == '*'
-    // offs = position of initial '/'
-    let CR_count = 0
-  
-    if (s.ch == 0x2f) { // /
-      //-style comment
-      s.next()
-      while (s.ch as int != 0xA && s.ch >= 0) { // \n
-        if (s.ch as int == 0xD) { // \r
-          CR_count++
-        }
-        s.next()
-      }
-      if (s.startoffs == s.lineOffset) {
-        // comment starts at the beginning of the current line
-        s.interpretLineComment()
-      }
-    } else {
-      /*-style comment */
-      let done = false
-      s.next()
-      while (s.ch >= 0) {
-        let ch = s.ch as int
-        if (ch == 0xD) { // \r
-          CR_count++
-        }
-        s.next()
-        if (ch == 0x2a && s.ch as int == 0x2f) { // */
-          s.next()
-          done = true
-          break
-        }
-      }
-      if (!done) {
-        s.error("comment not terminated")
-      }
+    // initial '/' already consumed; s.ch == '/'
+    do { s.next() } while (s.ch != 0xA && s.ch >= 0)
+
+    if (s.src[s.offset-1] == 0xD) { // \r
+      // don't include \r in comment
+      s.endoffs = s.offset - 1
     }
 
-    if (!skip) {
-      s.tok = token.COMMENT
-      if (CR_count) {
-        const v = s.src.subarray(s.startoffs, s.offset)
-        s.byteval = stripByte(v, 0xD, CR_count) // copies bytes; no mutation
+    if (s.startoffs == s.lineOffset && s.src[s.startoffs + 2] == 0x21) { // !
+      // comment pragma, e.g. //!foo
+      s.interpretCommentPragma()
+    }
+
+    s.startoffs += 2 // skip //
+    s.tok = token.COMMENT
+  }
+
+  scanGeneralComment() :int /* CR count */ {
+    // initial '/' already consumed; s.ch == '*'
+    const s = this
+    let CR_count = 0
+
+    while (true) {
+      s.next()
+      switch (s.ch) {
+        case -1: // EOF
+          s.error("comment not terminated")
+          return CR_count
+        case 0x2f: // /
+          if (s.src[s.offset-1] == 0x2a) { // *
+            s.next()
+            s.startoffs += 2
+            s.endoffs = s.offset - 2
+            return CR_count
+          }
+          break
+        case 0xD: // \r
+          ++CR_count
+          break
+        default:
+          break
+      }
+    }
+  }
+
+  findCommentLineEnd() :bool {
+    // initial '/' already consumed; s.ch == '*'
+    const s = this
+    
+    // save state
+    const enterOffset = s.offset
+
+    while (true) {
+      const ch = s.ch
+      s.next()
+      switch (ch) {
+        case -1: // EOF
+        case 0xA: // \n
+          return true
+        case 0x2a: // *
+          if (s.ch == 0x2f) { // /
+            // restore state
+            s.ch = 0x2a
+            s.offset = enterOffset
+            s.rdOffset = s.offset + 1
+            return false
+          }
+          break
+        default:
+          break
       }
     }
   }
   
-  interpretLineComment() {
+  interpretCommentPragma() {
     const s = this
     const offs = s.startoffs
     if ( s.offset - offs > linePrefix.length &&
@@ -1003,14 +1073,7 @@ function isIdentStart(cp :int) :bool {
     (0x41 <= cp && cp <= 0x5A) || // A..Z
     cp == 0x5F || // _
     cp == 0x24 || // $
-    cp >= utf8.RuneSelf && unicode.isLetter(cp)
-  )
-}
-
-function isDigit(ch :int) :bool {
-  return (
-    0x30 <= ch && ch <= 0x39 || // 0..9
-    ch >= utf8.RuneSelf && unicode.isDigit(ch)
+    cp >= utf8.UniSelf && unicode.isLetter(cp)
   )
 }
 
@@ -1018,7 +1081,7 @@ function digitVal(ch :int) :int {
   return (
     0x30 <= ch && ch <= 0x39 ? ch - 0x30 :      // 0..9
     0x61 <= ch && ch <= 0x66 ? ch - 0x61 + 10 : // a..f
-    0x41 <= ch && ch <= 0x46 ? ch - 0x41 + 10 : // a..f
+    0x41 <= ch && ch <= 0x46 ? ch - 0x41 + 10 : // A..F
     16 // larger than any legal digit val
   )
 }

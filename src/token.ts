@@ -1,32 +1,4 @@
-import { Pos } from './pos'
 import { BTree } from './btree'
-
-export class Token { constructor(
-  public readonly t     :token,
-  public readonly pos   :Pos,      // position in FileSet
-  public readonly value :Uint8Array|int|null = null, // valid for literals
-  ) {}
-
-  isEOF() :bool {
-    return this.t == token.EOF
-  }
-
-  isLiteral() :bool {
-    return this.t > token.literal_beg && this.t < token.literal_end
-  }
-
-  isKeyword() :bool {
-    return this.t > token.keyword_beg && this.t < token.keyword_end
-  }
-
-  hasIntValue() :bool {
-    return this.t == token.CHAR
-  }
-
-  toString() :string {
-    return tokenStrings.get(this.t) || token[this.t]
-  }
-}
 
 export function tokIsKeyword(t :token) :bool {
   return token.keyword_beg < t && t < token.keyword_end
@@ -45,6 +17,16 @@ export function hasByteValue(t :token) :bool {
 
 export function tokstr(t :token) :string {
   return tokenStrings.get(t) || token[t]
+}
+
+// Operator precedences
+export enum prec {
+  LOWEST, // := ! <-
+  OR,     // ||
+  AND,    // &&
+  CMP,    // == != < <= > >=
+  ADD,    // + - | ^
+  MUL,    // * / % & &^ << >>
 }
 
 export enum token {
@@ -69,69 +51,71 @@ export enum token {
   STRING_PIECE, // "a ${...} b" -- the "a " part (" b" is STRING)
   literal_end,
 
+  // Delimiters
+  delim_beg,
+  LPAREN,    // (
+  LBRACK,    // [
+  LBRACE,    // {
+  COMMA,     // ,
+  PERIOD,    // .
+  PERIOD2,   // ..
+  ELLIPSIS,  // ...
+  RPAREN,    // )
+  RBRACK,    // ]
+  RBRACE,    // }
+  SEMICOLON, // ;
+  COLON,     // :
+  delim_end,
+
+  // Operators
   operator_beg,
-  // Operators and delimiters
-  ADD, // +
-  SUB, // -
-  MUL, // *
-  QUO, // /
-  REM, // %
-
-  AND,     // &
-  OR,      // |
-  XOR,     // ^
-  SHL,     // <<
-  SHR,     // >>
-  AND_NOT, // &^
-
-  ADD_ASSIGN, // +=
-  SUB_ASSIGN, // -=
-  MUL_ASSIGN, // *=
-  QUO_ASSIGN, // /=
-  REM_ASSIGN, // %=
-
+  // prec.LOWEST
+  ASSIGN,         // =
+  ADD_ASSIGN,     // +=
+  SUB_ASSIGN,     // -=
+  MUL_ASSIGN,     // *=
+  QUO_ASSIGN,     // /=
+  REM_ASSIGN,     // %=
   AND_ASSIGN,     // &=
   OR_ASSIGN,      // |=
   XOR_ASSIGN,     // ^=
   SHL_ASSIGN,     // <<=
   SHR_ASSIGN,     // >>=
   AND_NOT_ASSIGN, // &^=
-
-  LAND,   // &&
-  LOR,    // ||
-  ARROWL, // <-
-  ARROWR, // ->
-  INC,    // ++
-  DEC,    // --
-
-  EQL,    // ==
-  LSS,    // <
-  GTR,    // >
-  ASSIGN, // =
-  NOT,    // !
-
-  NEQ,      // !=
-  LEQ,      // <=
-  GEQ,      // >=
-  DEFINE,   // :=
-  ELLIPSIS, // ...
-  PERIOD2,  // ..
-
-  LPAREN, // (
-  LBRACK, // [
-  LBRACE, // {
-  COMMA,  // ,
-  PERIOD, // .
-
-  RPAREN,    // )
-  RBRACK,    // ]
-  RBRACE,    // }
-  SEMICOLON, // ;
-  COLON,     // :
+  INC,            // ++
+  DEC,            // --
+  DEFINE,         // :=
+  NOT,            // !
+  ARROWL,         // <-
+  ARROWR,         // ->
+  // prec.OR
+  LOR, // ||
+  // prec.AND
+  LAND, // &&
+  // prec.CMP
+  EQL, // ==
+  NEQ, // !=
+  LSS, // <
+  LEQ, // <=
+  GTR, // >
+  GEQ, // >=
+  // prec.ADD
+  ADD, // +
+  SUB, // -
+  OR,  // |
+  XOR, // ^
+  // prec.MUL
+  MUL,     // *
+  QUO,     // /
+  REM,     // %
+  AND,     // &
+  AND_NOT, // &^
+  SHL,     // <<
+  SHR,     // >>
   operator_end,
 
-  keyword_beg,
   // Keywords
+  keyword_beg,
   BREAK,
   CASE,
   CHAN,

@@ -204,7 +204,7 @@ export class File {
 }
 
 function searchLineInfos(a :lineInfo[], x :int) :int {
-  return util.Search(a.length, (i :int) => a[i].offset > x) - 1
+  return util.search(a.length, (i :int) => a[i].offset > x) - 1
 }
 
 // -----------------------------------------------------------------
@@ -261,7 +261,7 @@ export class FileSet { constructor(
 
 function searchInts(a :ArrayLike<int>, x :int) :int {
   // Inlined version of
-  //  return util.Search(a.length, i => a[i] > x) - 1
+  //  return util.search(a.length, i => a[i] > x) - 1
   //
   let i = 0, j = a.length
   while (i < j) {
