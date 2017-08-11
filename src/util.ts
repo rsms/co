@@ -82,6 +82,20 @@ export function bufcmp(
 }
 
 
+// hashName returns an unsigned 31 bit integer hash of an array of bytes.
+// It's using the FNV1a algorithm which is very fast and has good distribution
+// for common short names (based on tests on a large corpus of go source code.)
+//
+export function hashName(buf :ArrayLike<byte>, offs :int, length :int) {
+  let h = 0x811c9dc5
+  let i = offs + length
+  while (i-- != offs) {
+    h = (h ^ buf[i]) * 0x1000193
+  }
+  return h >>> 0
+}
+
+
 // asbuf returns a byte buffer for a
 // 
 export let asbuf :(a :ArrayLike<byte>) => Uint8Array

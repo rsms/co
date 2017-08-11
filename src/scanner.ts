@@ -151,20 +151,6 @@ export class Scanner {
     return s.file.position(s.file.pos(s.offset))
   }
 
-  // srcSlice returns a slice of s.src
-  //
-  // private srcSlice(
-  //   startOffs :int = this.startoffs,
-  //   endOffs :int = this.offset
-  // ) :Uint8Array
-  // {
-  //   const s = this
-  //   return (
-  //     (this.mode & Mode.CopySource) ? this.src.slice(startOffs, endOffs) :
-  //     this.src.subarray(startOffs, endOffs)
-  //   )
-  // }
-
   // byteValue returns a byte buffer representing the literal value of the
   // current token.
   // Note that this method returns a byte buffer that is potentially referenced
@@ -286,12 +272,20 @@ export class Scanner {
         break
       }
 
-      case 0x40: // @
-        s.scanIdentifier()
-        s.tok = token.IDENTAT
+      case 0x40: { // @
         s.startoffs++ // skip @
+        let c = s.ch
+        if (c < utf8.UniSelf && (asciiFeats[c] & langIdentStart)) {
+          s.next()
+          s.scanIdentifier(c)
+        } else if (c >= utf8.UniSelf && unicode.isLetter(c)) {
+          s.next()
+          s.scanIdentifierU(c, this.startoffs)
+        }
+        s.tok = token.IDENTAT
         s.insertSemi = true
         break
+      }
 
       case 0x2c: // ,
         s.tok = token.COMMA
@@ -448,8 +442,16 @@ export class Scanner {
         break
 
       default: {
-        if (isIdentStart(ch)) { // $
-          s.scanIdentifier()
+
+        if (
+          (ch < utf8.UniSelf && (asciiFeats[ch] & langIdentStart)) ||
+          (ch >= utf8.UniSelf && unicode.isLetter(ch))
+        ) {
+          if (ch < utf8.UniSelf) {
+            s.scanIdentifier(ch)
+          } else {
+            s.scanIdentifierU(ch, this.startoffs)
+          }
 
           if (s.offset - s.startoffs > 1) {
             // shortest keyword is 2
@@ -487,11 +489,57 @@ export class Scanner {
     } // while(true)
   }
 
-  scanIdentifier() {
+
+  // hash value for current token (if IDENT or IDENTAT)
+  public hash :int = 0
+
+
+  scanIdentifierU(c :int, hashOffs :int, hash :int = 0x811c9dc5) {
+    // Scan identifier with non-ASCII characters.
+    // c is already verified to be a valid indentifier character.
+    // Hash is calculated as a second pass at the end.
     const s = this
-    while (isIdentStart(s.ch) || unicode.isDigit(s.ch)) {
+
+    console.log(`scanIdentifierU [ ${unicode.repr(c)}, ${unicode.repr(s.ch)} ]`)
+
+    c = s.ch
+    while (
+      (c < utf8.UniSelf && (asciiFeats[c] & langIdent)) ||
+      unicode.isLetter(c) ||
+      unicode.isDigit(c))
+    {
       s.next()
+      c = s.ch
     }
+
+    // computing rest of hash
+    for (let i = hashOffs; i < s.offset; ++i) {
+      hash = (hash ^ s.src[i]) * 0x1000193 // fnv1a
+    }
+    s.hash = hash >>> 0
+  }
+
+
+  scanIdentifier(c :int) {
+    // enters past first char; c = 1st char, s.ch = 2nd char
+    // c is already verified to be a valid indentifier character.
+    const s = this
+    console.log(`scanIdentifier [ ${unicode.repr(c)}, ${unicode.repr(s.ch)} ]`)
+    let hash = (0x811c9dc5 ^ c) * 0x1000193 // fnv1a
+
+    c = s.ch
+    while (c < utf8.UniSelf && (asciiFeats[c] & langIdent)) {
+      hash = (hash ^ c) * 0x1000193 // fnv1a
+      s.next()
+      c = s.ch
+    }
+
+    if (c >= utf8.UniSelf && (unicode.isLetter(c) || unicode.isDigit(c))) {
+      return s.scanIdentifierU(c, hash, s.offset)
+    }
+
+    s.hash = hash >>> 0
+    console.log('hash', s.hash)
   }
 
   scanChar() {
@@ -811,7 +859,7 @@ export class Scanner {
       s.rdOffset = s.offset + 1
       return false
     }
-    if (isIdentStart(s.ch) || s.ch == 0x2e) { // .
+    if (s.ch == 0x2e) { // .
       s.error("invalid ratio")
     }
     s.tok = token.RATIO
@@ -1067,15 +1115,6 @@ export class Scanner {
 
 }
 
-function isIdentStart(cp :int) :bool {
-  return (
-    (0x61 <= cp && cp <= 0x7A) || // a..z
-    (0x41 <= cp && cp <= 0x5A) || // A..Z
-    cp == 0x5F || // _
-    cp == 0x24 || // $
-    cp >= utf8.UniSelf && unicode.isLetter(cp)
-  )
-}
 
 function digitVal(ch :int) :int {
   return (
@@ -1098,3 +1137,140 @@ function stripByte(v :Uint8Array, b :byte, countHint :int = 0) :Uint8Array {
   }
   return i < c.length ? c.subarray(0, i) : c
 }
+
+const
+  langIdent = 1<< 1 -1,
+  langIdentStart = 1<< 2 -1
+
+// must smaller than utf8.UniSelf
+const asciiFeats = new Uint8Array([
+  /* 0    0  NUL */ 0,
+  /* 1    1  SOH */ 0,
+  /* 2    2  STX */ 0,
+  /* 3    3  ETX */ 0,
+  /* 4    4  EOT */ 0,
+  /* 5    5  ENQ */ 0,
+  /* 6    6  ACK */ 0,
+  /* 7    7  BEL */ 0,
+  /* 8    8  BS  */ 0,
+  /* 9    9  TAB */ 0,
+  /* 10   A  LF  */ 0,
+  /* 11   B  VT  */ 0,
+  /* 12   C  FF  */ 0,
+  /* 13   D  CR  */ 0,
+  /* 14   E  SO  */ 0,
+  /* 15   F  SI  */ 0,
+  /* 16  10  DLE */ 0,
+  /* 17  11  DC1 */ 0,
+  /* 18  12  DC2 */ 0,
+  /* 19  13  DC3 */ 0,
+  /* 20  14  DC4 */ 0,
+  /* 21  15  NAK */ 0,
+  /* 22  16  SYN */ 0,
+  /* 23  17  ETB */ 0,
+  /* 24  18  CAN */ 0,
+  /* 25  19  EM  */ 0,
+  /* 26  1A  SUB */ 0,
+  /* 27  1B  ESC */ 0,
+  /* 28  1C  FS  */ 0,
+  /* 29  1D  GS  */ 0,
+  /* 30  1E  RS  */ 0,
+  /* 31  1F  US  */ 0,
+  /* 32  20  SP  */ 0,
+  /* 33  21  !   */ 0,
+  /* 34  22  "   */ 0,
+  /* 35  23  #   */ 0,
+  /* 36  24  $   */ langIdent | langIdentStart,
+  /* 37  25  %   */ 0,
+  /* 38  26  &   */ 0,
+  /* 39  27  '   */ 0,
+  /* 40  28  (   */ 0,
+  /* 41  29  )   */ 0,
+  /* 42  2A  *   */ 0,
+  /* 43  2B  +   */ 0,
+  /* 44  2C  ,   */ 0,
+  /* 45  2D  -   */ 0,
+  /* 46  2E  .   */ 0,
+  /* 47  2F  /   */ 0,
+  /* 48  30  0   */ langIdent,
+  /* 49  31  1   */ langIdent,
+  /* 50  32  2   */ langIdent,
+  /* 51  33  3   */ langIdent,
+  /* 52  34  4   */ langIdent,
+  /* 53  35  5   */ langIdent,
+  /* 54  36  6   */ langIdent,
+  /* 55  37  7   */ langIdent,
+  /* 56  38  8   */ langIdent,
+  /* 57  39  9   */ langIdent,
+  /* 58  3A  :   */ 0,
+  /* 59  3B  ;   */ 0,
+  /* 60  3C  <   */ 0,
+  /* 61  3D  =   */ 0,
+  /* 62  3E  >   */ 0,
+  /* 63  3F  ?   */ 0,
+  /* 64  40  @   */ 0,
+  /* 65  41  A   */ langIdent | langIdentStart,
+  /* 66  42  B   */ langIdent | langIdentStart,
+  /* 67  43  C   */ langIdent | langIdentStart,
+  /* 68  44  D   */ langIdent | langIdentStart,
+  /* 69  45  E   */ langIdent | langIdentStart,
+  /* 70  46  F   */ langIdent | langIdentStart,
+  /* 71  47  G   */ langIdent | langIdentStart,
+  /* 72  48  H   */ langIdent | langIdentStart,
+  /* 73  49  I   */ langIdent | langIdentStart,
+  /* 74  4A  J   */ langIdent | langIdentStart,
+  /* 75  4B  K   */ langIdent | langIdentStart,
+  /* 76  4C  L   */ langIdent | langIdentStart,
+  /* 77  4D  M   */ langIdent | langIdentStart,
+  /* 78  4E  N   */ langIdent | langIdentStart,
+  /* 79  4F  O   */ langIdent | langIdentStart,
+  /* 80  50  P   */ langIdent | langIdentStart,
+  /* 81  51  Q   */ langIdent | langIdentStart,
+  /* 82  52  R   */ langIdent | langIdentStart,
+  /* 83  53  S   */ langIdent | langIdentStart,
+  /* 84  54  T   */ langIdent | langIdentStart,
+  /* 85  55  U   */ langIdent | langIdentStart,
+  /* 86  56  V   */ langIdent | langIdentStart,
+  /* 87  57  W   */ langIdent | langIdentStart,
+  /* 88  58  X   */ langIdent | langIdentStart,
+  /* 89  59  Y   */ langIdent | langIdentStart,
+  /* 90  5A  Z   */ langIdent | langIdentStart,
+  /* 91  5B  [   */ 0,
+  /* 92  5C  \   */ 0,
+  /* 93  5D  ]   */ 0,
+  /* 94  5E  ^   */ 0,
+  /* 95  5F  _   */ langIdent | langIdentStart,
+  /* 96  60  `   */ 0,
+  /* 97  61  a   */ langIdent | langIdentStart,
+  /* 98  62  b   */ langIdent | langIdentStart,
+  /* 99  63  c   */ langIdent | langIdentStart,
+  /* 100 64  d   */ langIdent | langIdentStart,
+  /* 101 65  e   */ langIdent | langIdentStart,
+  /* 102 66  f   */ langIdent | langIdentStart,
+  /* 103 67  g   */ langIdent | langIdentStart,
+  /* 104 68  h   */ langIdent | langIdentStart,
+  /* 105 69  i   */ langIdent | langIdentStart,
+  /* 106 6A  j   */ langIdent | langIdentStart,
+  /* 107 6B  k   */ langIdent | langIdentStart,
+  /* 108 6C  l   */ langIdent | langIdentStart,
+  /* 109 6D  m   */ langIdent | langIdentStart,
+  /* 110 6E  n   */ langIdent | langIdentStart,
+  /* 111 6F  o   */ langIdent | langIdentStart,
+  /* 112 70  p   */ langIdent | langIdentStart,
+  /* 113 71  q   */ langIdent | langIdentStart,
+  /* 114 72  r   */ langIdent | langIdentStart,
+  /* 115 73  s   */ langIdent | langIdentStart,
+  /* 116 74  t   */ langIdent | langIdentStart,
+  /* 117 75  u   */ langIdent | langIdentStart,
+  /* 118 76  v   */ langIdent | langIdentStart,
+  /* 119 77  w   */ langIdent | langIdentStart,
+  /* 120 78  x   */ langIdent | langIdentStart,
+  /* 121 79  y   */ langIdent | langIdentStart,
+  /* 122 7A  z   */ langIdent | langIdentStart,
+  /* 123 7B  {   */ 0,
+  /* 124 7C  |   */ 0,
+  /* 125 7D  }   */ 0,
+  /* 126 7E  ~   */ 0,
+  /* 127 7F  DEL */ 0,
+])
+
