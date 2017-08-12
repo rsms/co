@@ -81,7 +81,7 @@ export class Scanner {
   // Note that Init may call err if there is an error in the first character
   // of the file.
   //
-  init(file :File, src :Uint8Array, err? :ErrorHandler, m :Mode =Mode.None) {
+  init(file :File, src :Uint8Array, err? :ErrorHandler|null, m :Mode =Mode.None) {
     const s = this
     // Explicitly initialize all fields since a scanner may be reused
     if (file.size != src.length) {
@@ -456,9 +456,10 @@ export class Scanner {
             s.insertSemi = true
           }
         } else {
-          s.error('unexpected character in input')
+          s.error(`unexpected character ${unicode.repr(ch)} in input`)
           s.tok = token.ILLEGAL
         }
+        break
       }
 
     } // switch (ch)
@@ -478,17 +479,25 @@ export class Scanner {
     // c is already verified to be a valid indentifier character.
     // Hash is calculated as a second pass at the end.
     const s = this
+    const ZeroWidthJoiner = 0x200D
 
     // Track previous code point so that we can validate modifiers
     let prevCp = c
 
     while (
       isUniIdentCont(c) ||
-      (unicode.isEmojiModifier(c) && unicode.isEmojiModifierBase(prevCp))
+      (unicode.isEmojiModifier(c) && unicode.isEmojiModifierBase(prevCp)) ||
+      c == ZeroWidthJoiner
     ) {
       s.next()
       prevCp = c
       c = s.ch
+    }
+
+    if (c == ZeroWidthJoiner) {
+      s.error('invalid zero-width joiner character at end of identifer')
+      s.tok = token.ILLEGAL
+      return
     }
 
     // computing rest of hash

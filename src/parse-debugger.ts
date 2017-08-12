@@ -78,7 +78,7 @@ function parseAll() {
     const iterations = 1000
     let t1 = process.hrtime()
     for (let i = 0; i < iterations; ++i) {
-      s.init(file, src, onErr, scanner.Mode.ScanComments)
+      s.init(file, src, null, scanner.Mode.ScanComments)
       for (let t :token; (t = s.scan()) != token.EOF; ) {}
     }
     let t2 = process.hrtime()

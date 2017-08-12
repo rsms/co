@@ -40,8 +40,12 @@ $foo case switch if enum break
 '\117' '\x00' '\xEB'
 '\u221A' '\U00010299'
 
+Ꙁ_gԃ = 4
+
 😎 = cool
 
-🕺🏼 = yeah
+🕺🏽 = yeah
 
-Ꙁ_gԃ = 4
+// astronout woman with skin tone modifier:
+// U+1F469 U+1F3FD U+200D U+1F680
+👩🏽‍🚀 "\U0001F469\U0001F3FD\U0000200D\U0001F680"
