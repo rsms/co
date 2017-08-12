@@ -27,9 +27,8 @@ export enum Mode {
 
 const linePrefix = str8buf('//!line ')
 
-// A Scanner holds the scanner's internal state while processing
-// a given text. It can be allocated as part of another data
-// structure but must be initialized via Init before use.
+// A Scanner holds the scanner's internal state while processing a given text.
+// It must be initialized via init before use or resue.
 //
 export class Scanner {
   // immutable state (only changed by init())
