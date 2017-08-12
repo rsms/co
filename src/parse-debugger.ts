@@ -38,16 +38,18 @@ interface Tok {
 }
 
 
-const sourceFiles = fs.readdirSync(__dirname + '/../example').map(
-  fn => 'example/' + fn)
+const sourceDir = Path.join(__dirname, '..', 'example')
+const sourceFiles = fs.readdirSync(sourceDir)
+  .filter(fn => fn.endsWith('.go') && fn[0] != '.')
+  .map(fn => 'example/' + fn)
 const s = new scanner.Scanner()
 
 
 function fmtDuration(milliseconds :int) :string {
   return (
     milliseconds < 0.001 ? `${(milliseconds * 1000000).toFixed(0)} ns` :
-    milliseconds < 0.1 ? `${(milliseconds * 1000).toFixed(2)} µs` :
-    `${milliseconds.toFixed(2)} ms`
+    milliseconds < 0.1 ? `${(milliseconds * 1000).toFixed(0)} µs` :
+    `${milliseconds.toFixed(1)} ms`
   )
 }
 
@@ -152,6 +154,7 @@ function main() {
     for (const filename of fs.readdirSync(__dirname)) {
       selfSourceFiles.add(Path.join(__dirname, filename))
     }
+    selfSourceFiles.add(sourceDir)
 
     let isClosing = false
     const onSourceChanged = (curr: fs.Stats, prev :fs.Stats) => {
