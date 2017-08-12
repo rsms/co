@@ -87,8 +87,7 @@ export function bufcmp(
 // for common short names (based on tests on a large corpus of go source code.)
 //
 export function hashName(buf :ArrayLike<byte>, offs :int, length :int) {
-  let h = 0x811c9dc5
-  let i = offs + length
+  var h = 0x811c9dc5, i = offs + length
   while (i-- != offs) {
     h = (h ^ buf[i]) * 0x1000193
   }

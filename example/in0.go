@@ -39,3 +39,9 @@ $foo case switch if enum break
 '\n' '\t' '\f'
 '\117' '\x00' '\xEB'
 '\u221A' '\U00010299'
+
+😎 = cool
+
+🕺🏼 = yeah
+
+Ꙁ_gԃ = 4

@@ -19,6 +19,7 @@ interface FileInfo {
   name: string
   tokens: Tok[]
   errors: Err[]
+  parseTime :string
 }
 
 interface Err {
@@ -42,6 +43,15 @@ const sourceFiles = fs.readdirSync(__dirname + '/../example').map(
 const s = new scanner.Scanner()
 
 
+function fmtDuration(milliseconds :int) :string {
+  return (
+    milliseconds < 0.001 ? `${(milliseconds * 1000000).toFixed(0)} ns` :
+    milliseconds < 0.1 ? `${(milliseconds * 1000).toFixed(2)} µs` :
+    `${milliseconds.toFixed(2)} ms`
+  )
+}
+
+
 function parseAll() {
   console.log('parseAll')
   const fileSet = new FileSet()
@@ -52,6 +62,7 @@ function parseAll() {
       name: filename,
       tokens: [],
       errors: [],
+      parseTime: ''
     }
     const src = new Uint8Array(fs.readFileSync(filename, {flag:'r'}))
     const file = fileSet.addFile(filename, src.length)
@@ -60,6 +71,18 @@ function parseAll() {
       console.error(`[error] ${message} at ${position}`)
       fi.errors.push({ message, position, posstr: position.toString() })
     }
+
+    // benchmark
+    const iterations = 1000
+    let t1 = process.hrtime()
+    for (let i = 0; i < iterations; ++i) {
+      s.init(file, src, onErr, scanner.Mode.ScanComments)
+      for (let t :token; (t = s.scan()) != token.EOF; ) {}
+    }
+    let t2 = process.hrtime()
+    let td = ((t2[0] * 1000) + (t2[1] / 1000000)) - ((t1[0] * 1000) + (t1[1] / 1000000))
+    fi.parseTime = fmtDuration(td / iterations)
+    console.log(`${filename} ${fi.parseTime}`)
 
     s.init(file, src, onErr, scanner.Mode.ScanComments)
 
@@ -189,7 +212,7 @@ function startHttpServer() {
     }
 
     res.setHeader('Content-Type','text/html')
-    res.end(fs.readFileSync('misc/token-html-preview.html'))
+    res.end(fs.readFileSync('misc/parse-debugger.html'))
   })
   httpServer.listen(8984, '127.0.0.1')
   console.log('listening on http://127.0.0.1:8984')

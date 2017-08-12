@@ -6,3 +6,5 @@ _local
 out
 .DS_Store
 node_modules
+misc/UnicodeData.txt
+misc/emoji-data.txt

@@ -41,12 +41,27 @@ h2 {
   margin: 0 0;
 }
 
-.file h2 {
+.file .title {
+  display: flex;
+  background:salmon;
+  background: #222;
+  align-items:stretch;
+  line-height: 2.5em;
+}
+
+.file .title h2 {
   /*border-bottom: 2px solid #ccc;
   padding-bottom:0.5em;*/
-  background: #222;
   color: white;
-  padding: 0.5em;
+  margin:0;
+  margin-left: 0.5em;
+  flex: 1 0 auto;
+}
+
+.file .title .time {
+  flex: 0 1 auto;
+  margin-right: 0.5em;
+  color: white;
 }
 
 .file .errors {
@@ -230,9 +245,21 @@ function update(files) {
     fileEl.className = 'file'
     filesEl.appendChild(fileEl)
 
+    let titleEl = document.createElement("div")
+    titleEl.className = 'title'
+
     let h2El = document.createElement("h2")
     h2El.innerText = file.name
-    fileEl.appendChild(h2El)
+    titleEl.appendChild(h2El)
+
+    let timeEl = document.createElement("div")
+    timeEl.className = 'time'
+    timeEl.innerText = file.parseTime
+    titleEl.appendChild(timeEl)
+
+    file.tokens
+
+    fileEl.appendChild(titleEl)
 
     if (file.errors && file.errors.length) {
       let errorsEl = document.createElement("div")

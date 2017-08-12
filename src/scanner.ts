@@ -61,11 +61,10 @@ export class Scanner {
   public endoffs   :int = 0  // token end offset
   public tok       :token = token.EOF
   public intval    :int = 0 // value for some tokens
+  public hash      :int = 0 // hash value for current token (if IDENT*)
   public prec      :prec = prec.LOWEST // valid if tokIsOperator
 
   // sparse buffer state (not reset by s.init)
-  // private sparsebuf  :Uint8Array|null = null // sparse buffer for small lits
-  // private sparseoffs :int = 0 // write offset into sparsebuf
   private appendbuf  :AppendBuffer|null = null // for string literals
 
   // public state - ok to modify
@@ -173,20 +172,6 @@ export class Scanner {
     return (this.mode & Mode.CopySource) ? b.slice() : b
   }
 
-  // allocSparse ensures that s.sparsebuf has at least size available.
-  // Returns the current write offset into sparsebuf.
-  //
-  // allocSparse(size :int) :Uint8Array {
-  //   const s = this
-  //   if (!s.sparsebuf || s.sparsebuf.length - s.sparseoffs < size) {
-  //     s.sparsebuf = new Uint8Array(128)
-  //     s.sparseoffs = 0
-  //   }
-  //   const offs = s.sparseoffs
-  //   s.sparseoffs += size
-  //   return s.sparsebuf.subarray(offs, s.sparseoffs)
-  // }
-
   // Increment errorCount and call any error handler
   //
   error(msg :string, offs :int = this.startoffs) {
@@ -203,7 +188,10 @@ export class Scanner {
   while (true) {
     const s = this
 
-    s.skipWhitespace()
+    // skip whitespace
+    while (s.ch == 0x20 || s.ch == 0x9 || (s.ch == 0xA && !s.insertSemi) || s.ch == 0xD) {
+      s.next()
+    }
 
     // current token start
     s.pos = s.file.pos(s.offset)
@@ -231,7 +219,7 @@ export class Scanner {
 
       case 0xA: { // \n
         // we only reach here if s.insertSemi was set in the first place
-        // and exited early from s.skipWhitespace().
+        // and exited early from skipping whitespace.
         // newline consumed
         s.tok = token.SEMICOLON
         s.insertSemi = false
@@ -253,7 +241,7 @@ export class Scanner {
         break
 
       case 0x2e: { // .
-        if (unicode.isDigit(s.ch)) {
+        if (isDigit(s.ch)) {
           s.scanFloatNumber(/*seenDecimal*/true)
         } else {
           if (s.ch == 0x2e) { // .
@@ -278,7 +266,7 @@ export class Scanner {
         if (c < utf8.UniSelf && (asciiFeats[c] & langIdentStart)) {
           s.next()
           s.scanIdentifier(c)
-        } else if (c >= utf8.UniSelf && unicode.isLetter(c)) {
+        } else if (c >= utf8.UniSelf && isUniIdentStart(c)) {
           s.next()
           s.scanIdentifierU(c, this.startoffs)
         }
@@ -442,10 +430,9 @@ export class Scanner {
         break
 
       default: {
-
         if (
           (ch < utf8.UniSelf && (asciiFeats[ch] & langIdentStart)) ||
-          (ch >= utf8.UniSelf && unicode.isLetter(ch))
+          (ch >= utf8.UniSelf && isUniIdentStart(ch))
         ) {
           if (ch < utf8.UniSelf) {
             s.scanIdentifier(ch)
@@ -490,25 +477,21 @@ export class Scanner {
   }
 
 
-  // hash value for current token (if IDENT or IDENTAT)
-  public hash :int = 0
-
-
   scanIdentifierU(c :int, hashOffs :int, hash :int = 0x811c9dc5) {
     // Scan identifier with non-ASCII characters.
     // c is already verified to be a valid indentifier character.
     // Hash is calculated as a second pass at the end.
     const s = this
 
-    console.log(`scanIdentifierU [ ${unicode.repr(c)}, ${unicode.repr(s.ch)} ]`)
+    // Track previous code point so that we can validate modifiers
+    let prevCp = c
 
-    c = s.ch
     while (
-      (c < utf8.UniSelf && (asciiFeats[c] & langIdent)) ||
-      unicode.isLetter(c) ||
-      unicode.isDigit(c))
-    {
+      isUniIdentCont(c) ||
+      (unicode.isEmojiModifier(c) && unicode.isEmojiModifierBase(prevCp))
+    ) {
       s.next()
+      prevCp = c
       c = s.ch
     }
 
@@ -524,22 +507,25 @@ export class Scanner {
     // enters past first char; c = 1st char, s.ch = 2nd char
     // c is already verified to be a valid indentifier character.
     const s = this
-    console.log(`scanIdentifier [ ${unicode.repr(c)}, ${unicode.repr(s.ch)} ]`)
     let hash = (0x811c9dc5 ^ c) * 0x1000193 // fnv1a
 
     c = s.ch
-    while (c < utf8.UniSelf && (asciiFeats[c] & langIdent)) {
+    while (
+      isLetter(c) ||
+      isDigit(c) ||
+      c == 0x5F || // _
+      c == 0x24    // $
+    ) {
       hash = (hash ^ c) * 0x1000193 // fnv1a
       s.next()
       c = s.ch
     }
 
-    if (c >= utf8.UniSelf && (unicode.isLetter(c) || unicode.isDigit(c))) {
+    if (c >= utf8.UniSelf && isUniIdentCont(c)) {
       return s.scanIdentifierU(c, hash, s.offset)
     }
 
     s.hash = hash >>> 0
-    console.log('hash', s.hash)
   }
 
   scanChar() {
@@ -776,7 +762,7 @@ export class Scanner {
         case 0x78: case 0x58: { // x, X
           s.tok = token.INT_HEX
           s.next()
-          while (unicode.isHexDigit(s.ch)) {
+          while (isHexDigit(s.ch)) {
             s.next()
           }
           if (s.offset - s.startoffs <= 2 || unicode.isLetter(s.ch)) {
@@ -898,29 +884,6 @@ export class Scanner {
 
     s.tok = token.FLOAT
     s.insertSemi = true
-  }
-
-  skipWhitespace() {
-    const s = this
-    while (true) {
-      switch (s.ch) {
-        case 0x20: // SP
-        case 0x9:  // \t
-        case 0xD:  // \r
-          break
-        case 0xA:  // \n
-          if (s.insertSemi) {
-            return
-          }
-          break
-        default:
-          if (s.ch < utf8.UniSelf || !unicode.isWhitespace(s.ch)) {
-            return
-          }
-          break
-      }
-      s.next()
-    }
   }
 
   switch2(tok0 :token, tok1 :token) :token {
@@ -1096,7 +1059,15 @@ export class Scanner {
         }
       }
 
-      s.skipWhitespace() // s.insertSemi is set
+      // skip whitespace
+      while (
+        s.ch as int == 0x20 || // ' '
+        s.ch as int == 0x9 || // \t
+        (s.ch as int == 0xA && !s.insertSemi) || // \n
+        s.ch as int == 0xD) // \r
+      {
+        s.next()
+      }
 
       if (s.ch < 0 || s.ch as int == 0xA) { // \n
         return true
@@ -1136,6 +1107,46 @@ function stripByte(v :Uint8Array, b :byte, countHint :int = 0) :Uint8Array {
     }
   }
   return i < c.length ? c.subarray(0, i) : c
+}
+
+function isLetter(c :int) :bool {
+  return (
+    (0x41 <= c && c <= 0x5A) || // A..Z
+    (0x61 <= c && c <= 0x7A)  // a..z
+  )
+}
+
+function isDigit(c :int) :bool {
+  return 0x30 <= c && c <= 0x39 // 0..9
+}
+
+function isHexDigit(c :int) :bool {
+  return (
+    (0x30 <= c && c <= 0x39) || // 0..9
+    (0x41 <= c && c <= 0x46) || // A..F
+    (0x61 <= c && c <= 0x66)    // a..f
+  )
+}
+
+function isUniIdentStart(c :int) :bool {
+  return (
+    unicode.isLetter(c) ||
+    c == 0x5F || // _
+    c == 0x24 || // $
+    unicode.isEmojiPresentation(c) ||
+    unicode.isEmojiModifierBase(c)
+  )
+}
+
+function isUniIdentCont(c :int) :bool {
+  return (
+    unicode.isLetter(c) ||
+    unicode.isDigit(c) ||
+    c == 0x5F || // _
+    c == 0x24 || // $
+    unicode.isEmojiPresentation(c) ||
+    unicode.isEmojiModifierBase(c)
+  )
 }
 
 const
