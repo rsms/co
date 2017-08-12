@@ -124,7 +124,7 @@ export class Scanner {
         [r, w] = utf8.decode(s.src, s.rdOffset)
         if (r == 0) {
           s.error('illegal NUL byte in input', s.offset)
-        } else if (r == utf8.UniError) {
+        } else if (w == 0 && r == utf8.UniError) {
           s.error('invalid UTF-8 encoding', s.offset)
         }
       }
