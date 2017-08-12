@@ -481,21 +481,18 @@ export class Scanner {
     const s = this
     const ZeroWidthJoiner = 0x200D
 
-    // Track previous code point so that we can validate modifiers
-    let prevCp = c
-
     while (
       isUniIdentCont(c) ||
-      (unicode.isEmojiModifier(c) && unicode.isEmojiModifierBase(prevCp)) ||
+      unicode.isEmojiModifier(c) ||
+      unicode.isEmojiModifierBase(c) ||
       c == ZeroWidthJoiner
     ) {
       s.next()
-      prevCp = c
       c = s.ch
     }
 
-    if (c == ZeroWidthJoiner) {
-      s.error('invalid zero-width joiner character at end of identifer')
+    if (c == ZeroWidthJoiner || unicode.isEmojiModifier(c)) {
+      s.error(`invalid character ${unicode.repr(c)} at end of identifer`)
       s.tok = token.ILLEGAL
       return
     }
