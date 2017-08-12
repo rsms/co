@@ -23,9 +23,6 @@ export enum Mode {
     // less memory usage since when scanning is done, the source code memory
     // can be reclaimed. If you plan to keep the source code around after
     // scanning (common case) you should leave this disabled.
-
-  RawStrings = 4,
-    // Don't convert escape sequences in string literals into UTF8 bytes.
 }
 
 const linePrefix = str8buf('//!line ')
