@@ -480,6 +480,8 @@ export class Scanner {
     // Hash is calculated as a second pass at the end.
     const s = this
     const ZeroWidthJoiner = 0x200D
+    let lastCp = c
+    c = s.ch
 
     while (
       isUniIdentCont(c) ||
@@ -487,12 +489,13 @@ export class Scanner {
       unicode.isEmojiModifierBase(c) ||
       c == ZeroWidthJoiner
     ) {
+      lastCp = c
       s.next()
       c = s.ch
     }
 
-    if (c == ZeroWidthJoiner || unicode.isEmojiModifier(c)) {
-      s.error(`invalid character ${unicode.repr(c)} at end of identifer`)
+    if (lastCp == ZeroWidthJoiner) {
+      s.error(`illegal zero width-joiner character at end of identifer`)
       s.tok = token.ILLEGAL
       return
     }
