@@ -418,11 +418,11 @@ function bar(n :int) {
 ### function for clarity
 
 `() =>`, `lambda x: y`, `^(){ ... }` et al. might look real cool, but in reality
-I find these alternative "short" function syntaxes to be hard to read,
+I find these alternative "short" function syntaxes hard to read,
 causing the code in question to suffer in terms of clarity and readability.
 
 ```ts
-function foo() :(name :string)=>number {
+function foo() :(name :string) => number {
   return ((name :string) => () =>
     "Hello, " + name
   )("Dr " + name)
@@ -454,7 +454,7 @@ func foo() :func(name :string):number {
 ```
 
 
-### default initialization
+### Default initialization
 
 What's the value of something before you've assigned it or initialized it?
 In TypeScript and JavaScript, it's always "undefined" until explicitly intitialized.
@@ -828,10 +828,8 @@ class Foo is Fooable {
   }
 }
 
-// Extending a type or interface
 func Fooable.baz(x int) int {
-  // here, "this" is always of type Fooable
-  this.bar(x + y) // "y" is on interface Fooable
+  bar(x + y) // "y" is on interface Fooable
 }
 
 // An unbound function
@@ -851,7 +849,7 @@ const y = 9
 
 // Extending a type or interface
 func Fooable.baz(x int) int {
-  this.bar(x + y)
+  bar(x + y)
 }
 ```
 
@@ -900,6 +898,194 @@ can be hard to reason about and is error-prone. And we don't have to type
 "this." or "self." all of the time. Nice.
 
 
+
+### null — optional values
+
+On one hand, `null` (or "empty") is a really useful concept since we can model
+things that are optional. But on the other hand, it's a well-known source of
+runtime bugs where the programmer didn't realize that the value of something
+might be null.
+
+Most languages does nothing to help you avoid accidentally reading null values,
+some languages simply do don't have `null`, and a few languages have syntax
+and/or compile-time- and/or runtime-checks to help you with null values.
+
+For instance, programming in Swift is a constant consideration of
+"Should I use `?` here, or maybe `!`, or perhaps none of those?"
+
+C++ has two different kinds of ways to refer to a value: `*Type` for things that
+might be null, and `&Type` for things that can't be null. The compiler then
+ensures that a `&Type` value is never null, but does nothing to assist with
+values that might be null. Also, having two different ways to declare a pointer
+is error-prone because it requires deeper knowledge of the differences.
+C++ also has "Plain Old Data" values which are not references nor pointers.
+
+Null is a useful concept and we should include it and make sure there are no
+different kinds of ways to refer to values — there are only values.
+
+Optional values in our language:
+
+- A value is optional if its type is suffixed by `?`, e.g. `Foo?`
+- An optional value is default-initialized to `null` rather than its type.
+- Values of primary types like `int` and `bool` can _not_ be optional.
+- The keyword `null` is a special value that can be returned or assigned to any
+  optional type. E.g. `var f Foo? = null` or `x.y = null` if `y` is optional.
+- There is no "null type", i.e. `null` can't be used as a type name.
+- `null` can't be used alone for type inference, i.e. `x := null` is invalid and
+  should instead be written as `var x Foo?`
+
+```go
+var foo Foo?
+// ...
+if f := foo {
+  // we know f is not null; f has type Foo (sans null)
+} else {
+  // we know f is null; f has type null
+}
+```
+
+The type system could help us avoiding mistakes where some code deals with
+null values and some doesn't:
+
+```go
+func foo(n int) Foo? {
+  if n > 0 { Foo(n) } else { null }
+}
+
+func bar(f Foo) { ... }
+
+f := foo(0)
+bar(f)     // error: possible null value for required parameter f
+```
+
+We'd fix the error above by checking `f`:
+
+```go
+f := foo(0)
+if f {
+  bar(f) // ok; typeof(f) is Foo (not `Foo?`)
+}
+```
+
+Only compound types can be null/optional. This means that values of a primary
+type like `int`, `bool` or `float` can never be null, and an `if` check will
+never be ambiguous.
+
+This becase of zeroed-initizlied memory. See [Default initialization](#default-initialization) for longer discussion.
+
+```go
+type Foo {
+  n int // = 0
+}
+var x int   // = 0
+var y float // = 0.0
+var z bool  // = false
+var f Foo?  // = null
+var g Foo   // = Foo{n=0}
+```
+
+Attempting to make a value of primary type optional causes the compiler to emit
+an error:
+
+```go
+var z bool?  // error: primary type bool can not be made optional
+```
+
+The compiler should guarantee that something declared as _not optional_ can
+never be null.
+
+Here's another example:
+
+```go
+func cpuinfo() CpuInfo {
+  var ci CpuInfo?
+  //
+  // ... maybe assign a value to ci ...
+  //
+  ci   // error: possible null value for required value
+}
+```
+
+We can fix this either by making `cpuinfo()` return an optional value and leave
+the null-checking to the caller, or we can ensure the result is never null:
+
+```go
+const _emptyCpuInfo CpuInfo
+func cpuinfo() CpuInfo {
+  var ci CpuInfo?
+  //
+  // ... maybe assign a value to ci ...
+  //
+  if ci { ci } else { _emptyCpuInfo }
+}
+```
+
+If we fail to make a CpuInfo, we return a zero one.
+
+
+#### Pointers & references
+
+This also implies that our language doesn't have pointers or references for
+primary types, meaning that the following is _not possible_:
+
+```go
+func incr(n *int) { n++ }
+var count = 0
+incr(&count)
+```
+
+Instead, the value must be wrapped in a compound type and that type's field be
+updated:
+
+```go
+func incr(r {n int}) { r.n++ }
+var count = { n := 0 }
+incr(count)
+// count.n is now 1
+```
+
+Alternatively a new value can be returned. This is usually the best solution
+for updating values of a primary type as it makes it clear what is happening at
+the call site:
+
+```go
+func incr(n int) int { n + 1 }
+var count = 0
+count = incr(count)
+// count is now 1
+```
+
+
+### Multiple return values
+
+Returning more than one value is often very useful.
+Consider this UTF8 decoder that returns both the Unicode code point that it
+decoded as well as the amount of bytes it "consumed" from the input buffer:
+
+```go
+func decodeUtf8(b [byte], offs int) (cp, w int) {
+  // reads 1-4 bytes from b starting at offs
+  return (codepoint, bytesRead)
+}
+
+var offs = 0
+while offs < len(bytes) {
+  r := decodeUtf8(bytes, offs)
+  print("read codepoint ${hex(r.cp)}")
+  offs += r.w
+}
+```
+
+We could also expand the result values by position into local names:
+
+```go
+var offs = 0
+while offs < len(bytes) {
+  cp, width := decodeUtf8(bytes, offs)
+  print("read codepoint ${hex(cp)}")
+  offs += width
+}
+```
 
 
 <br><br><br><br><br>
