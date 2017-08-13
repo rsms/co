@@ -8,3 +8,902 @@ Usage:
 - Start visual debugger: `node out/parse-debugger.js` or run `node out/main.js`
 
 ![](https://user-images.githubusercontent.com/47046/29244520-ca3581b6-7f6e-11e7-9618-0c40569700e3.png)
+
+
+## Patterns
+
+Following are different patterns prevalent in day-to-day programming with
+some popular languages that target the web platform.
+These patterns all have issues, or at least it seems like they where designed with
+different things in mind than how they are actually used today.
+
+
+### Repeat fields over and over
+
+```ts
+class Foo {
+  private _field1 :number
+  field2 :string
+  field3 :Bar
+  field4 :boolean
+
+  constructor(field2 :string, field3 :Bar, field4 :boolean) {
+    this.field2 = field2
+    this.field3 = field3
+    this.field4 = field4
+    this._field1 = field4 ? 1 : 0
+  }
+}
+let foo = new Foo(1, "2", three, true)
+```
+
+TypeScript allows an alternate and strange constructor syntax to mitigate this
+clearly wasteful pattern. However, it's still overly verbose (you have to
+declare the access scope for each field) and I find it really hard to read as
+some fields are at the class scope and some at the constructor-parameter scope:
+
+```ts
+class Foo {
+  private _field1 :number
+  constructor(
+    public field2 :string,
+    public field3 :Bar,
+    public field4 :boolean
+  ) {
+    this._field1 = field4 ? 1 : 0
+  }
+}
+let foo = new Foo(1, "2", three, true)
+```
+
+But it would be so much nicer if we could just do this:
+
+```ts
+class Foo {
+  field2 :string
+  field3 :Bar
+  field4 :boolean
+  private _field1 :number = field4 ? 1 : 0
+}
+let foo = new Foo(field2="2", field3=three, field4=true)
+```
+
+
+### Public static private protected
+
+Java had its issues. Let's not go there again.
+
+```ts
+class Foo {
+  public foo() { ... }
+  public static fooify() { ... }
+  private doMagicalThings() { ... }
+  protected update() { doMagicalThings() }
+}
+```
+
+Forget about protected.
+It's a "Oh let's design a perfect system on this white-board" kind of invention.
+Let's just say that some things are internal to an implementation, and the
+things that are not can be accessed by other modules/packages.
+
+How about this instead:
+
+```ts
+class Foo {
+  foo() { ... }
+  _doMagicalThings() { ... }
+  _update() { ... }
+}
+
+function fooify(f :Foo) { ... }
+```
+
+Only code within the same package can access stuff that begins with an
+underscore.
+Also, "static methods" are really just convoluted ways of writing functions.
+
+
+
+### Implements Interface and redefines it all over
+
+```ts
+interface Foo {
+  field2 :string
+  field3 :Bar
+  field4 :boolean
+  transmogrify() :boolean
+}
+
+class foo implements Foo {
+  field2 :string
+  _field1 :number
+  field3 :Bar
+  field4 :boolean
+  transmogrify() :boolean {
+    return false
+  }
+}
+```
+
+Ugh. What if we could just do this instead:
+
+```ts
+interface Foo {
+  field2 :string
+  field3 :Bar
+  field4 :boolean
+  transmogrify() :boolean
+}
+
+class foo implements Foo {
+  _field1 :number
+  transmogrify() :boolean {
+    return this._field1 > 0
+  }
+}
+```
+
+The compiler could tell us if we are shadowing a field.
+
+```ts
+...
+class foo implements Foo {
+  _field1 :number
+  field4 :string          // error: Foo.field4 redeclared
+  ...
+```
+
+
+### Named arguments
+
+JavaScript confusingly allows this
+
+```js
+function x(a=0, b=0, c=0) {
+  console.log({a, b, c})
+}
+let b = 0
+x((b=9), c=3) // {a: 9, b: 3, c: 0} -- WTF?!
+```
+
+What would you expect to happen? Yeah.
+We really just defined a new variable `c` in the calling scope. 🤦‍♂️
+
+Wouldn't it be nice if we could just do this? Python and Go got it right.
+
+```js
+function x(a=0, b=0, c=0) {
+  console.log({a, b, c})
+}
+let b = 0
+x((b=9), c=3) // {a: 9, b: 0, c: 3} -- Thank you.
+```
+
+
+### import import import import
+
+Uuuuugh. This one drives me crazy when writing JS/TS:
+
+```ts
+import { Foo, bar, baz } from './file1'
+import * as library from 'some/library'
+import * as lolcat from './file3'
+import lolcatz from './file4'
+import { Internet } from './file5'
+
+// In scope:
+// library.A, library.B
+// Foo, bar, baz, lolcat, lolcatz, Internet
+```
+
+The problem here is that _every file of a logical package_ needs to import
+basically every other of its files.
+
+This makes it really expensive to:
+- Move code around and
+- to rename files.
+
+Filenames should really just be a way to organize your code.
+Also, why not just allow importing packages as the name they already have?
+Go, Python, Pony and a whole bunch of other languages got this right.
+
+```ts
+import 'some/library'
+
+// In scope:
+// library.A, library.B
+// Foo, bar, baz, lolcat, lolcatz, Internet
+```
+
+To sum things up:
+
+- One directory = one package
+- One file = some chunk of code of a package (compiler and runtime doesn't care.)
+- A file inside a directory is part of the same lecixal scope as other files in that same directory.
+- Imports are done on a package level.
+
+
+
+### new
+
+Basically anything you do in JavaScript allocates stuff, so why not throw away
+that old Java marketing trick "new" operator?
+
+```ts
+let date = new Date()
+let foo = new Foo()
+let bar = new Bar()
+```
+
+Python got this right. Let's just forget about the embarrassment that's `new`
+and do this:
+
+```ts
+let date = Date()
+let foo = Foo()
+let bar = Bar()
+```
+
+
+### Constructors
+
+Here's a pretty common kind of constructor that executes some small amount of
+code so that it can initialize its state:
+
+```ts
+class Foo {
+  field1 :string
+  _field2 :number
+
+  constructor(field1 :string) {
+    this.field1 = field1
+    this._field2 = field1.length
+  }
+}
+```
+
+This sucks, right?! So much typing, so little progress.
+
+First off, it should be a programming-crime to do anything else than
+state initialization in a constructor. If you start a network request,
+read a file or really do any "real work", you'll eventually get into trouble
+and should move that code into a descriptive function.
+
+So, constructors are purely for initialization.
+
+Here's one idea, where we allow putting some expression after a field,
+where the expression is executed when a Foo is initialized:
+
+```ts
+class Foo {
+  field1 :string
+  _field2 :number = field1.length
+}
+Foo("o hai") // _field2 is set to 5
+```
+
+An issue with this approach is the order of which these initializing
+expressions are evaluated, since they probably depend on each other.
+We could say that the compiler should handle this. After all, it's invalid to
+initialize A=B and B=A at the same time, so automatically resolving
+initialization order is possible. But it's a lot of work for a compiler.
+
+We could alternatively do this, where we attribute special meaning to the
+member name "_init", similar to Python's "__init__":
+
+```ts
+class Foo {
+  field1 :string
+  _field2 :number
+  _init() {
+    this._field2 = field1.length
+  }
+}
+Foo("o hai") // _field2 is set to 5
+```
+
+Or just ditch constructors alltogether, like Go:
+
+```ts
+class Foo {
+  field1 :string
+  _field2 :number
+}
+function makeFoo(field1 :string) :Foo {
+  Foo(field1, _field2=field1.length)
+}
+```
+
+
+
+### return
+
+Why do I have to type "return" all the time?
+
+```js
+function bar(n) {
+  const x = 10
+  return function() {
+    return x * n
+  }
+}
+```
+
+Here's a crazy idea: What if we just return the last expression in a function body?
+Another way of thinking about this: Instead of making return opt-in, we make it
+opt-out, assuming the common-case is to return a value.
+
+```js
+function bar(n) {
+  const x = 10
+  function() {
+    x * n
+  }
+}
+```
+
+So much nicer.
+
+We'd still allow explicit return, so that returning early is possible:
+
+```js
+function bar(n) {
+  const x = 10
+  if (n < 1) {
+    return null
+  }
+  function() { x * n }
+}
+```
+
+See [Go all in with types](#go-all-in-with-types)
+
+
+### Flow control as expressions
+
+Let's consider having all flow-control structures be expressions, as in they
+have a result value. For example "if..else":
+
+```js
+function bar(n) {
+  const x = 10
+  if (n < 1) {
+    null
+  } else {
+    function() { x * n }
+  }
+}
+```
+
+Which can be thought of as:
+
+```js
+function bar(n) // -> null or function
+  if { ... } else { ... } // -> null or function
+```
+
+In some languages where control structures are expressions, a different name
+than "if" is used for clarity. Something like this:
+
+```js
+...
+  cond {
+    case (n < 1) null
+    default function() { x * n }
+  }
+}
+```
+
+However, I think the tradeoffs for renaming "if" are not worth it — "if" is not
+only a logical and simple term, but is prevalent in the majority of programming
+languages. Therefore I think it makes more sense to:
+
+- Make `if...else` an expression, where its type is the union of all branches' types.
+- Remove the `<cond> ? <then> : <else>` syntax, which would be redundant and is hard to read.
+- Remove the need to enclose conditions in `(...)` (for all control structures.)
+- Require braces for bodies/blocks of code to be explicit about effects.
+
+Our little example snippet could be written like this:
+
+```ts
+function bar(n :int) {
+  const x = 10
+  if n < 1 { null }
+  else { function() { x * n } }
+}
+```
+
+
+### function for clarity
+
+`() =>`, `lambda x: y`, `^(){ ... }` et al. might look real cool, but in reality
+I find these alternative "short" function syntaxes to be hard to read,
+causing the code in question to suffer in terms of clarity and readability.
+
+```ts
+function foo() :(name :string)=>number {
+  return ((name :string) => () =>
+    "Hello, " + name
+  )("Dr " + name)
+}
+```
+
+Wait, what? Let's try this with "function" and our idea of implicit return:
+
+```ts
+function foo() :function(name :string):number {
+  (function (name :string) {
+    function() {
+      "Hello, " + name
+    }
+  })("Dr " + name)
+}
+```
+
+It's a little longer, but a lot more readable I think. We might even abbreviate
+"function" the way a lot of other languages does, and allow dropping `()` for
+functions that don't accept parameters:
+
+```go
+func foo() :func(name :string):number {
+  func (name :string) {
+    func { "Hello, " + name }
+  }("Dr " + name)
+}
+```
+
+
+### default initialization
+
+What's the value of something before you've assigned it or initialized it?
+In TypeScript and JavaScript, it's always "undefined" until explicitly intitialized.
+This means that for something of the type "number", it's not always a number.
+
+```ts
+class Foo {
+  x :number
+  name :string
+}
+let foo = new Foo()
+console.log(foo.x * 10)      // NaN, because x is not a number
+console.log(foo.name.length) // crash, because name is not a string
+```
+
+Objective-C, Go and a few other languages got this right by always initializing
+values to zero, whatever that means for the value type.
+
+I think Go has the best model here:
+_things are allocated into zeroed memory_ (all bits are `0`).
+All primitive types in Go are valid when its memory is all zero, which means
+that we only need to zero the memory region for a new thing — no need to
+execute code that initializes each and every member separately.
+
+```go
+type Foo struct {
+  x, y int    // == 0, 0
+  z    float  // == 0.0
+  bar  string // == "" (the empty string)
+  lol  bool   // == false
+  // and so on
+}
+```
+
+What's also nice about this model is that any compound types are always
+initialized too, in the same way, since any compound type is really just a set
+of primitive types.
+
+```go
+type Foo struct {
+  x, y int    // == 0, 0
+  z    float  // == 0.0
+  bar  string // == { 0 }
+  lol  bool   // == false
+}
+type Bar struct {
+  Foo          // == { 0, 0, 0.0, { 0 }, false }
+  hello string // == { 0 }
+}
+// Memory for Bar:
+//   { { 0, 0, 0.0, { 0 }, false } { 0 } }
+// Assuming int and float are 32-bits wide and bool is 8 bits:
+//   00000000 00000000 00000000 00000000 00 00000000
+```
+
+This is probably the best model for initialization and a good way to guarantee
+that any type is always valid (although perhaps not functionally.)
+
+> We need to figure out a way to deal with pointers in this model.
+
+
+### Go all-in with types
+
+TypeScript is awesome, but it is a "patch on top of JavaScript" and for
+historical reasons, declaring types in TypeScript is optional, meaning the
+syntax for no type or with types needs to be unambiguous. Therefore TypeScript
+dictates that every timetype needs to be prefixed with a colon, like so:
+
+```ts
+class Vec3 {
+  x :number
+  y :number
+  z :number
+}
+function origin(x :number, y :number, z :number) :Vec3|null {
+  if (z > 0) {
+    return Vec3(x, y, z)
+  }
+  null
+}
+let o = origin()
+```
+
+What if we said that types are only optional in certain specific cases,
+like for return types and assignment declarations?
+We could drop the `:`, since we wouldn't need it for disambiguation, and could
+even allow C- and Go-style short-form multi-declarations of the same type:
+
+```go
+class Vec3 {
+  x, y, z number
+}
+func origin(x, y, z number) Vec3|null {
+  if z > 0 {
+    Vec3(x, y, z)
+  } else {
+    null
+  }
+}
+let o = origin() // o has type Vec3|null
+```
+
+And what if a missing "else" condition meant "a default-initialized thing of the same type as the 'then' branch"?
+
+```go
+class Vec3 {
+  x, y, z number
+}
+func origin(x, y, z number) Vec3 {
+  if z > 0 {
+    Vec3(x, y, z)
+  }
+}
+let o = origin() // o has type Vec3
+```
+
+Of course, in the following case the compiler would have to error and require
+the programmer to add an "else" branch?
+
+```go
+func origin(x, y, z number) {
+  if z > 0 {
+    Vec3(x, y, z)
+  } else if z < 0 {
+    NegVec3(x, y, -z)
+  }
+}
+```
+
+The compiler might say something like this:
+
+```txt
+Error: ambiguous "if" with multiple "else" candidates: Vec3, NegVec3 in foo:12:3
+- Add an "else" branch or change all existing branches to the same type.
+```
+
+For the sake of simplicity, we might consider forcing return-type declaration
+for all functions:
+
+```go
+func origin(x, y, z number) Vec3|NegVec3 {
+  if z > 0 {
+    Vec3(x, y, z)
+  } else if z < 0 {
+    NegVec3(x, y, -z)
+  }
+}
+```
+
+The compiler could then either pick the first type and for the "else" case return
+a default-initialized instance of that type, or it could complain with an error
+as discusses earlier.
+
+
+### this
+
+There're a lot of opinions around the `this` keyword, but one thing is fact: It has—and is still—causing a lot of trouble and confusion.
+
+The main issue with `this`:
+
+> What is _this_ at this location in my code?
+
+Here's an example:
+
+```js
+...
+  bar() {
+    return this.x // what is "this"?
+  }
+...
+```
+
+It all depends on the context, and not just the lexical context (like a
+class definition), but the _runtime-call context_. In JavaScript `this` is
+whatever a function was called with:
+
+```js
+function bar() {
+  return this
+}
+let A = { bar }
+let B = { bar }
+A.bar() // this == A
+B.bar() // this == B
+bar()   // this == whatever `this` is in the calling context!
+```
+
+`this` gets worse when you use higher-order functions with closures:
+
+```js
+function bar(n) {
+  return function() {
+    return this.x * n
+  }
+}
+let fn = ({ x:10, bar }).bar(10)
+fn() // NaN!
+```
+
+A different kind of function was introduced into JavaScript to address this
+particular issue! That's how big of a problem `this` is.
+
+```js
+function bar(n) {
+  return () => { // automatically "binds this"
+    return this.x * n
+  }
+}
+let fn = ({ x:10, bar }).bar(10)
+fn() // 100
+```
+
+What if we got rid of `this`. Go and Python both takes this approach, although
+a bit differently.
+
+In Python the name "self" is used, which carries no special meaning in the
+language; it's purely a convention. For functions called with a parent context,
+like a class instance, it receives that context as the first parameter.
+
+```py
+class Foo:
+  x = 10
+  def bar(self, n):
+    def f():
+      return self.x * n
+    return f
+fn = Foo().bar(10)
+print(fn())
+```
+
+Additionally, since white-space has lexical meaning in Python, there's an
+alternative function syntax for anonymous functions:
+
+```py
+class Foo:
+  x = 10
+  def bar(self, n):
+    return lambda: self.x * n
+fn = Foo().bar(10)
+print(fn())  # 100
+```
+
+##### Some ideas for getting rid of "this"
+
+Go's approach is even simpler: There are no "methods" on types, there are only
+functions, and some functions takes a certain type as a prefix parameter.
+We give whatever name we want to that parameter (in this example it's `f`):
+
+```go
+type Foo struct {
+  x int
+}
+func (f Foo) bar(n int) func()int {
+  return func() int {
+    return f.x * n
+  }
+}
+fn := Foo{x:10}.bar(10)
+fn() // 100
+```
+
+The downside with this approach is the prefix-parameter syntax required which
+makes code harder to read compared to some other popular languages.
+There are a lot of parenthesis and names intermixed in this fairly simple
+function definition:
+
+```go
+class Foo {
+  (f Foo) bar(n int) int
+}
+func (f Foo) baz(n int) int
+```
+
+Let's see if we can make it more easilty readable:
+
+```go
+class Foo {
+  bar(f Foo, n int) int
+}
+func Foo.baz(f Foo, n int) int
+```
+
+That's easier to read, but now we're typing "Foo" where we clearly don't need to.
+
+Let's try something else: (we use `;` instead of `,` to still allow multi-parameter-single-type delcarations)
+
+```go
+class Foo {
+  bar(f; n int) int
+}
+func Foo.baz(f; n int) int
+// f would implicitly have type Foo
+```
+
+But this would introduce a new awkward syntax (ushing both `;` and `,` for
+function parameters) and make the language harder to use.
+
+
+##### Circling back to "this"
+
+So perhaps the concept of "this" is a decent one after all.
+The main issue with "this" in JavaScript et al. is the fact that its value is
+really hard to reason about. So why don't we keep "this" and make the value
+as obvious as possible and non-ambiguous?
+
+Two kinds of functions:
+
+- _Bound:_ Bound to a type — has `this` that is always of its bound-to type
+- _Unbound_: doesn't have `this`
+
+Example:
+
+```ts
+interface Fooable {
+  bar(n int) func()int
+}
+
+class Foo is Fooable {
+  x int
+
+  bar(x int) func()int {
+    // here, "this" is always of type Foo
+    func() {
+      // here, "this" is still of type Foo since this function is
+      // an "unbound" function -- typing "this" simply includes "this"
+      // from the "bar" function body in this function's closure.
+      this.x * x
+    }
+  }
+}
+
+// Extending a type or interface
+func Fooable.baz(x int) int {
+  // here, "this" is always of type Fooable
+  this.bar(x)
+}
+
+// An unbound function
+func lol(x int) int {
+  // here, "this" doesn't exist and the compiler will error
+  this.x * x  // error: undefined: this in foo:12:3
+}
+```
+
+The last piece of the puzzle is the fact that we type "this"
+_all the freaking time_. Go uses a single-character name by convention,
+but the concept of "this" clearly means we need to pick _just one name_.
+
+Before considering alternative names, what if we allow implicit member-field
+access?
+
+```ts
+interface Fooable {
+  y int
+  bar(n int) func()int
+}
+
+class Foo is Fooable {
+  x int
+
+  bar(x1 int) func()int {
+    // Note that we have to choose between naming the parameter "x"
+    // or using "x" to access "this.x" — we can't do both.
+    func() {
+      // here, "this" is still of type Foo.
+      // When we type "x", the compiler looks in the parent scope for "x"
+      // and when it doesn't find it as just plain "x", it looks at "this.x",
+      // which it does find, and so "x" here is the same as "this.x"
+      x * x1
+    }
+  }
+}
+
+// Extending a type or interface
+func Fooable.baz(x int) int {
+  // here, "this" is always of type Fooable
+  this.bar(x + y) // "y" is on interface Fooable
+}
+
+// An unbound function
+func lol(x1 int) int {
+  // here, "this" doesn't exist and the compiler won't find "x"
+  x * x1  // error: undefined: x in foo:12:3
+}
+```
+
+This is nice, but has some trickyness to it: What if you introduce a name "y"
+in the global scope and want to access that in `Fooable.baz`? It's easy to
+forget (or not even know) that `Fooable` defines a field "y":
+
+```ts
+// Fooable is defined in a different file, so we don't see it here
+const y = 9
+
+// Extending a type or interface
+func Fooable.baz(x int) int {
+  this.bar(x + y)
+}
+```
+
+We'd expect `y` to always be `9`, but in reality we would use the value of
+`Fooable.x`, potentially introducing subtle bugs.
+
+Therefore, we'll avoid implicit member-field access. Perhaps we can find a way
+to lower the cost of typing "this." all the time?
+
+My only favorite thing about Ruby is the use of `@` for "this", so let's try that.
+
+```ts
+interface Fooable {
+  bar(n int) func()int
+}
+
+class Foo is Fooable {
+  x int
+
+  bar(x int) func()int {
+    // here, "@" is always of type Foo
+    func() {
+      // here, "@" is still of type Foo since @ function is
+      // an "unbound" function -- typing "@" simply includes "@"
+      // from the "bar" function body in @ function's closure.
+      @x * x
+    }
+  }
+}
+
+// Extending a type or interface
+func Fooable.baz(x int) int {
+  // here, "@" is always of type Fooable
+  @bar(x)
+}
+
+// An unbound function
+func lol(x int) int {
+  // unbound -- the compiler will error
+  @x * x  // error: @ in unbound function in foo:12:3
+}
+```
+
+With this approach we don't have to allow implicit member-field access, which
+can be hard to reason about and is error-prone. And we don't have to type
+"this." or "self." all of the time. Nice.
+
+
+
+
+<br><br><br><br><br>
+<br><br><br><br><br>
+<br><br><br><br><br>
+<br><br><br><br><br>
+<br><br><br><br><br>
