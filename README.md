@@ -2,12 +2,15 @@
 
 A programming language similar to Go and TypeScript.
 
+[<img
+ align="right"
+ src="https://user-images.githubusercontent.com/47046/29244520-ca3581b6-7f6e-11e7-9618-0c40569700e3.png"
+ width="280" />](https://user-images.githubusercontent.com/47046/29244520-ca3581b6-7f6e-11e7-9618-0c40569700e3.png)
+
 Usage:
 - Setup: `yarn`
 - Build: `tsc`
 - Start visual debugger: `node out/parse-debugger.js` or run `node out/main.js`
-
-![](https://user-images.githubusercontent.com/47046/29244520-ca3581b6-7f6e-11e7-9618-0c40569700e3.png)
 
 
 ## Patterns
@@ -17,6 +20,27 @@ some popular languages that target the web platform.
 These patterns all have issues, or at least it seems like they where designed with
 different things in mind than how they are actually used today.
 
+Outline:
+
+- [Repeat fields over and over](#repeat-fields-over-and-over)
+- [Public static private protected](#public-static-private-protected)
+- [Implements Interface and redefines it all over](#implements-interface-and-redefines-it-all-over)
+- [Named arguments](#named-arguments)
+- [import import import import](#import-import-import-import)
+- [new](#new)
+- [Constructors](#constructors)
+- [return](#return)
+- [Flow control as expressions](#flow-control-as-expressions)
+- [function for clarity](#function-for-clarity)
+- [Default initialization](#default-initialization)
+- [Go all-in with types](#go-all-in-with-types)
+- [this](#this)
+- [null — optional values](#null--optional-values)
+- [Mutability](#mutability)
+- [Multiple return values](#multiple-return-values)
+- [Built-in types](#built-in-types)
+  - [Array](#array) & [slices](#array-slices)
+- [Collections](#collections)
 
 ### Repeat fields over and over
 
@@ -1011,16 +1035,17 @@ the null-checking to the caller, or we can ensure the result is never null:
 
 ```go
 const _emptyCpuInfo CpuInfo
+
 func cpuinfo() CpuInfo {
   var ci CpuInfo?
   //
   // ... maybe assign a value to ci ...
   //
-  if ci { ci } else { _emptyCpuInfo }
+  ci || _emptyCpuInfo
 }
 ```
 
-If we fail to make a CpuInfo, we return a zero one.
+If we fail to make a CpuInfo, we return a zero one (`_emptyCpuInfo`).
 
 
 #### Pointers & references
@@ -1056,6 +1081,76 @@ count = incr(count)
 ```
 
 
+### Mutability
+
+Opt-in to mutability with `var` — a mutable container. Maps to a `local` in WASM.
+
+
+#### Exploring opt-in to mutability
+
+We could say that fields are immutable by default and you opt-in with `var`s:
+
+```swift
+type Foo {
+  var x int
+  y float
+}
+
+func lol(f Foo) {
+  // parameters are always constants
+  f = Foo() // error: assignment to constant f
+  startTimeout(100, func {
+    // f here still refers to the original Foo, since we
+    // received the value, not the var, when lol() was called.
+    print("timeout. f.x: ${f.x}")
+  })
+}
+
+f := Foo() // == `var f Foo = Foo()`
+const f2 = f
+f.x = 5    // ok; changes var to point to 5
+f.y = 5    // error: assignment to constant y
+lol(f)     // passes the value to foo (not the var)
+f = Foo()  // ok; f is a var; lol() code is unaffected
+f2 = Foo() // error: assignment to constant f2
+```
+
+
+**A stricter opt-in**
+
+The assign-declare operator `:=` creates consts
+
+```ts
+type Foo {
+  var x int
+  y float
+}
+f := Foo() // == `const f Foo = Foo()`
+var f2 = f
+f.x = 5    // ok; changes var to point to 5
+f.y = 5    // error: assignment to constant y
+f = Foo()  // error: assignment to constant f
+f2 = Foo() // ok; f2 is a var
+```
+
+**Exploring opt-out from mutability**
+
+> Not doing this, but here for comparison
+
+```ts
+type Foo {
+  x int
+  const y float
+}
+const f = Foo()
+f2 := f    // == `var f2 Foo = Foo()`
+f.x = 5    // ok; changes var to point to 5
+f.y = 5    // error: assignment to constant y
+f = Foo()  // error: assignment to constant f
+f2 = Foo() // ok; f2 is a var
+```
+
+
 ### Multiple return values
 
 Returning more than one value is often very useful.
@@ -1086,6 +1181,160 @@ while offs < len(bytes) {
   offs += width
 }
 ```
+
+
+### Built-in types
+
+- 1 bit: `bool`
+- 8 bits: `uint8`, `int8`
+- 32 bits: `uint32`, `int32`, `float32`
+- 64 bits: `uint64`, `int64`, `float64`
+- Fixed-size array
+
+```
+BuiltInType = Array<T> | Primary
+Primary     = bool
+            | uint8 | int8
+            | uint32 | int32 | float32
+            | uint64 | int64 | float64
+Array<T>    = ArrayMember<T>*
+Size        = uint
+```
+
+#### Array
+
+- Building block for almost any other data structure imaginable — enables
+  implementation of things like hash tables, tries, etc in the language itself.
+- Potentially SIMD instructions would operate on arrays (e.g. 8x16, 32x4, 64x2)
+  where all operands need to be adjacent in memory.
+- Constant, fixed size means there's no need to store the size itself in memory.
+- It's size is part of its type (`int[4]` and `int[5]` are distinct, incompatible types.)
+- We need dynamic size and indexing, so we also have "slices".
+
+```go
+var a int[3]       // 3 default-initialized elements
+func makeNumbers() int[4] { int[]{1, 2, 3, 4} }
+b := makeNumbers() // typeof(a) == int[4]
+a = b              // error: assigning array of incompatible size
+var c int[0]       // empty array
+
+// Creation
+const a uint8[3]       // 3 default-initialized elements
+a := uint8[3]{1, 2, 3} // explicit initial values
+```
+
+##### Array slices
+
+Go's [`slice` approach](https://blog.golang.org/slices) is elegantly simple:
+A slice is a "view" into an array, with its own offset and length.
+
+Think of a slice like this:
+
+```go
+type slice<T> {
+  offs   uint
+  length uint
+  a      T[(size known by compiler)]
+}
+```
+
+We can make slices from arrays, or make new slices that reference
+dynamically-sized arrays:
+
+```go
+a := uint8[]{1, 2, 3, 4, 5}  // array of 5 ints
+s1 := a[1:4]   // slice of a; len(s1) == 3; index 0=2, 1=3, 2=4
+```
+
+Making an empty slice is similar to making an empty array:
+
+```go
+var s2 int[] // an empty slice of ints; len(c) == 0
+s2 = s1      // ok; size is not part of a slice's type, so types match
+```
+
+Allocating arrays of size only known at runtime can be done only via slices:
+
+```go
+s3 := int[](4) // slice of an array of size 4
+var z = getPreferredSize()
+s4 := int[](z) // slice of an array of some size known only at runtime
+```
+
+##### Array mutation
+
+Arrays need to be mutable in order to be efficient as fundamental building blocks.
+Perhaps we could take an "isolate" approach, where an array is mutable as long
+as its not referenced outside of its own scope:
+
+```swift
+type Node {
+  id       int
+  children Node[]
+}
+
+func makeNode(id int) Node {
+  const nodes Node[16]
+  // `nodes` are mutable in this scope, and only this scope
+  for i := range(0, size) {
+    nodes[i] = Node(id=id+i)
+  }
+  Node(id, nodes)
+}
+
+n := makeNode(0)
+n.children[1] = Node()  // error: assignment to immutable array
+```
+
+
+### Collections
+
+- Array & slice: Ordered collection of values —
+  `int[]`, `Foo[3]`, `Foo[3][]`
+- Set: Unordered collection of unique values —
+  `Set<int>(1, 2)`, `Set<Foo>()`
+- Map: Unordered collection of key-value associations —
+  `Map<string,int>(("frank", 32), ("anne", 34))`
+
+
+#### Collection mutability
+
+Because we're opting for mutability via `var`s, immutable persistent
+data structures would be a suitable approach for collections.
+
+```go
+m := Map<string,int>()   // Map()
+m2 := m.set("frank", 32) // Map("frank"=32)
+m != m2                  // true; different values -- m is still the empty map
+m2 = m2.set("anne", 34)  // Map("anne"=34, "frank"=32)
+```
+
+We could also consider the approach taken by Swift and C++ where storage
+dictates mutability:
+
+```go
+m := Map<string,int>() // Map()
+m.set("frank", 32)     // Map("frank"=32)
+m.set("anne", 34)      // Map("anne"=34, "frank"=32)
+
+const m2 = Map<string,int>()
+m2.set("bob", 12)  // error: mutation of constant Map m2
+```
+
+With this approach we could have the compiler be clever and copy the map when
+it's referenced by something else. This could easily spiral into what is
+move semantics, copy elision, and rvalues of C++11 — awesome but complicated
+concepts.
+
+
+
+
+
+
+
+
+
+
 
 
 <br><br><br><br><br>
