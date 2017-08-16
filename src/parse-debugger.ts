@@ -2,7 +2,14 @@ import './global'
 import * as scanner from './scanner'
 import { Position, FileSet } from './pos'
 import * as utf8 from './utf8'
-import { token, hasByteValue, hasIntValue, tokIsKeyword, tokstr } from './token'
+import {
+  token,
+  hasByteValue,
+  hasIntValue,
+  tokIsKeyword,
+  tokstr,
+  prec,
+} from './token'
 import * as fs from 'fs'
 import * as http from 'http'
 import * as Path from 'path'
@@ -35,6 +42,7 @@ interface Tok {
   position: Position
   posstr: string
   value?: string|int
+  prec?:  string // precedence; operators only
 }
 
 
@@ -54,8 +62,8 @@ function fmtDuration(milliseconds :int) :string {
 }
 
 
-function parseAll() {
-  console.log('parseAll')
+function parseFiles() {
+  console.log('parseFiles')
   const fileSet = new FileSet()
   const files :FileInfo[] = []
 
@@ -79,7 +87,7 @@ function parseAll() {
     let t1 = process.hrtime()
     for (let i = 0; i < iterations; ++i) {
       s.init(file, src, null, scanner.Mode.ScanComments)
-      for (let t :token; (t = s.scan()) != token.EOF; ) {}
+      do { s.next() } while (s.tok != token.EOF)
     }
     let t2 = process.hrtime()
     let td = ((t2[0] * 1000) + (t2[1] / 1000000)) - ((t1[0] * 1000) + (t1[1] / 1000000))
@@ -87,8 +95,10 @@ function parseAll() {
     console.log(`${filename} ${fi.parseTime}`)
 
     s.init(file, src, onErr, scanner.Mode.ScanComments)
+    s.next()
 
-    for (let t :token; (t = s.scan()) != token.EOF; ) {
+    while (s.tok != token.EOF) {
+      const t = s.tok
       const position = file.position(s.pos)
 
       fi.tokens.push({
@@ -102,8 +112,14 @@ function parseAll() {
           // utf8.decodeToString(s.byteValue())
           hasByteValue(t) ? utf8.decodeToString(s.byteValue()) :
           undefined
-        )
+        ),
+        prec: (
+          (token.operator_beg < t && t < token.operator_end) ?
+            prec[s.prec] : undefined
+        ),
       })
+
+      s.next()
     }
 
     files.push(fi)
@@ -134,7 +150,7 @@ function restartAsSubproc() {
 
 function main() {
   startHttpServer()
-  parseAll()
+  parseFiles()
 
   let parseTimer :any = null
   for (const filename of sourceFiles) {
@@ -142,7 +158,7 @@ function main() {
       if (parseTimer === null) {
         parseTimer = setTimeout(() => {
           parseTimer = null
-          parseAll()
+          parseFiles()
         }, 100)
       }
     })
@@ -204,9 +220,16 @@ function startHttpServer() {
 
     if (url.pathname == '/poll') {
       const version = q.version as string || ''
+      const filter = q.filter ? (q.filter as string).toLowerCase() : ''
       res.setHeader('Content-Type','application/json')
       try {
-        res.end(JSON.stringify(state.version == version ? null : state))
+        let st = state.version == version ? null : state
+        if (filter && st) {
+          st = {...state}
+          st.files = state.files.filter(f =>
+            f.name.toLowerCase().includes(filter))
+        }
+        res.end(JSON.stringify(st))
       } catch (err) {
         console.error('error in response handler', err.stack || err)
         res.end('null')

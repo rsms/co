@@ -2,7 +2,7 @@ import { AppendBuffer, bufcmp, str8buf } from './util'
 import { Pos, Position, File } from './pos'
 import * as utf8 from './utf8'
 import * as unicode from './unicode'
-import { token, prec, lookupKeyword } from './token'
+import { token, lookupKeyword, prec } from './token'
 import * as Path from 'path'
 
 // An ErrorHandler may be provided to Scanner.Init. If a syntax error is
@@ -35,11 +35,11 @@ export class Scanner {
   // Note: `undefined as any as X` is a workaround for a TypeScript issue
   // where members are otherwise not initialized at construction which causes
   // duplicate struct definitions in v8.
-  private file :File = undefined as any as File // source file handle
-  private dir  :string = ''   // directory portion of file.name
-  private src  :Uint8Array = undefined as any as Uint8Array // source
-  private err  :ErrorHandler|null = null // error reporting
-  private mode :Mode = 0         // scanning mode
+  public file :File = undefined as any as File // source file handle
+  public dir  :string = ''   // directory portion of file.name
+  public src  :Uint8Array = undefined as any as Uint8Array // source
+  public errh :ErrorHandler|null = null // error reporting
+  public mode :Mode = 0         // scanning mode
 
   // scanning state
   private ch         :int = -1 // current character (unicode; -1=EOF)
@@ -56,9 +56,9 @@ export class Scanner {
   public startoffs :int = 0  // token start offset
   public endoffs   :int = 0  // token end offset
   public tok       :token = token.EOF
+  public prec      :prec = prec.LOWEST
   public intval    :int = 0 // value for some tokens
-  public hash      :int = 0 // hash value for current token (if IDENT*)
-  public prec      :prec = prec.LOWEST // valid if tokIsOperator
+  public hash      :int = 0 // hash value for current token (if NAME*)
 
   // sparse buffer state (not reset by s.init)
   private appendbuf  :AppendBuffer|null = null // for string literals
@@ -73,15 +73,15 @@ export class Scanner {
   // line information which is already present is ignored. Init causes a
   // panic if the file size does not match the src size.
   //
-  // Calls to Scan will invoke the error handler err if they encounter a
-  // syntax error and err is not nil. Also, for each error encountered,
+  // Calls to Scan will invoke the error handler errh if they encounter a
+  // syntax error and errh is not nil. Also, for each error encountered,
   // the Scanner field ErrorCount is incremented by one. The mode parameter
   // determines how comments are handled.
   //
-  // Note that Init may call err if there is an error in the first character
+  // Note that Init may call errh if there is an error in the first character
   // of the file.
   //
-  init(file :File, src :Uint8Array, err? :ErrorHandler|null, m :Mode =Mode.None) {
+  init(file :File, src :Uint8Array, errh? :ErrorHandler|null, m :Mode =Mode.None) {
     const s = this
     // Explicitly initialize all fields since a scanner may be reused
     if (file.size != src.length) {
@@ -90,7 +90,7 @@ export class Scanner {
     s.file = file
     s.dir = Path.dirname(file.name)
     s.src = src
-    s.err = err || null
+    s.errh = errh || null
     s.mode = m
   
     s.ch = 0x20 /*' '*/
@@ -101,12 +101,12 @@ export class Scanner {
     s.insertSemi = false
     s.errorCount = 0
   
-    s.next()
+    s.readchar()
   }
 
   // Read the next Unicode char into s.ch.
   // s.ch < 0 means end-of-file.
-  next() {
+  private readchar() {
     const s = this
 
     if (s.rdOffset < s.src.length) {
@@ -141,6 +141,16 @@ export class Scanner {
     }
   }
 
+  // gotchar reads the next character and returns true if s.ch == ch
+  private gotchar(ch :int) :bool {
+    const s = this
+    if (s.ch == ch) {
+      s.readchar()
+      return true
+    }
+    return false
+  }
+
   currentPosition() :Position {
     const s = this
     return s.file.position(s.file.pos(s.offset))
@@ -172,21 +182,31 @@ export class Scanner {
   //
   error(msg :string, offs :int = this.startoffs) {
     const s = this
-    if (s.err) {
-      s.err(s.file.position(s.file.pos(offs)), msg)
+    s.errorAt(s.file.position(s.file.pos(offs)), msg)
+  }
+
+  errorAt(position :Position, msg :string) {
+    const s = this
+    if (s.errh) {
+      s.errh(position, msg)
     }
     s.errorCount++
   }
 
   // Scan the next token
   //
-  scan() :token {
+  next() {
   while (true) {
     const s = this
 
     // skip whitespace
-    while (s.ch == 0x20 || s.ch == 0x9 || (s.ch == 0xA && !s.insertSemi) || s.ch == 0xD) {
-      s.next()
+    while (
+      s.ch == 0x20 ||
+      s.ch == 0x9 ||
+      (s.ch == 0xA && !s.insertSemi) ||
+      s.ch == 0xD
+    ) {
+      s.readchar()
     }
 
     // current token start
@@ -197,13 +217,14 @@ export class Scanner {
 
     // always make progress
     const ch = s.ch
-    s.next()
+    s.readchar()
+
+    let insertSemi = false
 
     switch (ch) {
 
       case -1: {
         s.tok = s.insertSemi ? token.SEMICOLON : token.EOF
-        s.insertSemi = false
         break
       }
 
@@ -211,6 +232,7 @@ export class Scanner {
       case 0x35: case 0x36: case 0x37: case 0x38: case 0x39:
         // 0..9
         s.scanNumber(ch)
+        insertSemi = true
         break
 
       case 0xA: { // \n
@@ -218,40 +240,42 @@ export class Scanner {
         // and exited early from skipping whitespace.
         // newline consumed
         s.tok = token.SEMICOLON
-        s.insertSemi = false
         break
       }
 
       case 0x22: // "
-        s.scanString()
+        s.tok = s.scanString()
+        insertSemi = s.tok == token.STRING
         break
 
       case 0x27: // '
         s.scanChar()
+        insertSemi = true
         break
 
       case 0x3a: // :
-        s.tok = s.switch2(token.COLON, token.DEFINE)
-        s.prec = prec.LOWEST
-        s.insertSemi = false
+        if (s.gotchar(0x3D)) {
+          s.tok = token.DEFINE
+          s.prec = prec.LOWEST
+        } else {
+          s.tok = token.COLON
+        }
         break
 
       case 0x2e: { // .
         if (isDigit(s.ch)) {
           s.scanFloatNumber(/*seenDecimal*/true)
+          insertSemi = true
         } else {
-          if (s.ch == 0x2e) { // .
-            s.next()
-            if (s.ch == 0x2e) {
-              s.next()
+          if (s.gotchar(0x2e)) { // ..
+            if (s.gotchar(0x2e)) { // ...
               s.tok = token.ELLIPSIS
             } else {
-              s.tok = token.PERIOD2
+              s.tok = token.PERIODS
             }
           } else {
-            s.tok = token.PERIOD
+            s.tok = token.DOT
           }
-          s.insertSemi = false
         }
         break
       }
@@ -260,42 +284,38 @@ export class Scanner {
         s.startoffs++ // skip @
         let c = s.ch
         if (c < utf8.UniSelf && (asciiFeats[c] & langIdentStart)) {
-          s.next()
+          s.readchar()
           s.scanIdentifier(c)
         } else if (c >= utf8.UniSelf && isUniIdentStart(c)) {
-          s.next()
+          s.readchar()
           s.scanIdentifierU(c, this.startoffs)
         }
-        s.tok = token.IDENTAT
-        s.insertSemi = true
+        s.tok = token.NAMEAT
+        insertSemi = true
         break
       }
 
       case 0x2c: // ,
         s.tok = token.COMMA
-        s.insertSemi = false
         break
       case 0x3b: // ;
         s.tok = token.SEMICOLON
-        s.insertSemi = false
         break
 
       case 0x28: // (
         s.tok = token.LPAREN
-        s.insertSemi = false
         break
       case 0x29: // )
         s.tok = token.RPAREN
-        s.insertSemi = true
+        insertSemi = true
         break
 
       case 0x5b: // [
         s.tok = token.LBRACK
-        s.insertSemi = false
         break
       case 0x5d: // ]
         s.tok = token.RBRACK
-        s.insertSemi = true
+        insertSemi = true
         break
 
       case 0x7b: // {
@@ -303,54 +323,73 @@ export class Scanner {
           s.cbraceL++
         }
         s.tok = token.LBRACE
-        s.insertSemi = false
         break
       case 0x7d: // }
         if (s.interpStrL) {
           if (s.cbraceL == 0) {
             // continue interpolated string
             s.interpStrL--
-            s.scanString()
+            s.tok = s.scanString()
+            insertSemi = s.tok == token.STRING
           } else {
             s.cbraceL--
           }
         } else {
           s.tok = token.RBRACE
-          s.insertSemi = true
+          insertSemi = true
         }
         break
 
       case 0x2b: { // +
-        s.tok = s.switch3(token.ADD, token.ADD_ASSIGN, ch, token.INC)
-        s.insertSemi = (s.tok == token.INC)
+        s.prec = prec.LOWEST
+        if (s.gotchar(0x3D)) { // +=
+          s.tok = token.ADD_ASSIGN
+        } else if (s.gotchar(ch)) { // ++
+          s.tok = token.INC
+          insertSemi = true
+        } else {
+          s.tok = token.ADD
+          s.prec = prec.ADD
+        }
         break
       }
 
       case 0x2d: { // -
-        if (s.ch == 0x3e) { // >
-          s.next()
+        s.prec = prec.LOWEST
+        if (s.gotchar(0x3e)) { // ->
           s.tok = token.ARROWR
-          s.insertSemi = false
         } else {
-          s.tok = s.switch3(token.SUB, token.SUB_ASSIGN, ch, token.DEC)
-          s.insertSemi = (s.tok == token.DEC)
+          if (s.gotchar(0x3D)) { // -=
+            s.tok = token.SUB_ASSIGN
+          } else if (s.gotchar(ch)) { // --
+            s.tok = token.DEC
+            insertSemi = true
+          } else {
+            s.tok = token.SUB
+            s.prec = prec.ADD
+          }
         }
         break
       }
 
       case 0x2a: // *
-        s.tok = s.switch2(token.MUL, token.MUL_ASSIGN)
-        s.insertSemi = false
+        if (s.gotchar(0x3D)) { // *=
+          s.tok = token.MUL_ASSIGN
+          s.prec = prec.LOWEST
+        } else {
+          s.tok = token.MUL
+          s.prec = prec.MUL
+        }
         break
 
       case 0x2f: { // /
-        if (s.ch == 0x2f) { // /
+        if (s.ch == 0x2f) { // //
           s.scanLineComment()
           if (!(s.mode & Mode.ScanComments)) {
             continue
           }
-          // note: intentionally not changing s.insertSemi
-        } else if (s.ch == 0x2a) { // *
+          insertSemi = s.insertSemi // persist s.insertSemi
+        } else if (s.ch == 0x2a) { // /*
           const CRcount = s.scanGeneralComment()
           if (s.mode & Mode.ScanComments) {
             s.tok = token.COMMENT
@@ -365,64 +404,132 @@ export class Scanner {
           } else {
             continue
           }
-          // note: intentionally not changing s.insertSemi
+          insertSemi = s.insertSemi // persist s.insertSemi
         } else {
-          s.tok = s.switch2(token.QUO, token.QUO_ASSIGN)
-          s.insertSemi = false
+          if (s.gotchar(0x3D)) { // /=
+            s.tok = token.QUO_ASSIGN
+            s.prec = prec.LOWEST
+          } else {
+            s.tok = token.QUO
+            s.prec = prec.MUL
+          }
         }
         break
       }
 
       case 0x25: // %
-        s.tok = s.switch2(token.REM, token.REM_ASSIGN)
-        s.insertSemi = false
+        if (s.gotchar(0x3D)) { // %=
+          s.tok = token.REM_ASSIGN
+          s.prec = prec.LOWEST
+        } else {
+          s.tok = token.REM
+          s.prec = prec.MUL
+        }
         break
 
       case 0x5e: // ^
-        s.tok = s.switch2(token.XOR, token.XOR_ASSIGN)
-        s.insertSemi = false
+        if (s.gotchar(0x3D)) { // ^=
+          s.tok = token.XOR_ASSIGN
+          s.prec = prec.LOWEST
+        } else {
+          s.tok = token.XOR
+          s.prec = prec.ADD
+        }
         break
 
       case 0x3c: { // <
-        if (s.ch == 0x2d) { // -
-          s.next()
+        if (s.gotchar(0x2D)) { // <-
           s.tok = token.ARROWL
+          s.prec = prec.LOWEST
+        } else if (s.gotchar(0x3D)) { // <=
+          s.tok = token.LEQ
+          s.prec = prec.CMP
+        } else if (s.gotchar(ch)) { // <<
+          if (s.gotchar(0x3D)) { // <<=
+            s.tok = token.SHL_ASSIGN
+            s.prec = prec.LOWEST
+          } else {
+            s.tok = token.SHL
+            s.prec = prec.MUL
+          }
         } else {
-          s.tok = s.switch4(token.LSS, token.LEQ, ch, token.SHL, token.SHL_ASSIGN)
+          s.tok = token.LSS
+          s.prec = prec.CMP
         }
-        s.insertSemi = false
         break
       }
 
-      case 0x3e: // >
-        s.tok = s.switch4(token.GTR, token.GEQ, ch, token.SHR, token.SHR_ASSIGN)
-        s.insertSemi = false
+      case 0x3E: // >
+        if (s.gotchar(0x3D)) { // >=
+          s.tok = token.GEQ
+          s.prec = prec.CMP
+        } else if (s.gotchar(ch)) { // >>
+          if (s.gotchar(0x3D)) { // >>=
+            s.tok = token.SHR_ASSIGN
+            s.prec = prec.LOWEST
+          } else {
+            s.tok = token.SHR
+            s.prec = prec.MUL
+          }
+        } else {
+          s.tok = token.GTR
+          s.prec = prec.CMP
+        }
         break
       
-      case 0x3d: // =
-        s.tok = s.switch2(token.ASSIGN, token.EQL)
-        s.insertSemi = false
+      case 0x3D: // =
+        if (s.gotchar(0x3D)) { // ==
+          s.tok = token.EQL
+          s.prec = prec.CMP
+        } else {
+          s.tok = token.ASSIGN
+          s.prec = prec.LOWEST
+        }
         break
 
       case 0x21: // !
-        s.tok = s.switch2(token.NOT, token.NEQ)
-        s.insertSemi = false
+        if (s.gotchar(0x3D)) { // !=
+          s.tok = token.NEQ
+          s.prec = prec.CMP
+        } else {
+          s.tok = token.NOT
+          s.prec = prec.LOWEST
+        }
         break
 
       case 0x26: { // &
-        if (s.ch == 0x5e) { // ^
-          s.next()
-          s.tok = s.switch2(token.AND_NOT, token.AND_NOT_ASSIGN)
+        if (s.gotchar(0x5E)) { // &^
+          if (s.gotchar(0x3D)) { // &^=
+            s.tok = token.AND_NOT_ASSIGN
+            s.prec = prec.LOWEST
+          } else {
+            s.tok = token.AND_NOT
+            s.prec = prec.MUL
+          }
+        } else if (s.gotchar(0x3D)) { // &=
+          s.tok = token.AND_ASSIGN
+          s.prec = prec.LOWEST
+        } else if (s.gotchar(ch)) { // &&
+          s.tok = token.LAND
+          s.prec = prec.AND
         } else {
-          s.tok = s.switch3(token.AND, token.AND_ASSIGN, ch, token.LAND)
+          s.tok = token.AND
+          s.prec = prec.MUL
         }
-        s.insertSemi = false
         break
       }
 
       case 0x7c: // |
-        s.tok = s.switch3(token.OR, token.OR_ASSIGN, ch, token.LOR)
-        s.insertSemi = false
+        if (s.gotchar(0x3D)) { // |=
+          s.tok = token.OR_ASSIGN
+          s.prec = prec.LOWEST
+        } else if (s.gotchar(ch)) { // ||
+          s.tok = token.LOR
+          s.prec = prec.OR
+        } else {
+          s.tok = token.OR
+          s.prec = prec.ADD
+        }
         break
 
       default: {
@@ -439,21 +546,17 @@ export class Scanner {
           if (s.offset - s.startoffs > 1) {
             // shortest keyword is 2
             switch (s.tok = lookupKeyword(s.byteValue())) {
-              case token.IDENT:
+              case token.NAME:
               case token.BREAK:
               case token.CONTINUE:
               case token.FALLTHROUGH:
               case token.RETURN:
-                s.insertSemi = true
-                break
-
-              default:
-                s.insertSemi = false
+                insertSemi = true
                 break
             }
           } else {
-            s.tok = token.IDENT
-            s.insertSemi = true
+            s.tok = token.NAME
+            insertSemi = true
           }
         } else {
           s.error(`unexpected character ${unicode.repr(ch)} in input`)
@@ -468,7 +571,9 @@ export class Scanner {
       s.endoffs = s.offset
     }
 
-    return s.tok
+    s.insertSemi = insertSemi
+
+    return
 
     } // while(true)
   }
@@ -490,7 +595,7 @@ export class Scanner {
       c == ZeroWidthJoiner
     ) {
       lastCp = c
-      s.next()
+      s.readchar()
       c = s.ch
     }
 
@@ -511,6 +616,7 @@ export class Scanner {
   scanIdentifier(c :int) {
     // enters past first char; c = 1st char, s.ch = 2nd char
     // c is already verified to be a valid indentifier character.
+    // The hash function used here must exactly match what's in bytestr.
     const s = this
     let hash = (0x811c9dc5 ^ c) * 0x1000193 // fnv1a
 
@@ -522,7 +628,7 @@ export class Scanner {
       c == 0x24    // $
     ) {
       hash = (hash ^ c) * 0x1000193 // fnv1a
-      s.next()
+      s.readchar()
       c = s.ch
     }
 
@@ -546,42 +652,38 @@ export class Scanner {
       }
       case 0x27: { // '
         s.error("empty character literal or unescaped ' in character literal")
-        s.next()
-        s.insertSemi = true
+        s.readchar()
         s.intval = unicode.InvalidChar
         return
       }
       case 0x5c: { // \
-        s.next()
+        s.readchar()
         cp = s.scanEscape(0x27) // '
         // note: cp is -1 for illegal escape sequences
         break
       }
       default: {
         cp = s.ch
-        s.next()
+        s.readchar()
         break
       }
     }
 
 
     if (s.ch == 0x27) { // '
-      s.next()
-      s.insertSemi = true
+      s.readchar()
       s.intval = cp
     } else {
       // failed -- read until EOF or '
-      s.insertSemi = false
       while (true) {
         if (s.ch == -1) {
           break
         }
         if (s.ch == 0x27) { // '
-          s.insertSemi = true
-          s.next() // consume '
+          s.readchar() // consume '
           break
         }
-        s.next()
+        s.readchar()
       }
       s.intval = unicode.InvalidChar
       s.error("invalid character literal")
@@ -599,7 +701,7 @@ export class Scanner {
     return s.appendbuf
   }
 
-  scanString() {
+  scanString() :token {
     // opening char already consumed
     const s = this
     let buf :AppendBuffer|null = null
@@ -621,7 +723,7 @@ export class Scanner {
           if (buf) {
             buf.appendRange(s.src, chunkStart, s.offset)
           }
-          s.next()
+          s.readchar()
           break loop1
 
         case 0x5c: { // \
@@ -631,7 +733,7 @@ export class Scanner {
           }
           buf.appendRange(s.src, chunkStart, s.offset)
 
-          s.next()
+          s.readchar()
 
           const cp = s.scanEscape(0x22) // "
           // we continue even if there was an error
@@ -651,34 +753,32 @@ export class Scanner {
         }
 
         case 0x24: { // $
-          s.next()
-          if (s.ch as int == 0x7b) { // {
+          s.readchar()
+          if (s.gotchar(0x7b)) { // {
             // start interpolated string
-            s.next()
             s.interpStrL++
-            s.tok = token.STRING_PIECE
-            s.insertSemi = false
             if (buf) {
               s.byteval = buf.subarray()
             } else {
               s.endoffs = s.offset - 2
             }
+            return token.STRING_PIECE
           }
-          return
+          s.error("expecting ${ to start string interpolation")
+          break
         }
 
         default:
-          s.next()
+          s.readchar()
       }
     }
 
-    s.tok = token.STRING
-    s.insertSemi = true
     if (buf) {
       s.byteval = buf.subarray()
     } else {
       s.endoffs = s.offset - 1
     }
+    return token.STRING
   }
 
   // scanEscape parses an escape sequence where `quote` is the accepted
@@ -694,31 +794,31 @@ export class Scanner {
     let max :int = 0
 
     switch (s.ch) {
-      case 0x61:  s.next(); return 0x7  // a - alert or bell
-      case 0x62:  s.next(); return 0x8  // b - backspace
-      case 0x66:  s.next(); return 0xC  // f - form feed
-      case 0x6e:  s.next(); return 0xA  // n - line feed or newline
-      case 0x72:  s.next(); return 0xD  // r - carriage return
-      case 0x74:  s.next(); return 0x9  // t - horizontal tab
-      case 0x76:  s.next(); return 0xb  // v - vertical tab
-      case 0x5c:  s.next(); return 0x5c // \
-      case 0x24:  s.next(); return 0x24 // $
-      case quote: s.next(); return quote
+      case 0x61:  s.readchar(); return 0x7  // a - alert or bell
+      case 0x62:  s.readchar(); return 0x8  // b - backspace
+      case 0x66:  s.readchar(); return 0xC  // f - form feed
+      case 0x6e:  s.readchar(); return 0xA  // n - line feed or newline
+      case 0x72:  s.readchar(); return 0xD  // r - carriage return
+      case 0x74:  s.readchar(); return 0x9  // t - horizontal tab
+      case 0x76:  s.readchar(); return 0xb  // v - vertical tab
+      case 0x5c:  s.readchar(); return 0x5c // \
+      case 0x24:  s.readchar(); return 0x24 // $
+      case quote: s.readchar(); return quote
 
       case 0x30: case 0x31: case 0x32: case 0x33: case 0x34:
       case 0x35: case 0x36: case 0x37: // 0..7
         n = 3; base = 8; max = 255
         break
       case 0x78: // x
-        s.next()
+        s.readchar()
         n = 2; base = 16; max = 255
         break
       case 0x75: // u
-        s.next()
+        s.readchar()
         n = 4; base = 16; max = unicode.MaxRune
         break
       case 0x55: // U
-        s.next()
+        s.readchar()
         n = 8; base = 16; max = unicode.MaxRune
         break
 
@@ -745,7 +845,7 @@ export class Scanner {
         return -1
       }
       cp = cp * base + d
-      s.next()
+      s.readchar()
       n--
     }
 
@@ -759,21 +859,20 @@ export class Scanner {
 
   scanNumber(c :int) {
     let s = this
-    s.insertSemi = true
 
     if (c == 0x30) { // 0
       switch (s.ch) {
 
         case 0x78: case 0x58: { // x, X
           s.tok = token.INT_HEX
-          s.next()
+          s.readchar()
           while (isHexDigit(s.ch)) {
-            s.next()
+            s.readchar()
           }
           if (s.offset - s.startoffs <= 2 || unicode.isLetter(s.ch)) {
             // only scanned "0x" or "0X" OR e.g. 0xfg
             while (unicode.isLetter(s.ch) || unicode.isDigit(s.ch)) {
-              s.next() // consume invalid letters & digits
+              s.readchar() // consume invalid letters & digits
             }
             s.error("invalid hex number")
           }
@@ -802,7 +901,7 @@ export class Scanner {
     }
 
     while (unicode.isDigit(s.ch)) {
-      s.next()
+      s.readchar()
     }
     s.tok = token.INT
 
@@ -820,14 +919,14 @@ export class Scanner {
   scanRadixInt8(base :int) {
     // invariant: base = 8 | 2
     const s = this
-    s.next()
+    s.readchar()
     let isInvalid = false
     while (unicode.isDigit(s.ch)) {
       if (s.ch - 0x30 >= base) {
         // e.g. 0o678
         isInvalid = true
       }
-      s.next()
+      s.readchar()
     }
     if (isInvalid || s.offset - s.startoffs <= 2) {
       // isInvalid OR only scanned "0x"
@@ -839,9 +938,9 @@ export class Scanner {
     // ratio_lit = decimals "/" decimals
     const s = this
     const startoffs = s.offset
-    s.next() // consume /
+    s.readchar() // consume /
     while (unicode.isDigit(s.ch)) {
-      s.next()
+      s.readchar()
     }
     if (startoffs+1 == s.offset) {
       // e.g. 43/* 43/= etc -- restore state
@@ -866,21 +965,21 @@ export class Scanner {
     const s = this
 
     if (seenDecimal || s.ch == 0x2e) { // .
-      s.next()
+      s.readchar()
       while (unicode.isDigit(s.ch)) {
-        s.next()
+        s.readchar()
       }
     }
 
     if (s.ch == 0x65 || s.ch == 0x45) { // e E
-      s.next()
+      s.readchar()
       if ((s.ch as int) == 0x2d || (s.ch as int) == 0x2b) { // - +
-        s.next()
+        s.readchar()
       }
       let valid = false
       while (unicode.isDigit(s.ch)) {
         valid = true
-        s.next()
+        s.readchar()
       }
       if (!valid) {
         s.error("invalid floating-point exponent")
@@ -888,51 +987,12 @@ export class Scanner {
     }
 
     s.tok = token.FLOAT
-    s.insertSemi = true
-  }
-
-  switch2(tok0 :token, tok1 :token) :token {
-    const s = this
-    if (s.ch == 0x3D) { // =
-      s.next()
-      return tok1
-    }
-    return tok0
-  }
-
-  switch3(tok0 :token, tok1 :token, ch2 :int, tok2 :token) :token {
-    const s = this
-    if (s.ch == 0x3D) { // =
-      s.next()
-      return tok1
-    } else if (s.ch == ch2) {
-      s.next()
-      return tok2
-    }
-    return tok0
-  }
-
-  switch4(tok0 :token, tok1 :token, ch2 :int, tok2 :token, tok3 :token) :token {
-    const s = this
-    if (s.ch == 0x3D) { // =
-      s.next()
-      return tok1
-    } else if (s.ch == ch2) {
-      s.next()
-      if (s.ch == 0x3D) { // =
-        s.next()
-        return tok3
-      } else {
-        return tok2
-      }
-    }
-    return tok0
   }
 
   scanLineComment() {
     const s = this
     // initial '/' already consumed; s.ch == '/'
-    do { s.next() } while (s.ch != 0xA && s.ch >= 0)
+    do { s.readchar() } while (s.ch != 0xA && s.ch >= 0)
 
     if (s.src[s.offset-1] == 0xD) { // \r
       // don't include \r in comment
@@ -954,14 +1014,14 @@ export class Scanner {
     let CR_count = 0
 
     while (true) {
-      s.next()
+      s.readchar()
       switch (s.ch) {
         case -1: // EOF
           s.error("comment not terminated")
           return CR_count
         case 0x2f: // /
           if (s.src[s.offset-1] == 0x2a) { // *
-            s.next()
+            s.readchar()
             s.startoffs += 2
             s.endoffs = s.offset - 2
             return CR_count
@@ -985,7 +1045,7 @@ export class Scanner {
 
     while (true) {
       const ch = s.ch
-      s.next()
+      s.readchar()
       switch (ch) {
         case -1: // EOF
         case 0xA: // \n
@@ -1051,15 +1111,15 @@ export class Scanner {
       }
 
       /*-style comment: look for newline */
-      s.next()
+      s.readchar()
       while (s.ch >= 0) {
         const ch = s.ch as int
         if (ch == 0xA) { // \n
           return true
         }
-        s.next()
+        s.readchar()
         if (ch == 0x2a && s.ch as int == 0x2f) { // */
-          s.next()
+          s.readchar()
           break
         }
       }
@@ -1071,7 +1131,7 @@ export class Scanner {
         (s.ch as int == 0xA && !s.insertSemi) || // \n
         s.ch as int == 0xD) // \r
       {
-        s.next()
+        s.readchar()
       }
 
       if (s.ch < 0 || s.ch as int == 0xA) { // \n
@@ -1083,7 +1143,7 @@ export class Scanner {
         return false
       }
 
-      s.next() // consume '/'
+      s.readchar() // consume '/'
     }
   
     return false

@@ -49,13 +49,19 @@ h2 {
   line-height: 2.5em;
 }
 
-.file .title h2 {
+.file .title a {
   /*border-bottom: 2px solid #ccc;
   padding-bottom:0.5em;*/
+  font-weight: 600;
+  text-decoration: none;
   color: white;
   margin:0;
   margin-left: 0.5em;
   flex: 1 0 auto;
+  cursor: pointer;
+}
+.file .title a:hover {
+  color: lightblue;
 }
 
 .file .title .time {
@@ -248,9 +254,10 @@ function update(files) {
     let titleEl = document.createElement("div")
     titleEl.className = 'title'
 
-    let h2El = document.createElement("h2")
-    h2El.innerText = file.name
-    titleEl.appendChild(h2El)
+    let aEl = document.createElement("a")
+    aEl.innerText = file.name
+    aEl.href = '?filter=' + encodeURIComponent(file.name)
+    titleEl.appendChild(aEl)
 
     let timeEl = document.createElement("div")
     timeEl.className = 'time'
@@ -340,7 +347,8 @@ function update(files) {
       tokEl.title = (
         t.type + ' ' +
         (isImplicit ? '(implicit) ' : '') +
-        (t.position.line ? `${t.position.line}:${t.position.column}` : '?')
+        (t.position.line ? `${t.position.line}:${t.position.column}` : '?') +
+        (t.prec ? ` prec.${t.prec}` : '')
       )
       codeEl.appendChild(tokEl)
 
@@ -400,8 +408,10 @@ function update(files) {
   }
 }
 
+const query = new Map(document.location.search.replace(/^\?/, '').split('&').map(p => p.split('=').map(decodeURIComponent)))
+
 function poll(rebuild) {
-  const url = `/poll?version=${lastVersion}`
+  const url = `/poll?version=${lastVersion}&filter=${query.get('filter') || ''}`
   fetch(url).then(r => r.json()).then(r => {
     if (r) {
       lastVersion = r.version

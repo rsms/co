@@ -16,12 +16,12 @@ export function hasByteValue(t :token) :bool {
 }
 
 export function tokstr(t :token) :string {
-  return tokenStrings.get(t) || token[t]
+  return tokenStrings.get(t) || token[t].toLowerCase()
 }
 
 // Operator precedences
 export enum prec {
-  LOWEST, // := ! <-
+  LOWEST, // = := ! <- ->
   OR,     // ||
   AND,    // &&
   CMP,    // == != < <= > >=
@@ -38,8 +38,8 @@ export enum token {
   literal_beg,
   // Identifiers and basic type literals
   // (these tokens stand for classes of literals)
-  IDENT,   // main
-  IDENTAT, // @foo, @
+  NAME,    // main
+  NAMEAT,  // @foo, @
   INT,     // 12345
   INT_BIN, // 0b1010
   INT_OCT, // 0o6737
@@ -57,8 +57,8 @@ export enum token {
   LBRACK,    // [
   LBRACE,    // {
   COMMA,     // ,
-  PERIOD,    // .
-  PERIOD2,   // ..
+  DOT,       // .
+  PERIODS,   // ..
   ELLIPSIS,  // ...
   RPAREN,    // )
   RBRACK,    // ]
@@ -69,6 +69,7 @@ export enum token {
 
   // Operators
   operator_beg,
+
   // prec.LOWEST
   ASSIGN,         // =
   ADD_ASSIGN,     // +=
@@ -88,10 +89,13 @@ export enum token {
   NOT,            // !
   ARROWL,         // <-
   ARROWR,         // ->
+
   // prec.OR
   LOR, // ||
+  
   // prec.AND
   LAND, // &&
+
   // prec.CMP
   EQL, // ==
   NEQ, // !=
@@ -99,11 +103,13 @@ export enum token {
   LEQ, // <=
   GTR, // >
   GEQ, // >=
+  
   // prec.ADD
   ADD, // +
   SUB, // -
   OR,  // |
   XOR, // ^
+  
   // prec.MUL
   MUL,     // *
   QUO,     // /
@@ -112,6 +118,7 @@ export enum token {
   AND_NOT, // &^
   SHL,     // <<
   SHR,     // >>
+
   operator_end,
 
   // Keywords
@@ -154,7 +161,7 @@ export enum token {
 
 
 const tokenStrings = new Map<token, string>([
-  [token.IDENTAT, "@"],
+  [token.NAMEAT, "@"],
 
   [token.ADD, "+"],
   [token.SUB, "-"],
@@ -200,13 +207,13 @@ const tokenStrings = new Map<token, string>([
   [token.GEQ,      ">="],
   [token.DEFINE,   ":="],
   [token.ELLIPSIS, "..."],
-  [token.PERIOD2,  ".."],
+  [token.PERIODS,  ".."],
 
   [token.LPAREN, "("],
   [token.LBRACK, "["],
   [token.LBRACE, "{"],
   [token.COMMA,  ","],
-  [token.PERIOD, "."],
+  [token.DOT,    "."],
 
   [token.RPAREN,    ")"],
   [token.RBRACK,    "]"],
@@ -258,9 +265,9 @@ const keywords = new BTree<token>(
             R:{ k: cdat.subarray(130,133) /*var*/, v: token.VAR}}}}}}
 )
 
-// lookupKeyword maps an identifier to its keyword token or IDENT
+// lookupKeyword maps an identifier to its keyword token or NAME
 // (if not a keyword).
 //
 export function lookupKeyword(ident :ArrayLike<byte>) :token {
-  return keywords.get(ident) || token.IDENT
+  return keywords.get(ident) || token.NAME
 }

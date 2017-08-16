@@ -24,8 +24,10 @@ function panic(msg :any, ...v :any[]) {
 G.panic = panic
 
 function assert(cond :any) {
-  console.error('assertion failure:', cond, _stackTrace(assert))
-  process.exit(3)
+  if (!cond) {
+    console.error('assertion failure:', cond, _stackTrace(assert))
+    process.exit(3)
+  }
 }
 G.assert = assert
 

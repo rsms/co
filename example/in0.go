@@ -28,6 +28,7 @@ $foo case switch if enum break
 "c \U00010299 C"
 "x ${y + "foo ${or} yo" + b ar} z"
 "x \${y} z"
+// "y $" invalid
 "multi
  line" -> <-
 9 //bob
@@ -42,7 +43,7 @@ $foo case switch if enum break
 
 Ꙁ_gԃ = 4
 
-😎 = cool
+😎 == cool
 
 🕺🏽 = yeah
 

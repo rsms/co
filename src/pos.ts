@@ -154,7 +154,7 @@ export class File {
 
   // position returns the Position value for the given file position p.
   // If adjusted is set, the position may be adjusted by position-altering
-  // //line comments; otherwise those comments are ignored.
+  // //!line comments; otherwise those comments are ignored.
   // p must be a Pos value in f or NoPos.
   //
   position(p :Pos, adjusted :bool = true) :Position {
