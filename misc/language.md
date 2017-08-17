@@ -93,9 +93,10 @@ Functions can be declared but are also first-class values that can be used in
 expressions.
 
 - Function declaration — `func foo(name string) int { name.length }`
-- Type-function declaration — `func Account.foo(name string) int { name.length }`
 - Function expression — `func (name string) int { name.length }`
 - Function type declaration — `type Foo func(name string) int` (See [Types](#types))
+- Method declaration — `func Account.foo(name string) int { name.length }`
+- Inline method declaration — `type Account { foo(name string) int { name.length } }`
 
 A function always begins with the keyword `func` and is followed by an optional
 name, parameters, return type and body:
