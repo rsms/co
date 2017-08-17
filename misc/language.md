@@ -271,9 +271,9 @@ var n = 3
 while n-- {
   print("O hai! #${n}")
 }
-// "O hai! #0"
-// "O hai! #1"
 // "O hai! #2"
+// "O hai! #1"
+// "O hai! #0"
 ```
 
 ### for
