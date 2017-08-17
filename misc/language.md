@@ -212,7 +212,7 @@ you intend.
 > Consider enforcing return-type declarations for functions that return more
 > than one type.
 
-Parameters can have default values, making them optional:
+Parameters can have default values:
 
 ```go
 func foo(name string = "John") int {
@@ -222,7 +222,7 @@ print(foo()) // 4
 print(foo("bar")) // 3
 ```
 
-When calling a function, parameters can be named
+When calling a function, parameters can be named:
 
 ```go
 func foo(name string = "John", twice bool = false) int {
