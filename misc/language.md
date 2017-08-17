@@ -141,6 +141,9 @@ func foo(name string, twice bool) int {
 print(foo(fooArg0, true)) // 8
 ```
 
+Thus there's no runtime penalty when using named parameters, even when out-of
+order.
+
 
 ## Flow control
 
@@ -157,17 +160,10 @@ if n < 3 {
 }
 ```
 
-If's are expressions and has the type that is the union of all branches:
+If's are expressions and has the type of its branches:
 
 ```go
 if n < 3 { 1 } else { 2 } // type is int
-```
-
-When there's no `else` branch, the value of `else` is `nil`, making the other
-branch's type "optional":
-
-```go
-if n < 3 { 1 }  // type is int?
 ```
 
 When there are different types in different branches the effective type is
@@ -177,7 +173,14 @@ the union:
 if n < 3 { true } else { 100 } // type is bool|int
 ```
 
-And again, when an `else` branch is missing, the other branche's types becomes
+When there's no `else` branch, the value of `else` is [`nil`](#nil), making the other
+branch's type "optional":
+
+```go
+if n < 3 { 1 }  // type is int?
+```
+
+And again, when an `else` branch is missing, the other branch's types becomes
 optional as the `if...else` might return `nil`:
 
 ```go
@@ -192,9 +195,9 @@ Used to `switch` paths depending on a value:
 ```go
 n = 4
 message = switch n {
-  1..3 "one, two or three"
-  4    "four"
-  else "large number"
+  1, 2, 3  "one, two or three"
+  4        "four"
+  else     "large number"
 }
 print(message)  // "four"
 ```
@@ -238,9 +241,9 @@ type of a `switch` is the union of all branches:
 
 ```go
 r = switch n {
-  1..3 "one, two or three" }
-  4    4
-  else false
+  1, 2, 3  "one, two or three"
+  4        4
+  else     false
 }
 print(typeof(r))  // string|int|bool
 ```
@@ -250,8 +253,8 @@ optional as it might result in `nil`:
 
 ```go
 r = switch n {
-  1..3 "one, two or three" }
-  4    4
+  1, 2, 3  "one, two or three"
+  4        4
 }
 print(typeof(r))  // string?|int?
 ```
