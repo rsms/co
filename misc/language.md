@@ -159,9 +159,10 @@ x := 123  // equivalent to `var x = 123`
 But this would probably get confusing with our
 [Constant declaration shorthand](#constant-declaration-shorthand) (`x = 123`)
 
-So let's consider going with
-_either_ `x := 123` for `var x = 123`
-_or_ `x = 123` for `const x = 123`
+So let's consider going with _either_:
+
+- `x := 123` for `var x = 123`, or
+- `x = 123` for `const x = 123`
 
 
 ## Functions
