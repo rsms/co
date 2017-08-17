@@ -186,7 +186,7 @@ func foo(name string) int {
 print(foo("John")) // 4
 ```
 
-A function that doesn't take any arguments can omit the parameter group:
+A function that doesn't take any arguments can omit its parameters:
 
 ```go
 func foo int {
