@@ -134,10 +134,11 @@ print(foo(twice=true)) // 8
 The code generated for the above is equivalent to the following:
 
 ```go
+const fooArg0 = "John"
 func foo(name string, twice bool) int {
   // ...
 }
-print(foo("John", true)) // 8
+print(foo(fooArg0, true)) // 8
 ```
 
 
