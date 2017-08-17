@@ -41,6 +41,67 @@ print(integerPI) // 3
 This is useful when you want to force a specific type that's different than
 the value expression's natural type.
 
+
+### Constant declaration shorthand
+
+In most cases when a value is given a name, it's for clarity and readability
+of code, or for "fanning out" (using the same value in multiple places.)
+It's actually less common for a name to change its value in a given scope.
+
+For this reason there's a Python-style shorthand for declaring new constants:
+
+```go
+PI = 3.141592653589793
+```
+
+This has a caveat which is also present in languages like Python:
+you might inadvertently assign to a variable in the outer scope
+when you indented to declare a new constant:
+
+```go
+var y int
+func foo() int {
+  y = 4
+}
+print(foo())  // 4
+print(y)      // 4 — maybe unexpected
+```
+
+If we didn't intend to change the value of `var y`, we should rewrite our code
+to use an explicit `const`:
+
+```go
+var y int
+func foo() int {
+  const y = 4
+}
+print(foo())  // 4
+print(y)      // 0 — unchanged
+```
+
+However, vars should be fairly rare and in many cases the compile-time
+type checker will stop you from doing things like this:
+
+```go
+var y int
+func foo() string {
+  y = "Hello"  // error: assignment to var y of incompatible type int
+}
+```
+
+And we can't assign to constants either:
+
+```go
+const y = 1
+func foo() string {
+  y = 3  // error: assignment to constant y
+}
+```
+
+Giving things names is such a common practice that it's a net win to trade this
+pitfall for the added readability and ease of use.
+
+
 ## Variables
 
 Variables in this language are like vars in JavaScript and Clojure, unlike
@@ -85,6 +146,22 @@ name = "Anne"
 // ...
 // prints "Anne"
 ```
+
+
+### Variable declaration shorthand
+
+Considering Go-style variable declaration shorthand:
+
+```go
+x := 123  // equivalent to `var x = 123`
+```
+
+But this would probably get confusing with our
+[Constant declaration shorthand](#constant-declaration-shorthand) (`x = 123`)
+
+So let's consider going with
+_either_ `x := 123` for `var x = 123`
+_or_ `x = 123` for `const x = 123`
 
 
 ## Functions
