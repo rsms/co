@@ -244,10 +244,8 @@ r = switch n {
   1, 2,
   3
     "one, two or three"
-  4
-    4
-  else
-    false
+  4 4
+  else false
 }
 print(typeof(r))  // string|int|bool
 ```
