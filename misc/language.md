@@ -121,14 +121,23 @@ print(foo("bar")) // 3
 When calling a function, parameters can be named
 
 ```go
-func foo(name string = "John", double bool = false) int {
-  if double {
+func foo(name string = "John", twice bool = false) int {
+  if twice {
     name.length * 2
   } else {
     name.length
   }
 }
-print(foo(double=true)) // 8
+print(foo(twice=true)) // 8
+```
+
+The code generated for the above is equivalent to the following:
+
+```go
+func foo(name string, twice bool) int {
+  // ...
+}
+print(foo("John", true)) // 8
 ```
 
 
