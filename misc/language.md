@@ -172,7 +172,7 @@ expressions.
 
 - Function declaration — `func foo(name string) int { name.length }`
 - Function expression — `func (name string) int { name.length }`
-- Function type declaration — `type Foo func(name string) int` (See [Types](#types))
+- Function type declaration — `type Foo func(string) int` (See [Types](#types))
 - Method declaration — `func Account.foo(name string) int { name.length }`
 - Inline method declaration — `type Account { foo(name string) int { name.length } }`
 
@@ -185,6 +185,32 @@ func foo(name string) int {
 }
 print(foo("John")) // 4
 ```
+
+A function that doesn't take any arguments can omit the parameter group:
+
+```go
+func foo int {
+  123
+}
+```
+
+Functions can also omit their return type, in which case it's inferred from
+the function body. (The exception to this is function type declarations which
+must always declare their return types.)
+
+```go
+func foo(name string) {
+  name.length  // is type int
+}
+print(typeof(foo)) // func(string)int
+```
+
+However, for larger functions it's often better to declare the return type so
+that the compiler can help make sure you're only returning the kinds of values
+you intend.
+
+> Consider enforcing return-type declarations for functions that return more
+> than one type.
 
 Parameters can have default values, making them optional:
 
