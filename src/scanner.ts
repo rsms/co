@@ -245,7 +245,7 @@ export class Scanner {
 
       case 0x22: // "
         s.tok = s.scanString()
-        insertSemi = s.tok == token.STRING
+        insertSemi = s.tok != token.STRING_PIECE
         break
 
       case 0x27: // '
@@ -330,7 +330,7 @@ export class Scanner {
             // continue interpolated string
             s.interpStrL--
             s.tok = s.scanString()
-            insertSemi = s.tok == token.STRING
+            insertSemi = s.tok != token.STRING_PIECE
           } else {
             s.cbraceL--
           }
@@ -707,11 +707,11 @@ export class Scanner {
     let buf :AppendBuffer|null = null
     s.startoffs++ // skip initial "
     let chunkStart = s.startoffs
+    let tok = token.STRING
 
     loop1:
     while (true) {
       switch (s.ch) {
-        // case 0xA: // \n
         case -1:
           s.error("string literal not terminated")
           if (buf) {
@@ -731,20 +731,28 @@ export class Scanner {
           if (!buf) {
             buf = s.resetAppendBuf()
           }
-          buf.appendRange(s.src, chunkStart, s.offset)
+
+          if (chunkStart != s.offset) {
+            buf.appendRange(s.src, chunkStart, s.offset)
+          }
 
           s.readchar()
+          const ch = s.ch as int // e.g. "u", "x", etc
+          const n = s.scanEscape(0x22) // "
 
-          const cp = s.scanEscape(0x22) // "
           // we continue even if there was an error
-
-          if (cp >= 0) {
-            // Write unicode code point as UTF8 to value buffer
-            if (cp < utf8.UniSelf) {
-              buf.append(cp)
-            } else {
+          if (n >= 0) {
+            if (n >= utf8.UniSelf && (ch == 0x75 || ch == 0x55)) { // u | U
+              // Write unicode code point as UTF8 to value buffer
+              if (0xD800 <= n && n <= 0xE000) {
+                s.error("illegal: surrogate half in string literal")
+              } else if (n > unicode.MaxRune) {
+                s.error("escape sequence is invalid Unicode code point")
+              }
               buf.reserve(utf8.UTFMax)
-              buf.length += utf8.encode(buf.buffer, buf.length, cp)
+              buf.length += utf8.encode(buf.buffer, buf.length, n)
+            } else {
+              buf.append(n)
             }
           }
 
@@ -768,6 +776,11 @@ export class Scanner {
           break
         }
 
+        case 0xA: // \n
+          tok = token.STRING_MULTI
+          s.readchar()
+          break
+
         default:
           s.readchar()
       }
@@ -778,22 +791,25 @@ export class Scanner {
     } else {
       s.endoffs = s.offset - 1
     }
-    return token.STRING
+
+    return tok
   }
 
   // scanEscape parses an escape sequence where `quote` is the accepted
   // escaped character. In case of a syntax error, it stops at the offending
-  // character (without consuming it) and returns -1. Otherwise
-  // it returns the unicode codepoint.
+  // character (without consuming it) and returns -1.
+  // Otherwise it returns the unicode codepoint for \u and \U, and returns a
+  // byte value for all other escape sequences.
   //
   scanEscape(quote :int) :int {
     const s = this
 
     let n :int = 0
     let base :int = 0
-    let max :int = 0
 
     switch (s.ch) {
+      case quote: s.readchar(); return quote
+      case 0x30:  s.readchar(); return 0    // 0 - null
       case 0x61:  s.readchar(); return 0x7  // a - alert or bell
       case 0x62:  s.readchar(); return 0x8  // b - backspace
       case 0x66:  s.readchar(); return 0xC  // f - form feed
@@ -803,25 +819,9 @@ export class Scanner {
       case 0x76:  s.readchar(); return 0xb  // v - vertical tab
       case 0x5c:  s.readchar(); return 0x5c // \
       case 0x24:  s.readchar(); return 0x24 // $
-      case quote: s.readchar(); return quote
-
-      case 0x30: case 0x31: case 0x32: case 0x33: case 0x34:
-      case 0x35: case 0x36: case 0x37: // 0..7
-        n = 3; base = 8; max = 255
-        break
-      case 0x78: // x
-        s.readchar()
-        n = 2; base = 16; max = 255
-        break
-      case 0x75: // u
-        s.readchar()
-        n = 4; base = 16; max = unicode.MaxRune
-        break
-      case 0x55: // U
-        s.readchar()
-        n = 8; base = 16; max = unicode.MaxRune
-        break
-
+      case 0x78:  s.readchar(); n = 2; base = 16; break // x
+      case 0x75:  s.readchar(); n = 4; base = 16; break // u
+      case 0x55:  s.readchar(); n = 8; base = 16; break // U
       default: {
         let msg = "unknown escape sequence"
         if (s.ch < 0) {
@@ -847,11 +847,6 @@ export class Scanner {
       cp = cp * base + d
       s.readchar()
       n--
-    }
-
-    if (cp > max || 0xD800 <= cp && cp < 0xE000) /* surrogate range */ {
-      s.error("escape sequence is invalid Unicode code point")
-      return -1
     }
 
     return cp

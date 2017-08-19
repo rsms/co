@@ -19,6 +19,11 @@ export function repr(cp :int) :string {
   return `U+${s} '${str}'`
 }
 
+export function isValid(c :int) :bool {
+  return c <= MaxRune && (c < 0xD800 || 0xE000 < c)
+  // D800..E000 surrogate range
+}
+
 export function isLetter(c :int) :bool {
   return (
     0x41 <= c && c <= 0x1E943 && ( // LATIN CAPITAL LETTER A..ADLAM SMALL LETTER SHA

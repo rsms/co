@@ -48,6 +48,7 @@ export enum token {
   RATIO,   // 22/7
   CHAR,    // 'a'
   STRING,  // "abc"
+  STRING_MULTI, // "ab\nc" — multi-line
   STRING_PIECE, // "a ${...} b" -- the "a " part (" b" is STRING)
   literal_end,
 

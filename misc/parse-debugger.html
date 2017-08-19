@@ -293,7 +293,8 @@ function update(files) {
     let codeEl = document.createElement("code")
     fileEl.appendChild(codeEl)
 
-    for (let t of file.tokens) {
+    for (let i = 0; i < file.tokens.length; ++i) {
+      let t = file.tokens[i]
 
       let isImplicit = false
 
@@ -354,7 +355,8 @@ function update(files) {
 
       if ((t.type == 'SEMICOLON' && !isImplicit) ||
           (t.type == 'COMMENT' && (
-            t.value.includes('\n') || t.value.startsWith('//')
+            file.tokens[i+1] && file.tokens[i+1].type != 'SEMICOLON'
+            // t.value.includes('\n') || t.value.startsWith('//')
           )))
       {
         let nlEl = document.createElement("div")

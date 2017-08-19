@@ -15,7 +15,7 @@ function main() {
   const p = new parser.Parser()
 
   const onErr = (p :Position, msg :string) => {
-    console.error(`[scanner error] ${msg} at ${p}`)
+    console.error(`${msg} at ${p}`)
   }
 
   const strSet = new ByteStrSet()

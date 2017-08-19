@@ -38,8 +38,11 @@ type C = B  // alias (b/c of `=`)
 
 // Diverging from Go syntax here
 type S {
-  // foo() {}
+  decode(b byte[]) (c char, w uint) {
+    //
+  }
 }
+
 
 // interface I {
 //   n int
