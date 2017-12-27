@@ -198,6 +198,22 @@ function initScreen(screen) {
     }
     a.href = '#' + e.id
   })
+
+  var codeBlocks = null, codeBlockIndex = 0
+  function highlightNextCode() {
+    if (!window.hljs) {
+      // poll for hljs
+      return setTimeout(highlightNextCode, 100)
+    }
+    if (codeBlocks == null) {
+      codeBlocks = $$('code[class*="language-"]')
+    }
+    var codeBlock = codeBlocks[codeBlockIndex++];
+    if (!codeBlock) { return } // done
+    window.hljs.highlightBlock(codeBlock.parentElement);
+    requestAnimationFrame(highlightNextCode)
+  }
+  highlightNextCode()
 }
 
 window._remoteScreen = {}
