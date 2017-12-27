@@ -1,0 +1,28 @@
+
+// bufcmp compares two arrays of numbers
+//
+fun cmp(
+  a <A>[],
+  b <B>[],
+  astart uint = 0, aend uint = a.len,
+  bstart uint = 0, bend uint = b.len,
+) int {
+  if (a == b) {
+    0
+  } else {
+    var ai, bi = astart, bstart
+    for ai != aend && bi != bend {
+      if a[ai] < b[bi] { return -1 }
+      if b[bi] < a[ai] { return 1 }
+      ++ai
+      ++bi
+    }
+    aL: aend - astart
+    bL: bend - bstart
+    when { // missing cond means `true`
+      aL < bL -> -1
+      bL < aL -> 1
+      else    -> 0
+    }
+  }
+}

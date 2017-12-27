@@ -1,0 +1,26 @@
+import "foo"
+import bar "bar"
+import . "lol/cat"
+import (
+  "bob-hello"
+  bar2 "alt/bar"
+  . "meow"
+)
+
+/*const (
+  a int = 0
+  b, c
+  d
+)
+
+const (
+  aaa int = 0
+  bbb
+  ccc
+  ddd
+)
+
+var (
+  g int = 0
+  h Foo
+)*/

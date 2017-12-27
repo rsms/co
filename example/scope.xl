@@ -1,0 +1,77 @@
+// import "foo"
+// import bar "bar"
+
+
+//
+// TODO NEXT
+//  allow `a := 4` to declare a new
+//  variable when
+//   - `a` is not found in scope OR
+//   - `a` is not a variable AND
+//     `a` is not defined in this scope
+//  e.g.
+//    a = 1
+//    fun f() { a := 2 }
+//  is equivalent to
+//    a = 1
+//    fun f() { var a = 2 }
+//
+
+// scope0
+fun print()
+var a int  // define var scope0/a
+b = 1    // define const scope0/b
+
+fun scope1(x int) {  // define const scope1/x
+  // x := 2      // error: cannot assign to x
+  
+  a := 2   // store scope0/a
+  a = 3    // define const scope1/a
+  // a := 4   // error: cannot assign to a
+  // a = 4    // error: a redeclared
+
+  // b := 4 // error: cannot assign to bob
+  c := 5   // store scope0/c          -- late binding
+  d := 5   // error: cannot assign to d   -- d is a function in another file
+  e.f.g    // error: e undefined      -- late
+
+  print(scope1) // load scope1
+  print(x)      // load scope1/x
+
+  var b = true  // define var scope1/bob
+  b = false     // store scope1/bob
+
+  {
+    // we have to use set-assign here
+    // to edit var b:
+    b := true
+
+    // the following defines a new const
+    b = true
+  }
+  
+  print(c)      // load scope0/c           -- late binding
+  c = 2         // define const scope1/c   -- NOT store scope0/c
+  print(b)      // load scope0/b
+  b = 3         // store scope1/b
+  print(b)      // load scope1/b
+
+  fun scope2(y int) {
+    print(scope2) // load scope2
+    b = 10      // define const scope2/b
+    a = true    // define const scope2/a
+    print(b)    // load scope2/b
+    print(c)    // load scope0/c
+    print(x)    // load scope1/x
+    print(y)    // load scope2/y
+  }
+  
+  d()           // load <pkgscope>/d    -- late binding; defined in other file
+  d = 3         // define const scope1/d
+  // d = 4         // error: d redeclared
+
+  print(bar)    // load scope0/bar
+  print(foo)    // load scope0/foo   -- late binding
+}
+
+var c int  // define var scope0/c

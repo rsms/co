@@ -5,20 +5,31 @@ import * as utf8 from './utf8'
 import {
   Node,
   Group,
-  Name,
-  QualName,
+  Ident,
+  Field,
   BasicLit,
   StringLit,
   ImportDecl,
   ConstDecl,
   VarDecl,
   TypeDecl,
-  SelectorExpr,
+  DotsType,
+  FunDecl,
+  FunSig,
   Operation,
+  CallExpr,
   ParenExpr,
-  ListExpr,
+  TupleExpr,
+  BadExpr,
+  SelectorExpr,
+  BlockStmt,
+  ReturnStmt,
+  ExprStmt,
+  AssignStmt,
+  DeclStmt,
 } from './ast'
-import { tokstr } from './token'
+import { tokstr, token } from './token'
+import { repr as reprobj } from './util'
 
 
 class ReprCtx {
@@ -46,9 +57,12 @@ export function astRepr(n :Node, ctx: ReprCtx|null = null) :string {
 }
 
 
-function reprv(nv :Node[], newline :string, c :ReprCtx) :string {
-  const nl2 = newline + c.ind
-  return '(' + nv.map(n => repr(n, nl2, c)).join(' ') + ')'
+function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :string {
+  return (
+    (delims[0] || '') +
+    nv.map(n => repr(n, newline, c)).join(' ') +
+    (delims[1] || '')
+  )
 }
 
 
@@ -64,37 +78,99 @@ function repr(n :Node, newline :string, c :ReprCtx) :string {
     return JSON.stringify(utf8.decodeToString(n.value))
   }
 
-  if (n instanceof Name) {
+  if (n instanceof Ident) {
     return utf8.decodeToString(n.value.bytes)
   }
 
-  if (n instanceof QualName) {
-    return utf8.decodeToString(n.value.bytes) + '.' + repr(n.next, newline, c)
+  if (n instanceof DotsType) {
+    return '...' + (n.type ? repr(n.type, newline, c) : 'auto')
   }
 
-  let s = '(' + n.constructor.name
+  if (n instanceof BadExpr) {
+    return 'BAD'
+  }
+
   const nl2 = newline + c.ind
+
+  if (n instanceof Field) {
+    let s = n.type ? repr(n.type, nl2, c) : 'auto'
+    if (n.ident) {
+      s = '(' + repr(n.ident, nl2, c) + ' ' + s + ')'
+    }
+    return s
+  }
+
+  if (n instanceof BlockStmt) {
+    return (
+      n.list.length ?
+       '{' + reprv(n.list, newline, c, '') + newline + '}' :
+      '{}'
+    )
+  }
+
+  if (n instanceof ReturnStmt) {
+    if (n.result) {
+      return newline + '(return ' + repr(n.result, nl2, c) + ')'
+    }
+    return newline + 'return'
+  }
+
+  if (n instanceof ExprStmt) {
+    return newline + '(ExprStmt ' + repr(n.expr, nl2, c) + ')'
+  }
+
+  if (n instanceof FunSig) {
+    let s = reprv(n.params, nl2, c) + ' -> '
+    if (n.result) {
+      s += repr(n.result, nl2, c)
+    } else {
+      s += 'auto'
+    }
+    return s
+  }
+
+  if (n instanceof AssignStmt) {
+    let s = newline + '(AssignStmt '
+    s += reprv(n.lhs, nl2, c)
+    if (n.op == token.ILLEGAL) {
+      s += ' = '
+    } else {
+      s += ' ' + tokstr(n.op) + ' '
+    }
+    s += reprv(n.rhs, nl2, c)
+    return s + ')'
+  }
+
+  if (n instanceof DeclStmt) {
+    return newline + '(DeclStmt' + ' ' + reprv(n.decls, nl2, c, '') + ')'
+  }
+
+
+  // --------
+
+
+  let s = '(' + n.constructor.name
 
   if (n instanceof ImportDecl) {
     s += ' path: ' + repr(n.path, nl2, c)
-    if (n.localName) {
+    if (n.localIdent) {
       s += newline +
-        c.ind + 'localName: ' + repr(n.localName, nl2, c)
+        c.ind + 'localIdent: ' + repr(n.localIdent, nl2, c)
     }
     return s + ')'
   }
 
   if (n instanceof ConstDecl || n instanceof VarDecl) {
-    if (n.group) {
+    if (n instanceof VarDecl && n.group) {
       s += ' [#' + c.groupId(n.group) + ']'
     }
     s += newline
     if (n.type) {
       s += c.ind + 'type: ' + repr(n.type, nl2, c) + newline
     }
-    s += c.ind +   'names: ' + reprv(n.names, nl2, c) + newline
+    s += c.ind +   'names: ' + reprv(n.idents, nl2, c) + newline
     if (n.values) {
-      s += c.ind + 'values: ' + repr(n.values, nl2, c) + newline
+      s += c.ind + 'values: ' + reprv(n.values, nl2, c) + newline
     }
     return s + ')'
   }
@@ -103,37 +179,56 @@ function repr(n :Node, newline :string, c :ReprCtx) :string {
     if (n.group) {
       s += ' [#' + c.groupId(n.group) + ']'
     }
-    s += ' ' + repr(n.name, nl2, c)
+    s += ' ' + repr(n.ident, nl2, c)
     if (n.alias) {
       s += ' ='
     }
     return s + ' ' + repr(n.type, nl2, c) + ')'
   }
 
-  if (n instanceof SelectorExpr) {
-    s += newline +
-      c.ind + 'expr: ' + repr(n.expr, nl2, c) + newline +
-      c.ind + 'sel: ' + repr(n.sel, nl2, c) + newline
-    return s + ')'
-  }
-
   if (n instanceof Operation) {
-    s += ' ' + tokstr(n.op) + newline +
-      c.ind + repr(n.x, nl2, c) + newline
+    s += ' ' + tokstr(n.op) + ' ' + repr(n.x, nl2, c)
     if (n.y) {
-      s += c.ind + repr(n.y, nl2, c) + newline
+      s += ' ' + repr(n.y, nl2, c)
     }
     return s + ')'
   }
 
+  if (n instanceof CallExpr) {
+    s += ' ' + repr(n.fun, newline, c) + ' ('
+    s += reprv(n.argList, nl2, c, '')
+    if (n.hasDots) {
+      s += '...'
+    }
+    return s + '))'
+  }
+
   if (n instanceof ParenExpr) {
-    return s + ' ' + repr(n.x, nl2, c) + newline + ')'
+    return s + ' ' + repr(n.x, newline, c) + ')'
   }
 
-  if (n instanceof ListExpr) {
-    return s + newline +
-      c.ind + reprv(n.exprs, newline, c) + ')'
+  if (n instanceof SelectorExpr) {
+    return (
+      s + ' ' + repr(n.lhs, newline, c) +
+      ' . ' + repr(n.rhs, newline, c) + ')'
+    )
   }
 
-  return s + ' ?)'
+  if (n instanceof FunDecl) {
+    s += ' '
+    if (n.name) {
+      s += repr(n.name, newline, c) + ' '
+    }
+    s += repr(n.sig, newline, c)
+    if (n.body) {
+      s += ' ' + repr(n.body, nl2, c)
+    }
+    return s + ')'
+  }
+
+  if (n instanceof TupleExpr) {
+    s += reprv(n.exprs, nl2, c, '') + ')'
+  }
+
+  return '(? ' + reprobj(n) + ')'
 }

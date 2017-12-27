@@ -6,13 +6,13 @@ import * as util from './util'
 //
 // The Pos value for a given file is a number in the range [base, base+size],
 // where base and size are specified when adding the file to the file set via
-// AddFile.
+// addFile.
 //
 // To create the Pos value for a specific source offset (measured in bytes),
-// first add the respective file to the current file set using FileSet.AddFile
-// and then call File.Pos(offset) for that file. Given a Pos value p
-// for a specific file set fset, the corresponding Position value is
-// obtained by calling fset.Position(p).
+// first add the respective file to the current file set using
+// SrcFileSet.addFile and then call File.Pos(offset) for that file.
+// Given a Pos value p for a specific file set fset, the corresponding Position
+// value is obtained by calling fset.Position(p).
 //
 // Pos values can be compared directly with the usual comparison operators:
 // If two Pos values p and q are in the same file, comparing p and q is
@@ -82,13 +82,12 @@ interface lineInfo {
   line     :int
 }
 
-// A File is a handle for a file belonging to a FileSet.
-// A File has a name, size, and line offset table.
-export class File {
+// A SrcFile is a handle for a file belonging to a FileSet.
+// A SrcFile has a name, size, and line offset table.
+export class SrcFile {
   private infos :lineInfo[] = []
 
   constructor(
-  public set   :FileSet,
   public name  :string,  // file name as provided to addFile
   public base  :int,     // Pos value range for this file is [base...base+size]
   public size  :int,     // file size as provided to addFile
@@ -209,21 +208,21 @@ function searchLineInfos(a :lineInfo[], x :int) :int {
 
 // -----------------------------------------------------------------
 
-// A FileSet represents a set of source files
-export class FileSet { constructor(
+// A SrcFileSet represents a set of source files
+export class SrcFileSet { constructor(
   public base:  int = 1,      // base offset for the next file. 0 == NoPos
     // Base is the minimum base offset that must be provided to
-    // AddFile when adding the next file.
+    // addFile when adding the next file.
 
-  public files: File[] = [],  // list of files in the order added to the set
-  public last:  File|null = null,  // cache of last file looked up
+  public files: SrcFile[] = [],  // list of files in the order added to the set
+  public last:  SrcFile|null = null,  // cache of last file looked up
   ) {}
 
-  // AddFile adds a new file with a given filename, base offset, and file size
+  // addFile adds a new file with a given filename, base offset, and file size
   // to the file set s and returns the file. Multiple files may have the same
-  // name. The base offset must not be smaller than the FileSet's Base(), and
+  // name. The base offset must not be smaller than the SrcFileSet's Base(), and
   // size must not be negative. As a special case, if a negative base is
-  // provided, the current value of the FileSet's Base() is used instead.
+  // provided, the current value of the SrcFileSet's base() is used instead.
   //
   // Adding the file will set the file set's Base() value to base + size + 1
   // as the minimum base value for the next file. The following relationship
@@ -232,11 +231,11 @@ export class FileSet { constructor(
   //  int(p) = base + offs
   //
   // with offs in the range [0, size] and thus p in the range [base, base+size].
-  // For convenience, File.Pos may be used to create file-specific position
+  // For convenience, SrcFile.pos may be used to create file-specific position
   // values from a file offset.
   //
-  addFile(filename :string, size :int, base :int = -1) :File {
-    let s = this
+  addFile(filename :string, size :int, base :int = -1) :SrcFile {
+    const s = this
     if (base < 0) {
       base = s.base
     }
@@ -244,7 +243,7 @@ export class FileSet { constructor(
       panic("illegal base or size")
     }
     // base >= s.base && size >= 0
-    const f = new File(s, filename, base, size, [0])
+    const f = new SrcFile(filename, base, size, [0])
     base += size + 1 // +1 because EOF also has a position
     if (base < 0) {
       panic("Pos offset overflow (too much source code in file set)")
@@ -256,6 +255,47 @@ export class FileSet { constructor(
     return f
   }
 
+  // findFile returns the file that contains the position p.
+  // If no such file is found (for instance for p == NoPos),
+  // the result is null.
+  //
+  findFile(p :Pos) :SrcFile|null {
+    if (p == NoPos) {
+      return null
+    }
+    const s = this
+    // common case: p is in last file
+    let f = s.last
+    if (f && f.base <= p && p <= f.base + f.size) {
+      return f
+    }
+    // p is not in last file - search all files
+    let i = searchFiles(s.files, p)
+    if (i >= 0) {
+      f = s.files[i]
+      // f.base <= p  by definition of searchFiles
+      if (p <= f.base + f.size) {
+        s.last = f
+        return f
+      }
+    }
+    return null
+  }
+
+  // position converts a Pos p in the fileset into a Position value.
+  // If adjusted is set, the position may be adjusted by position-altering
+  // //line comments; otherwise those comments are ignored.
+  // p must be a Pos value in s or NoPos.
+  //
+  position(p :Pos, adjusted :bool = true) :Position {
+    const f = this.findFile(p)
+    return f ? f.position(p, adjusted) : invalidPosition
+  }
+}
+
+
+function searchFiles(a :SrcFile[], x :int) :int {
+  return util.search(a.length, (i :int) => a[i].base > x ) - 1
 }
 
 

@@ -23,9 +23,9 @@ function panic(msg :any, ...v :any[]) {
 }
 G.panic = panic
 
-function assert(cond :any) {
+function assert(cond :any, msg :string = '') {
   if (!cond) {
-    console.error('assertion failure:', cond, _stackTrace(assert))
+    console.error('assertion failure:', cond, _stackTrace(assert), msg)
     process.exit(3)
   }
 }

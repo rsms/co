@@ -1,0 +1,40 @@
+var n int
+var n := 3
+var n int := 3
+var a, b, c := 1, 2, 3
+var a, b, c int := 1, 2, 3
+
+k1, k2, k3 := 1, 2, 3
+
+const x foo.bar.lol.cat = -123
+
+type A B    // concrete
+type C = B  // alias (b/c of `=`)
+
+type Person {
+  age      int
+  name     string
+  realname string = name
+}
+
+// Increments the age field
+func birthday(p Person) Person {
+  p(age = p.age + 1)
+}
+
+p = Person(age=32, name="Bob")
+print(p.age) // 32
+p = p.birthday
+print(p.age) // 33
+
+// decode(s S, b byte[]) (c char, w uint) {
+//   //
+// }
+
+// interface I {
+//   n int
+// }
+
+// func foo() {
+//   a := 4
+// }

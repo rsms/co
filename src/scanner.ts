@@ -1,5 +1,5 @@
 import { AppendBuffer, bufcmp, str8buf } from './util'
-import { Pos, Position, File } from './pos'
+import { Pos, Position, SrcFile } from './pos'
 import * as utf8 from './utf8'
 import * as unicode from './unicode'
 import { token, lookupKeyword, prec } from './token'
@@ -10,12 +10,12 @@ import * as Path from 'path'
 // position and an error message. The position points to the beginning of
 // the offending token.
 //
-export type ErrorHandler = (pos :Position, msg :string) => void
+export type ErrorHandler = (pos :Position, msg :string, typ :string) => void
 
 export enum Mode {
   None = 0,
 
-  ScanComments = 1, // emit comments as tokens
+  ScanComments = 1, // do not skip comments; produce token.COMMENT
 
   CopySource = 2,
     // copy slices of source data for tokens with literal values instead of
@@ -27,6 +27,8 @@ export enum Mode {
 
 const linePrefix = str8buf('//!line ')
 
+enum istrOne { OFF, WAIT, CONT }
+
 // A Scanner holds the scanner's internal state while processing a given text.
 // It must be initialized via init before use or resue.
 //
@@ -35,11 +37,11 @@ export class Scanner {
   // Note: `undefined as any as X` is a workaround for a TypeScript issue
   // where members are otherwise not initialized at construction which causes
   // duplicate struct definitions in v8.
-  public file :File = undefined as any as File // source file handle
-  public dir  :string = ''   // directory portion of file.name
-  public src  :Uint8Array = undefined as any as Uint8Array // source
-  public errh :ErrorHandler|null = null // error reporting
-  public mode :Mode = 0         // scanning mode
+  public sfile :SrcFile = undefined as any as SrcFile // source file handle
+  public sdata :Uint8Array = undefined as any as Uint8Array // source data
+  public dir   :string = ''   // directory portion of file.name
+  public errh  :ErrorHandler|null = null // error reporting
+  public mode  :Mode = 0         // scanning mode
 
   // scanning state
   private ch         :int = -1 // current character (unicode; -1=EOF)
@@ -47,9 +49,10 @@ export class Scanner {
   private rdOffset   :int = 0  // reading offset (position after current char)
   private lineOffset :int = 0  // current line offset
   private insertSemi :bool = false // insert a semicolon before next newline
-  private cbraceL    :int = 0  // curly-brace level, for string interpolation
+  private parenL     :int = 0  // parenthesis level, for string interpolation
   private interpStrL :int = 0  // string interpolation level
-  private byteval   :Uint8Array|null = null // value for some string tokens
+  private istrOne    :istrOne = istrOne.OFF // string interpolation
+  private byteval    :Uint8Array|null = null // value for some string tokens
 
   // public scanning state (read-only)
   public pos       :Pos = 0  // token start position
@@ -66,12 +69,12 @@ export class Scanner {
   // public state - ok to modify
   public errorCount :int = 0 // number of errors encountered
 
-  // Init prepares the scanner s to tokenize the text src by setting the
-  // scanner at the beginning of src. The scanner uses the file set file
+  // Init prepares the scanner s to tokenize the text sdata by setting the
+  // scanner at the beginning of sdata. The scanner uses the file set file
   // for position information and it adds line information for each line.
   // It is ok to re-use the same file when re-scanning the same file as
   // line information which is already present is ignored. Init causes a
-  // panic if the file size does not match the src size.
+  // panic if the file size does not match the sdata size.
   //
   // Calls to Scan will invoke the error handler errh if they encounter a
   // syntax error and errh is not nil. Also, for each error encountered,
@@ -81,15 +84,18 @@ export class Scanner {
   // Note that Init may call errh if there is an error in the first character
   // of the file.
   //
-  init(file :File, src :Uint8Array, errh? :ErrorHandler|null, m :Mode =Mode.None) {
+  init(sfile :SrcFile, sdata :Uint8Array, errh? :ErrorHandler|null, m :Mode =Mode.None) {
     const s = this
     // Explicitly initialize all fields since a scanner may be reused
-    if (file.size != src.length) {
-      panic(`file size (${file.size}) does not match src len (${src.length})`)
+    if (sfile.size != sdata.length) {
+      panic(
+        `file size (${sfile.size}) `+
+        `does not match source size (${sdata.length})`
+      )
     }
-    s.file = file
-    s.dir = Path.dirname(file.name)
-    s.src = src
+    s.sfile = sfile
+    s.dir = Path.dirname(sfile.name)
+    s.sdata = sdata
     s.errh = errh || null
     s.mode = m
   
@@ -109,33 +115,33 @@ export class Scanner {
   private readchar() {
     const s = this
 
-    if (s.rdOffset < s.src.length) {
+    if (s.rdOffset < s.sdata.length) {
       s.offset = s.rdOffset
       
       if (s.ch == 0xA /*\n*/ ) {
         s.lineOffset = s.offset
-        s.file.addLine(s.offset)
+        s.sfile.addLine(s.offset)
       }
 
-      let w = 1, r = s.src[s.rdOffset]
+      let w = 1, r = s.sdata[s.rdOffset]
 
       if (r >= 0x80) {
         // uncommon case: non-ASCII character
-        [r, w] = utf8.decode(s.src, s.rdOffset)
+        [r, w] = utf8.decode(s.sdata, s.rdOffset)
         if (r == 0) {
-          s.error('illegal NUL byte in input', s.offset)
+          s.errorAtOffs('illegal NUL byte in input', s.offset)
         } else if (w == 0 && r == utf8.UniError) {
-          s.error('invalid UTF-8 encoding', s.offset)
+          s.errorAtOffs('invalid UTF-8 encoding', s.offset)
         }
       }
 
       s.rdOffset += w
       s.ch = r
     } else {
-      s.offset = s.src.length
+      s.offset = s.sdata.length
       if (s.ch == 0xA /*\n*/) {
         s.lineOffset = s.offset
-        s.file.addLine(s.offset)
+        s.sfile.addLine(s.offset)
       }
       s.ch = -1 // eof
     }
@@ -153,7 +159,7 @@ export class Scanner {
 
   currentPosition() :Position {
     const s = this
-    return s.file.position(s.file.pos(s.offset))
+    return s.sfile.position(s.sfile.pos(s.offset))
   }
 
   // byteValue returns a byte buffer representing the literal value of the
@@ -165,7 +171,7 @@ export class Scanner {
   byteValue() :Uint8Array {
     const s = this
     const end = s.endoffs == -1 ? s.offset : s.endoffs
-    return s.byteval || s.src.subarray(s.startoffs, end)
+    return s.byteval || s.sdata.subarray(s.startoffs, end)
   }
 
   // takeByteValue returns a new byte buffer that is not referenced by
@@ -180,15 +186,20 @@ export class Scanner {
 
   // Increment errorCount and call any error handler
   //
-  error(msg :string, offs :int = this.startoffs) {
+  error(msg :string, p :Pos = this.pos, typ? :string) {
     const s = this
-    s.errorAt(s.file.position(s.file.pos(offs)), msg)
+    s.errorAt(s.sfile.position(p), msg, typ)
   }
 
-  errorAt(position :Position, msg :string) {
+  errorAtOffs(msg :string, offs :int, typ? :string) {
+    const s = this
+    s.errorAt(s.sfile.position(s.sfile.pos(offs)), msg, typ)
+  }
+
+  errorAt(position :Position, msg :string, typ :string = 'E_SYNTAX') {
     const s = this
     if (s.errh) {
-      s.errh(position, msg)
+      s.errh(position, msg, typ)
     }
     s.errorCount++
   }
@@ -199,23 +210,37 @@ export class Scanner {
   while (true) {
     const s = this
 
-    // skip whitespace
-    while (
-      s.ch == 0x20 ||
-      s.ch == 0x9 ||
-      (s.ch == 0xA && !s.insertSemi) ||
-      s.ch == 0xD
-    ) {
-      s.readchar()
+    if (s.istrOne == istrOne.OFF) {
+      // skip whitespace
+      while (
+        s.ch == 0x20 ||
+        s.ch == 0x9 ||
+        (s.ch == 0xA && !s.insertSemi) ||
+        s.ch == 0xD
+      ) {
+        s.readchar()
+      }
     }
 
     // current token start
-    s.pos = s.file.pos(s.offset)
+    s.pos = s.sfile.pos(s.offset)
     s.startoffs = s.offset
     s.endoffs = -1
     s.byteval = null
 
-    // always make progress
+    if (s.istrOne == istrOne.CONT) {
+      // continue interpolated string
+      s.istrOne = istrOne.OFF
+      s.startoffs-- // b/c scanString increments it, assuming it's skipping `"`
+      s.tok = s.scanString()
+      s.insertSemi = s.tok != token.STRING_PIECE
+      return
+    } else if (s.istrOne == istrOne.WAIT) {
+      // we are about to scan a single token following $ in a string template
+      s.istrOne = istrOne.CONT
+    }
+
+    // make progress
     const ch = s.ch
     s.readchar()
 
@@ -255,7 +280,7 @@ export class Scanner {
 
       case 0x3a: // :
         if (s.gotchar(0x3D)) {
-          s.tok = token.DEFINE
+          s.tok = token.SET_ASSIGN
           s.prec = prec.LOWEST
         } else {
           s.tok = token.COLON
@@ -303,11 +328,24 @@ export class Scanner {
         break
 
       case 0x28: // (
+        if (s.interpStrL) {
+          s.parenL++
+        }
         s.tok = token.LPAREN
         break
       case 0x29: // )
         s.tok = token.RPAREN
         insertSemi = true
+        if (s.interpStrL) {
+          if (s.parenL == 0) {
+            // continue interpolated string
+            s.interpStrL--
+            s.tok = s.scanString()
+            insertSemi = s.tok != token.STRING_PIECE
+          } else {
+            s.parenL--
+          }
+        }
         break
 
       case 0x5b: // [
@@ -319,28 +357,14 @@ export class Scanner {
         break
 
       case 0x7b: // {
-        if (s.interpStrL) {
-          s.cbraceL++
-        }
         s.tok = token.LBRACE
         break
       case 0x7d: // }
-        if (s.interpStrL) {
-          if (s.cbraceL == 0) {
-            // continue interpolated string
-            s.interpStrL--
-            s.tok = s.scanString()
-            insertSemi = s.tok != token.STRING_PIECE
-          } else {
-            s.cbraceL--
-          }
-        } else {
-          s.tok = token.RBRACE
-          insertSemi = true
-        }
+        s.tok = token.RBRACE
+        insertSemi = true
         break
 
-      case 0x2b: { // +
+      case 0x2B: { // +
         s.prec = prec.LOWEST
         if (s.gotchar(0x3D)) { // +=
           s.tok = token.ADD_ASSIGN
@@ -354,7 +378,7 @@ export class Scanner {
         break
       }
 
-      case 0x2d: { // -
+      case 0x2D: { // -
         s.prec = prec.LOWEST
         if (s.gotchar(0x3e)) { // ->
           s.tok = token.ARROWR
@@ -395,7 +419,7 @@ export class Scanner {
             s.tok = token.COMMENT
             if (CRcount) {
               // strip CR characters from comment
-              const v = s.src.subarray(
+              const v = s.sdata.subarray(
                 s.startoffs,
                 s.endoffs == -1 ? s.offset : s.endoffs
               )
@@ -607,7 +631,7 @@ export class Scanner {
 
     // computing rest of hash
     for (let i = hashOffs; i < s.offset; ++i) {
-      hash = (hash ^ s.src[i]) * 0x1000193 // fnv1a
+      hash = (hash ^ s.sdata[i]) * 0x1000193 // fnv1a
     }
     s.hash = hash >>> 0
   }
@@ -624,6 +648,7 @@ export class Scanner {
     while (
       isLetter(c) ||
       isDigit(c) ||
+      c == 0x2D || // -
       c == 0x5F || // _
       c == 0x24    // $
     ) {
@@ -721,7 +746,7 @@ export class Scanner {
 
         case 0x22: // "
           if (buf) {
-            buf.appendRange(s.src, chunkStart, s.offset)
+            buf.appendRange(s.sdata, chunkStart, s.offset)
           }
           s.readchar()
           break loop1
@@ -733,7 +758,7 @@ export class Scanner {
           }
 
           if (chunkStart != s.offset) {
-            buf.appendRange(s.src, chunkStart, s.offset)
+            buf.appendRange(s.sdata, chunkStart, s.offset)
           }
 
           s.readchar()
@@ -762,18 +787,30 @@ export class Scanner {
 
         case 0x24: { // $
           s.readchar()
-          if (s.gotchar(0x7b)) { // {
-            // start interpolated string
-            s.interpStrL++
-            if (buf) {
-              s.byteval = buf.subarray()
-            } else {
-              s.endoffs = s.offset - 2
-            }
-            return token.STRING_PIECE
+          // start interpolated string
+
+          if (buf) {
+            s.byteval = buf.subarray()
           }
-          s.error("expecting ${ to start string interpolation")
-          break
+
+          if (s.gotchar(0x28)) { // (
+            // don't close until we see a balanced closing ')'
+            s.interpStrL++
+            s.endoffs = s.offset - 2 // exclude `$(`
+          } else if (s.ch as int == 0x22) { // "
+            // "foo $"bar"" is invalid -- hard to read, hard to parse.
+            // ("foo $("bar")" _is_ valid however.)
+            s.error(
+              "invalid \" in string template — string literals inside string " +
+              "templates need to be enclosed in parenthesis"
+            )
+            break // consume
+          } else {
+            // expect a single token to follow
+            s.endoffs = s.offset - 1 // exclude `$`
+            s.istrOne = istrOne.WAIT
+          }
+          return token.STRING_PIECE
         }
 
         case 0xA: // \n
@@ -841,7 +878,7 @@ export class Scanner {
           (s.ch < 0) ? "escape sequence not terminated" :
             `illegal character ${unicode.repr(s.ch)} in escape sequence`
         )
-        s.error(msg, s.offset)
+        s.errorAtOffs(msg, s.offset)
         return -1
       }
       cp = cp * base + d
@@ -968,7 +1005,7 @@ export class Scanner {
 
     if (s.ch == 0x65 || s.ch == 0x45) { // e E
       s.readchar()
-      if ((s.ch as int) == 0x2d || (s.ch as int) == 0x2b) { // - +
+      if ((s.ch as int) == 0x2D || (s.ch as int) == 0x2B) { // - +
         s.readchar()
       }
       let valid = false
@@ -989,12 +1026,12 @@ export class Scanner {
     // initial '/' already consumed; s.ch == '/'
     do { s.readchar() } while (s.ch != 0xA && s.ch >= 0)
 
-    if (s.src[s.offset-1] == 0xD) { // \r
+    if (s.sdata[s.offset-1] == 0xD) { // \r
       // don't include \r in comment
       s.endoffs = s.offset - 1
     }
 
-    if (s.startoffs == s.lineOffset && s.src[s.startoffs + 2] == 0x21) { // !
+    if (s.startoffs == s.lineOffset && s.sdata[s.startoffs + 2] == 0x21) { // !
       // comment pragma, e.g. //!foo
       s.interpretCommentPragma()
     }
@@ -1015,7 +1052,7 @@ export class Scanner {
           s.error("comment not terminated")
           return CR_count
         case 0x2f: // /
-          if (s.src[s.offset-1] == 0x2a) { // *
+          if (s.sdata[s.offset-1] == 0x2a) { // *
             s.readchar()
             s.startoffs += 2
             s.endoffs = s.offset - 2
@@ -1064,15 +1101,15 @@ export class Scanner {
     const s = this
     const offs = s.startoffs
     if ( s.offset - offs > linePrefix.length &&
-         bufcmp(s.src, linePrefix, offs, offs + linePrefix.length) == 0
+         bufcmp(s.sdata, linePrefix, offs, offs + linePrefix.length) == 0
     ) {
       // get filename and line number, if any
       // e.g. "//!line file name:line"
       let text = utf8.decodeToString(
-        s.src.subarray(offs + linePrefix.length, s.offset)
+        s.sdata.subarray(offs + linePrefix.length, s.offset)
       )
       /// --- here--- the above doesnt work on uintarray.
-      // we need to decode src to a js string
+      // we need to decode sdata to a js string
       let i = text.lastIndexOf(':')
       if (i > 0) {
         let line = parseInt(text.substr(i+1))
@@ -1087,7 +1124,7 @@ export class Scanner {
             }
           }
           // update scanner position
-          s.file.addLineInfo(s.offset + 1, filename, line)
+          s.sfile.addLineInfo(s.offset + 1, filename, line)
             // +1 since comment applies to next line
         }
       }
@@ -1202,6 +1239,7 @@ function isUniIdentCont(c :int) :bool {
   return (
     unicode.isLetter(c) ||
     unicode.isDigit(c) ||
+    c == 0x2D || // -
     c == 0x5F || // _
     c == 0x24 || // $
     unicode.isEmojiPresentation(c) ||

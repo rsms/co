@@ -1,0 +1,44 @@
+
+fun map(c $T[], f) {
+  a := vec<$T>()
+  i := 0
+  for v in c {
+    a += f(v, i++)
+  }
+  a
+}
+
+fun main {
+  s := "Hello"
+  map(s, i) fun (c) =
+    if c == 'e' || i+1 < len(s) {
+      true
+    } else {
+      false
+    }
+}
+
+// ————————————————————————————————
+// codegen
+
+fun map(c char[], f fn(c char) bool) bool[] {
+  var a vec<bool[]>() = vec<bool[]>()
+  var i int = 0
+  for v in c {
+    a += f(v, i++)
+  }
+  a
+}
+
+fun __f0(s str, c char) bool {
+  if c == 'e' || i+1 < len(s) {
+    true
+  } else {
+    false
+  }
+}
+
+fun main() {
+  s := "Hello"
+  map(s, bind(__f0, s))
+}

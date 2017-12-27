@@ -1,4 +1,5 @@
 import { bufcmp } from './util'
+import * as utf8 from './utf8'
 //
 // Interned byte strings
 //
@@ -11,6 +12,10 @@ export class ByteStr {
   readonly hash  :int,
   readonly bytes :Uint8Array,
   ){}
+
+  toString() :string {
+    return utf8.decodeToString(this.bytes)
+  }
 }
 
 export class ByteStrSet {
@@ -23,7 +28,7 @@ export class ByteStrSet {
     }
     let v = this._m.get(hash)
     if (v) {
-      for (const bs of v) {
+      for (let bs of v) {
         if (bs.bytes.length == value.length && bufcmp(bs.bytes, value) == 0) {
           return bs
         }
@@ -45,9 +50,9 @@ export class ByteStrSet {
 //
 export function hashBytes(buf :ArrayLike<byte>, offs :int, length :int) {
   // This function must exactly match what's in scanner.
-  var h = 0x811c9dc5, i = offs + length
-  while (i-- != offs) {
-    h = (h ^ buf[i]) * 0x1000193
+  var h = 0x811c9dc5, i = offs, e = offs + length
+  while (i < e) {
+    h = (h ^ buf[i++]) * 0x1000193
   }
   return h >>> 0
 }

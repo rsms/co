@@ -2,6 +2,7 @@
 "a ë A"
 "Buy milk: \u221A"
 "Logotype for my band: \U00010299"
+""
 "A cool cat 😎"
 
 // Different ways of embedding the same Unicode text:
@@ -14,7 +15,7 @@
     U+1F469 woman
   + U+1F3FD skin tone modifier
   + U+200D  zero width joiner
-  + U+1F680
+  + U+1F680 rocket ship
   = astronaut (woman) with skin tone modifier */
 "👩🏽‍🚀" // UTF-8 input text
 "\U0001F469\U0001F3FD\u200D\U0001F680" // Unicode code points
@@ -24,9 +25,14 @@
 "a \xEB A" // the byte 0xEB
 "a \u00EB A" // the code point U+00EB
 
-// piece strings
-"x ${y + "foo ${or} yo" + b ar} z"
-"x \${y} z"
+// strings templates
+// "x $"foo"" // invalid
+"foo: $foo, bar: $bar"
+"PI $3.14159265359"
+"Name: $(@.firstName) $@lastName"
+"x $(y * (45 / 9)) z $(y + 9) x"
+"x $(y + "foo $bar yo" + b ar) z"
+"actual dollar sign: \$y"
 
 // multiline strings
 "multi

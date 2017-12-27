@@ -106,7 +106,7 @@ pitfall for the added readability and ease of use.
 
 Variables in this language are like vars in JavaScript and Clojure, unlike
 those of say C++ — a variable is a _value container_ which value can be
-exchanged for a different one at any point in time.
+exchanged for a different value at any point in time.
 
 ```go
 var PI = 141592653589793

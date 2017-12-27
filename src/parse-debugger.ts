@@ -1,6 +1,6 @@
 import './global'
 import * as scanner from './scanner'
-import { Position, FileSet } from './pos'
+import { Position, SrcFileSet } from './pos'
 import * as utf8 from './utf8'
 import {
   token,
@@ -64,10 +64,10 @@ function fmtDuration(milliseconds :int) :string {
 
 function parseFiles() {
   console.log('parseFiles')
-  const fileSet = new FileSet()
+  const fileSet = new SrcFileSet()
   const files :FileInfo[] = []
 
-  for (const filename of sourceFiles) {
+  for (let filename of sourceFiles) {
     const fi :FileInfo = {
       name: filename,
       tokens: [],
@@ -153,7 +153,7 @@ function main() {
   parseFiles()
 
   let parseTimer :any = null
-  for (const filename of sourceFiles) {
+  for (let filename of sourceFiles) {
     fs.watchFile(filename, {interval:200}, (curr: fs.Stats, prev :fs.Stats) => {
       if (parseTimer === null) {
         parseTimer = setTimeout(() => {
@@ -167,7 +167,7 @@ function main() {
   // reload self on changes
   setTimeout(() => {
     const selfSourceFiles = new Set<string>()
-    for (const filename of fs.readdirSync(__dirname)) {
+    for (let filename of fs.readdirSync(__dirname)) {
       selfSourceFiles.add(Path.join(__dirname, filename))
     }
     selfSourceFiles.add(sourceDir)
@@ -175,11 +175,11 @@ function main() {
     let isClosing = false
     const onSourceChanged = (curr: fs.Stats, prev :fs.Stats) => {
       // console.log(process.pid, 'server changed')
-      for (const filename of selfSourceFiles) {
+      for (let filename of selfSourceFiles) {
         fs.unwatchFile(filename)
       }
 
-      for (const filename of sourceFiles) {
+      for (let filename of sourceFiles) {
         fs.unwatchFile(filename)
       }
 
@@ -204,7 +204,7 @@ function main() {
       }
     }
 
-    for (const filename of selfSourceFiles) {
+    for (let filename of selfSourceFiles) {
       fs.watchFile(filename, {interval:200}, onSourceChanged)
     }
   }, 500)

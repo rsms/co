@@ -1,14 +1,17 @@
 {
   "name": "xlang",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "out/xlang.js",
   "license": "MIT",
   "scripts": {
-    "build-w": "TSC_NONPOLLING_WATCHER=1 ./node_modules/.bin/tsc -w",
-    "build": "./node_modules/.bin/tsc"
+    "build": "node build.js -O"
   },
   "devDependencies": {
-    "@types/node": "^8.0.17",
-    "typescript": "^2.4.2"
+    "@types/node": "^8.5.2",
+    "awesome-typescript-loader": "^3.4.1",
+    "source-map-support": "^0.5.0",
+    "typescript": "^2.6.2",
+    "uglify-es": "^3.3.2",
+    "webpack": "^3.10.0"
   }
 }

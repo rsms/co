@@ -1,0 +1,24 @@
+
+// var v0 // error: missing type or value in var declaration
+var va int
+// var va int // error: va redeclared
+var vb = 1
+var vc int = 1
+var vd, ve int
+var vf, vg = 1, 2
+var vh, vi int = 1, 2
+// var vj, vk = 1 // error: cannot assign 1 values to 2 variables
+// var vl, vm = 1, 2, 3 // error: cannot assign 3 values to 2 variables
+// var vn, vo int = 1 // error: cannot assign 1 values to 2 variables
+// var vp, vq int = 1, 2, 3 // error: cannot assign 3 values to 2 variables
+
+// ca // error: missing value in const declaration
+// cb int // error: const declaration cannot have type without value
+cc = 1
+// cc = 1 // error: cc redeclared
+cd int = 1
+ce, cf = 1, 2
+cg, ch int = 1, 2
+
+// fun cc() {} // error: cc redeclared
+fun fa() {}

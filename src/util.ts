@@ -39,7 +39,7 @@ function bufcopy(bytes :ArrayLike<byte>, addlSize :int) {
 
 
 // str8buf creates a new buffer based on a string.
-// Each character in the string is interpreted as an 8-bit number.
+// Each character in the string is interpreted as an 8-bit UTF-8 byte.
 export function str8buf(s :string) :Uint8Array {
   return Uint8Array.from(
     s as any as ArrayLike<number>,
@@ -202,5 +202,15 @@ export class AppendBuffer {
       this.buffer,
       Math.min(minAddlSize, this.buffer.length)
     )
+  }
+}
+
+
+export function repr(obj :any) :string {
+  // TODO: something better
+  try {
+    return JSON.stringify(obj)
+  } catch (_) {
+    return String(obj)
   }
 }

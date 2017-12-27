@@ -330,7 +330,9 @@ function update(files) {
       }
 
       let tokEl = document.createElement("span")
-      tokEl.innerText = t.value || t.name
+      tokEl.innerText = t.value || (
+        t.type.includes('STRING') ? '' : t.name
+      )
       tokEl.className = 'tok tok-' + t.type
       if (!t.value) {
         tokEl.className += ' empty'
