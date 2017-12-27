@@ -150,7 +150,7 @@ screen.active {
 }
 
 /* Code highlighting */
-.hljs, pre > code {
+pre > code {
   display: block;
   max-width: auto;
   min-width: 50%;
