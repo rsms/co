@@ -187,16 +187,10 @@ function initScreen(screen) {
   )
   ev.forEach(e => {
     e.id = screen.id + '#' + e.id
-    var pe = e.parentElement
-    var a
-    if (pe.nodeName == 'A') {
-      a = pe
-    } else {
-      a = document.createElement('a')
-      pe.replaceChild(a, e)
-      a.appendChild(e)
+    e.classList.add('anchor')
+    e.onclick = function() {
+      document.location.hash = '#' + e.id
     }
-    a.href = '#' + e.id
   })
 
   var codeBlocks = null, codeBlockIndex = 0

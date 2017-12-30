@@ -1,0 +1,83 @@
+// note:
+//  scope1 is package
+//  scope2 is file (imports)
+
+a = 0  // define const scope1/a  -- only consts at file/package level
+
+fun init {
+  a = 1
+}
+
+fun f0(x int) {  // scope3; define c|v scope1/x
+  print(a)
+  a = 2  // define v|c scope3/a
+
+  b = 3  // define v|c scope3/b
+  b = 4  // store scope3/b -- marks first decl of a as var
+
+  {
+    b = 5 // store scope3/b
+  }
+
+  // b := true // redeclare b, shadow other b
+}
+
+// fun print(v) {} // define fun scope1/print
+
+// maybe defined in a different file
+c i64 = 0xDEADBEEF // define const scope1/c
+
+// semantics:
+//
+// a = 0
+// a, b = 1, 2
+// a, b = b, a
+//   must load a and b before
+//   storing any of them
+//
+// (assign
+//   (dest (var a))
+//   (source (i32 0)) )
+// (assign
+//   (dest (var a) (var b))
+//   (source (i32 1) (i32 2)) )
+// (assign
+//   (dest (var a) (var b))
+//   (source (var b) (var a)) )
+//
+// codegen wants:
+//
+// instruction   stack
+//
+// i32.const 0   push  0 -> (0)
+// set_local 0   pop   0 <- ()
+// i32.const 1   push  1 -> (1)
+// i32.const 2   push  2 -> (2 1)
+// set_local 1   pop   2 <- (1)
+// set_local 0   pop   1 <- ()
+// get_local 1   push  2 -> (2)
+// get_local 0   push  1 -> (1 2)
+// set_local 1   pop   1 <- (2)
+// set_local 0   pop   2 <- ()
+//
+// --------
+// for late-resolve global decls
+//
+// fun a {
+//   b
+// }
+// b = a
+//
+// (fundecl a (funsig () <?>)
+//   (block<?>
+//     (exprstmt (ident b))) )
+//      -- unresolved ^
+// (vardecl b (fun a))
+//
+// after post-resolve:
+//
+// (fundecl a (funsig () <fun()>)
+//   (block<fun()>
+//     (exprstmt (fun b))) )
+// (vardecl b (fun a))
+//

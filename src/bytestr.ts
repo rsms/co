@@ -16,6 +16,14 @@ export class ByteStr {
   toString() :string {
     return utf8.decodeToString(this.bytes)
   }
+
+  equals(other :ByteStr) :bool {
+    return (
+      this.hash == other.hash &&
+      this.bytes.length == other.bytes.length &&
+      bufcmp(this.bytes, other.bytes) == 0
+    )
+  }
 }
 
 export class ByteStrSet {

@@ -1,123 +1,301 @@
 #!/usr/bin/env TSC_NONPOLLING_WATCHER=1 node
-//
-// usage: build.js [-w] [-O | -Oonly]
-//  -w      Watch sources for changes and rebuild incrementally
-//  -O      Generate optimized output in addition to "regular" output
-//  -Oonly  Only generate optimized output (based on existing debug product)
-//
-const webpack = require("webpack")
-const fs = require('fs')
-const promisify = require('util').promisify
 
+// Usage: build.js [-w [-clean]]
+//        build.js -O [-nominify]
+//  -w         Watch sources for changes and rebuild incrementally
+//  -clean     Force rebuilding of everything, ignoring cache. Implied with -O.
+//  -O         Generate optimized product
+//  -nominify  Do not minify (or mangle) optimized product code (i/c/w -O)
+//  -h, -help  Print this help message to stderr and exit
+//
+
+// Limitations:
+//
+//  - uglify-es currently doesn't handle array destructors during optimization.
+//    e.g. `let x = 1, y = 1; [x, y] = foo()` generates invalid code because of
+//    a bug in the constant-evaluation code, yielding `[1, 1] = foo()`
+//
+
+const UglifyJS = require('uglify-es')
+const rollup = require('rollup')
+const typescriptPlugin = require('rollup-plugin-typescript2')
+const fs = require('fs')
+const Path = require('path')
+const subprocess = require('child_process')
+const { join: pjoin, relative: relpath, dirname } = Path
+const pkg = require('./package.json')
+const promisify = require('util').promisify
 const readfile = promisify(fs.readFile)
 const writefile = promisify(fs.writeFile)
-
 const rootdir = __dirname
 
-// see https://webpack.github.io/docs/node.js-api.html
+// config
+const productName = 'xlang'
+const outdir = pjoin(rootdir, 'out')
+const srcdir = pjoin(rootdir, 'src')
 
-function main() {
-  if (process.argv.includes('-Oonly')) {
-    return buildOptimized()
-  }
+const debug = !process.argv.includes('-O')
+const watch = process.argv.includes('-w')
+const minify = !process.argv.includes('-nominify')
+const clean = process.argv.includes('-clean')
+const outfilename = debug ? `${productName}.debug.js` : `${productName}.js`
+const outfile = pjoin(outdir, outfilename)
+const mapfile = outfile + '.map'
 
-  const compiler = webpack({
-    devtool: 'cheap-module-source-map',
-    entry: [ rootdir + '/src/main'],
-    target: 'node',
-    output: {
-      path: rootdir + '/out',
-      filename: 'xlang.debug.js',
-      libraryTarget: 'umd',
-    },
-    resolve: {
-      extensions: ['.ts', '.js'],
-    },
-    module: {
-      rules: [
-        {
-          test: /\.ts$/,
-          exclude: /node_modules/,
-          loader: 'awesome-typescript-loader'
-        },
-      ],
-    },
-    plugins: [
-      new webpack.BannerPlugin({
-        banner: 'try{require("source-map-support").install();}catch(_){};\n',
-        raw: true,
-        entryOnly: true
-      })
-    ],
-  })
-
-  if (process.argv.includes('-w')) {
-    compiler.watch({
-      aggregateTimeout: 50, // wait so long for more changes
-    }, onBuild)
-  } else {
-    compiler.run(onBuild)
-  }
-}
-
-function onBuild(err, stats) {
-  if (err) {
-    console.error(err.stack || ''+err)
-    process.exit(1)
-  }
-  console.log(stats.toString({
-    chunks: false, // Makes the build much quieter
-    colors: true
-  }))
-  if (!stats.hasErrors()) {
-    const map = stats.compilation.assets['xlang.debug.js.map']
-    patchSourceMap(map).then(() => {
-      if (process.argv.includes('-O')) {
-        buildOptimized()
+if (process.argv.includes('-h') || process.argv.includes('-help')) {
+  // show usage, read from comment at top of file
+  let lines = fs.readFileSync(__filename, 'utf8').split(/\n/, 100)
+  let started = false, end = 0, usage = []
+  for (let i = 1; i < lines.length; ++i) {
+    let line = lines[i]
+    if (started) {
+      if (!line.startsWith('//')) {
+        console.error(usage.join('\n').replace(/[\r\t\n\s]+$/, ''))
+        break
       }
+      usage.push(line.substr(3))
+    } else if (line.startsWith('// Usage:')) {
+      started = true
+      usage.push(line.substr(3))
+    }
+  }
+  process.exit(1)
+} else if (watch && !debug) {
+  console.error("error: both -O and -w provided -- confused. Try -h for help")
+  process.exit(1)
+} else if (!debug && clean) {
+  console.warn("warning: -clean has no effect in combination with -O")
+}
+
+// constant definitions that may be inlined
+const defines_inline = {
+  DEBUG: debug,
+}
+
+// constant defintions (will be available as `const name = value` at runtime)
+const defines_all = Object.assign({
+  VERSION: `${pkg.version}-${debug ? 'debug' : getGitHashSync() || 'release'}`,
+}, defines_inline)
+
+// typescript config
+const tsconfig = {
+  // check: false, // don't lint -- faster
+  verbosity: 1, // 0 Error, 1 Warning, 2 Info, 3 Debug
+  tsconfig: pjoin(rootdir, 'tsconfig.json'),
+  tsconfigOverride: {
+    compilerOptions: Object.assign({
+      // for both debug and release builds
+      removeComments: true,
+    }, debug ? {
+      // only for debug builds
+    } : {
+      // only for release builds
+      noFallthroughCasesInSwitch: true,
+      noImplicitAny: true,
+      noImplicitReturns: true,
+      noImplicitThis: true,
+      noUnusedLocals: true,
+      // noUnusedParameters: true,
+      preserveConstEnums: true,
+      strictNullChecks: true,
     })
+  },
+  cacheRoot: debug ? pjoin(outdir, '.tscache') : undefined,
+  clean: clean,
+}
+
+// input config
+const rin = {
+  input: pjoin(srcdir, 'main.ts'),
+  external: [
+    'fs', 'path',
+    'source-map-support',
+  ],
+  plugins: [
+    typescriptPlugin(tsconfig),
+  ],
+  onwarn(warning) {
+    console.warn('WARN', warning.message)
+  },
+}
+
+// output config
+const rout = {
+  file: outfile,
+  format: 'cjs', // change to umd when we no longer require 'fs'
+  name: 'xlang',
+  sourcemap: true,
+  freeze: debug, // Object.freeze(x) on import * as x from ...
+  banner: `/* ${pkg.name} ${defines_all.VERSION} */\n`,
+  intro: '',
+}
+
+// add predefined constants to intro
+rout.intro += 'var ' + Object.keys(defines_all).map(k =>
+  k + ' = ' + JSON.stringify(defines_all[k])
+).join(', ') + ';\n'
+
+// add global code to intro
+rout.intro += getGlobalJSSync()
+
+
+if (watch) {
+  buildIncrementally()
+} else {
+  buildOnce()
+}
+
+
+function buildIncrementally() {
+  const wopt = Object.assign({}, rin, {
+    clearScreen: true,
+    output: rout,
+  })
+  rollup.watch(wopt).on('event', ev => {
+    switch (ev.code) {
+      case 'START':        // the watcher is (re)starting
+        break
+      case 'BUNDLE_START': // building an individual bundle
+        const outfiles = ev.output.map(fn => relpath(rootdir, fn)).join(', ')
+        console.log(`build ${outfiles} ...`)
+        break
+      case 'BUNDLE_END':   // finished building a bundle
+        reportBuilt(
+          ev.duration,
+          ev.output.map(fn => relpath(rootdir, fn)).join(', ')
+        )
+        break
+      case 'END':          // finished building all bundles
+        break
+      case 'ERROR':        // encountered an error while bundling
+        logBuildError(ev.error)
+        break
+      case 'FATAL': {       // encountered an unrecoverable error
+        const err = ev.error
+        if (err) {
+          logBuildError(err)
+          if (err.code == 'PLUGIN_ERROR' && err.plugin == 'rpt2') {
+            // TODO: retry buildIncrementally() when source changes
+          }
+        } else {
+          console.error('unknown error')
+        }
+        break
+      }
+      default:
+        console.log('rollup event:', ev.code, ev)
+    }
+  })
+}
+
+
+function buildOnce() {
+  let startTime = Date.now()
+  console.log(`build ${relpath(rootdir, rout.file)} ...`)
+  rollup.rollup(rin).then(bundle => {
+    // console.log(`imports: (${bundle.imports.join(', ')})`)
+    // console.log(`exports: (${bundle.exports.join(', ')})`)
+    // bundle.modules is an array of module objects
+
+    bundle.generate(rout).then(({ code, map }) => {
+      let p
+      if (debug) {
+        code += '\n//# sourceMappingURL=' + Path.basename(mapfile)
+        p =  Promise.all([
+          writefile(mapfile, map.toString(), 'utf8'),
+          writefile(outfile, code, 'utf8'),
+        ])
+      } else {
+        map = patchSourceMap(map)
+        p = genOptimized(code, map)
+      }
+
+      return p.then(() => {
+        reportBuilt(Date.now() - startTime, relpath(rootdir, rout.file))
+      })
+    })
+
+    // return bundle.write(rout).then(() => {
+    //   let duration = Date.now() - startTime
+    //   reportBuilt(duration, relpath(rootdir, rout.file))
+    // })
+  }).catch(err => {
+    logBuildError(err)
+    process.exit(1)
+  })
+}
+
+
+function logBuildError(err) {
+  if (err.code == 'PLUGIN_ERROR') {
+    // don't include stack trace
+    let msg = err.message || ''+err
+    if (err.plugin == 'rpt2') {
+      // convert weird typescript origins `file(line,col):` to standard
+      // `file:line:col:`
+      msg = msg.replace(
+        /(\n|^)(.+)\((\d+),(\d+)\)/g, '$1$2:$3:$4'
+      )
+    }
+    console.log(msg)
+  } else {
+    console.error(err.stack || ''+err)
   }
 }
 
-function patchSourceMap(map) { // :Promise<void>
-  // Webpack generates a really messy source map. This cleans it up.
-  let m = JSON.parse(map.source())
-  m.sourceRoot = '..'
-  delete m.sourcesContent
-  const builtinNamePrefix = 'webpack:///webpack'
-  m.sources = m.sources.map(s => {
-    return s.replace('webpack:///webpack/', 'wp:').replace('webpack:///', '')
-  })
-  return writefile(map.existsAt, JSON.stringify(m), 'utf8')
+
+function reportBuilt(duration, outfiles) {
+  console.log(`built ${outfiles} in ${ Math.round((duration/100))/10 }s`)
 }
 
-function buildOptimized() { // :Promise<void>
-  const infile = 'out/xlang.debug.js'
-  const outjsfile = 'xlang.js'
-  const outmapfile = outjsfile + '.map'
 
-  console.log(`building optimized ${outjsfile}`)
+function patchSourceMap(m) { // :Promise<string>
+  delete m.sourcesContent
 
-  const UglifyJS = require('uglify-es')
+  const srcDirRel = relpath(outdir, srcdir)
+  const sourceRootRel = dirname(srcDirRel)
 
-  const pureFuncList = [
-    // list of known global pure functions that doesn't have any side-effects,
-    // provided by the environment.
-    'Math.floor',
-    'Math.ceil',
-    'Math.round',
-    'Math.random',
-    // TODO: expand this list
-  ]
+  m.sourceRoot = srcDirRel
 
-  return Promise.all([
-    readfile(infile, 'utf8'),
-    readfile(infile + '.map', 'utf8'),
-  ]).then(([jssource, mapsource]) => {
-    var result = UglifyJS.minify({[infile]: jssource}, {
+  m.sources = m.sources.map(path => {
+    if (path.startsWith(srcDirRel)) {
+      const abspath = Path.resolve(outdir, path)
+      return relpath(srcdir, abspath)
+    }
+    return path
+  })
+
+  return m
+  // const json = JSON.stringify(m)
+  // return writefile(mapfilename, json, 'utf8').then(() => m)
+}
+
+
+function genOptimized(code, map) { // :Promise<void>
+  return new Promise(resolve => {
+    console.log(`optimizing...`)
+
+    // need to clear sourceRoot for uglify to produce correct source paths
+    const mapSourceRoot = map.sourceRoot
+    map.sourceRoot = ''
+    // const mapjson = JSON.stringify(map)
+
+    const pureFuncList = [
+      // list of known global pure functions that doesn't have any side-effects,
+      // provided by the environment.
+      'Math.floor',
+      'Math.ceil',
+      'Math.round',
+      'Math.random',
+      // TODO: expand this list
+    ]
+
+    const infilename = Path.relative(rootdir, outfile)
+
+    var result = UglifyJS.minify({[infilename]: code}, {
       ecma: 8,
       warnings: true,
-      // toplevel: true,
+      toplevel: rout.format == 'cjs',
 
       // compress: false,
       compress: {
@@ -164,14 +342,14 @@ function buildOptimized() { // :Promise<void>
         // (default: `5`) -- Pass `6` or greater to enable `compress` options that
         // will transform ES5 code into smaller ES6+ equivalent forms.
 
-        evaluate: false, // breaks our build
+        evaluate: true,
         // (default: `true`) -- attempt to evaluate constant expressions
 
         // expression: true,
         // (default: `false`) -- Pass `true` to preserve completion values
         // from terminal statements without `return`, e.g. in bookmarklets.
 
-        // global_defs: {},
+        global_defs: defines_inline,
         // (default: `{}`) -- see [conditional compilation](#conditional-compilation)
 
         // hoist_funs: false,
@@ -341,7 +519,8 @@ function buildOptimized() { // :Promise<void>
 
         // unused: true,
         // (default: `true`) -- drop unreferenced functions and variables (simple
-        // direct variable assignments do not count as references unless set to `"keep_assign"`)
+        // direct variable assignments do not count as references unless set to
+        // `"keep_assign"`)
 
         // warnings: false,
         // (default: `false`) -- display warnings when dropping unreachable
@@ -349,34 +528,110 @@ function buildOptimized() { // :Promise<void>
       },
 
       // mangle: false,
-      mangle: {
+      mangle: minify ? {
         // reserved: [],
         keep_classnames: true,
         keep_fnames: false,
         safari10: false,
-      },
+      } : false,
 
       output: {
-        // beautify: true, indent_level: 2, // comments: true,
+        preamble: rout.banner.trim(),
+          // Note: uglify adds a trailing newline after preamble
+        beautify: !minify,
+        indent_level: 2,
+        // comments: true,
         ast: false,
         code: true,
         safari10: false,
       },
       sourceMap: {
-        content: fs.readFileSync(infile + '.map', 'utf8'),
-        url: outmapfile,
-        filename: outjsfile,
+        content: map,
+        root: mapSourceRoot,
+        url: Path.basename(mapfile),
+        filename: Path.basename(outfile),
       },
     })
 
-    var outdir = 'out/'
-    console.log('write', outdir + outjsfile)
-    return Promise.all([
-      writefile(outdir + outjsfile, result.code, 'utf8'),
-      writefile(outdir + outmapfile, result.map, 'utf8'),
-    ])
-  })  
+    if (result.error) {
+      throw result.error
+    }
+
+    console.log(
+      `write ${fmtsize(result.code.length)} to ${relpath(rootdir, outfile)}`)
+    console.log(
+      `write ${fmtsize(result.map.length)} to ${relpath(rootdir, mapfile)}`)
+    resolve(Promise.all([
+      writefile(outfile, result.code, 'utf8'),
+      writefile(mapfile, result.map, 'utf8'),
+    ]))
+  })
 }
 
 
-main()
+function fmtsize(z) {
+  return (z / 1024).toFixed(1) + ' kB'
+}
+
+
+function getGlobalJSSync() {
+  const srcfile = pjoin(srcdir, 'global.js')
+  const cachefile = pjoin(outdir, '.global.'+(debug ? 'd':'r')+'.cache.js')
+
+  try {
+    const srcst = fs.statSync(srcfile)
+    const cachest = fs.statSync(cachefile)
+    if (
+      (srcst.mtimeMs !== undefined && srcst.mtimeMs <= cachest.mtimeMs) ||
+      (srcst.mtimeMs === undefined && srcst.mtime <= cachest.mtime)
+    ) {
+      return fs.readFileSync(cachefile, 'utf8')
+    }
+  } catch (_) {}
+
+  console.log(`build ${relpath(rootdir, srcfile)}`)
+
+  const r = compileJS(srcfile, fs.readFileSync(srcfile, 'utf8'))
+  if (r.error) {
+    const err = r.error
+    if (err.line !== undefined) {
+      err.message =
+        `${err.filename || err.file}:${err.line}:${err.col} ${r.message}`
+    }
+    throw err
+  }
+
+  try { fs.mkdirSync(dirname(cachefile)) } catch(_) {}
+  fs.writeFileSync(cachefile, r.code, 'utf8')
+  return r.code
+}
+
+
+function compileJS(name, source) { // :{ error? :Error, code :string }
+  const res = UglifyJS.minify({[name] : source}, {
+    ecma:  6,
+    parse: {},
+    compress: {
+      dead_code: true,
+      global_defs: defines_inline,
+    },
+    mangle: false,
+    output: {
+      ast: false,
+      code: true,
+      preserve_line: debug, // poor man's sourcemap :-)
+    },
+  })
+  return res
+}
+
+
+function getGitHashSync() {
+  try {
+    return subprocess.execSync('git rev-parse HEAD', {
+      cwd: rootdir,
+      timeout: 2000,
+    }).toString('utf8').trim()
+  } catch (_) {}
+  return ''
+}

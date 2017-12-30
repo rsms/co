@@ -6,8 +6,7 @@ Source code is Unicode text encoded in UTF-8. The text is not canonicalized, so 
 
 Each code point is distinct; for instance, upper and lower case letters are different characters.
 
-
-### Characters
+#### Characters
 
 The following terms are used to denote specific Unicode character classes:
 
@@ -18,7 +17,7 @@ unicode_letter = /* a Unicode code point classified as "Letter" */
 unicode_digit  = /* a Unicode code point classified as "Number, decimal digit" */
 ```
 
-### Letters and digits
+#### Letters and digits
 
 ```php
 letter        = unicode_letter | "_" | "$"
@@ -472,13 +471,13 @@ Generalized type parameters are declared after a name, in between `<` and `>`:
 
 - `<A>` — A can be any type
 - `<A is B>` — A must be a type compatible with B
-- `<A is B|C>` — A must be a type compatible with B or C
-- `<A is B&C>` — A must be a type compatible with B _and_ C
+- `<A is B | C>` — A must be a type compatible with B or C
+- `<A is B & C>` — A must be a type compatible with B _and_ C
 
 ```go
-type MyList<T> [T]           // list of `T`s wher T is any type
-type F<A, R> (A, A) -> R     // parameters and return value are generic
-type M<A, B is X> Map<A, B>  // map with value type compatible with X
+type MyList <T> [T]           // list of `T`s wher T is any type
+type F <A, R> (A, A) -> R     // parameters and return value are generic
+type M <A, B is X> Map<A, B>  // map with value type compatible with X
 ```
 
 ```go
@@ -519,12 +518,14 @@ uint64      the set of all unsigned 64-bit integers (0 to 18446744073709551615)
 int8        the set of all signed  8-bit integers (-128 to 127)
 int16       the set of all signed 16-bit integers (-32768 to 32767)
 int32       the set of all signed 32-bit integers (-2147483648 to 2147483647)
-int64       the set of all signed 64-bit integers (-9223372036854775808 to 9223372036854775807)
+int64       the set of all signed 64-bit integers
+            (-9223372036854775808 to 9223372036854775807)
 
 float32     the set of all IEEE-754 32-bit floating-point numbers
 float64     the set of all IEEE-754 64-bit floating-point numbers
 
-ratio       the set of all non-zero integers divided by the set of all non-zero integers
+ratio       the set of all non-zero integers divided by the set of all non-zero
+            integers
 
 byte        alias for uint8
 char        alias for int32

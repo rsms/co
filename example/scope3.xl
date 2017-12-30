@@ -1,0 +1,39 @@
+// scope0
+
+a = 0  // define const scope0/a  -- only consts at file/package level
+b = 1  // define const scope0/b
+
+fun scope1(x int) {  // define c|v scope1/x
+  print(a)  // load scope0/a  -- late binding of "print"
+  a = 2  // define scope1/a
+
+  b = 3  // define v|c scope1/b
+  b = 4  // store scope1/b -- marks first decl of a as var
+  
+  print(c) // load scope0/c  -- late binding
+  c = 5    // define v|c scope1/c -- marked const later since not stored to
+
+  var d int  // define var scope1/d
+
+  for b < 10 { // scope2
+    d = b * 10  // store scope1/d  -- since at same fun scope as decl of d
+    b++         // store scope1/b
+  }
+
+  fun scope3 {
+    print(c) // load scope1/c
+    c = 6    // define c|v scope3/c
+    print(c) // load scope3/c
+    d = 6    // define c|v scope3/d  -- since in different scope than `for`
+  }
+
+  if v = d - 3 { // scope4; define c|v scope4/v
+    print(v)  // load scope4/v
+  }
+  print(v) // error: v undefined  -- x was only defined inside the `if` scope
+}
+
+fun print() { ... } // define fun scope0/print
+
+// maybe defined in a different file
+c int64 = 0xDEADBEEF // define const scope0/c

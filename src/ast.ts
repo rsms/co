@@ -36,25 +36,7 @@ export class Field extends Node {
 // ——————————————————————————————————————————————————————————————————
 // Scope
 
-// An Object describes a named language entity such as a package,
-// constant, type, variable, function (incl. methods), or label.
-//
-// The Data fields contains object-specific data:
-//
-//  Kind    Data type         Data value
-//  Pkg     *Scope            package scope
-//  Con     int               iota for the respective declaration
-//
-// type Object struct {
-//   Kind ObjKind
-//   Name string      // declared name
-//   Decl interface{} // corresponding Field, XxxSpec, FuncDecl, LabeledStmt,
-//                    // AssignStmt, Scope; or nil
-//   Data interface{} // object-specific data; or nil
-//   Type interface{} // placeholder for type information; may be nil
-// }
-
-// An Object describes a named language entity such as a package,
+// An Obj describes a named language entity such as a package,
 // constant, type, variable, function (incl. methods), or label.
 //
 export class Obj {
@@ -64,6 +46,10 @@ export class Obj {
     public value :Expr|null,
     public data  :any = null,
   ) {}
+
+  get scope() :Scope {
+    return this.decl.scope
+  }
 }
 
 export interface UnresolvedAssign {
@@ -72,11 +58,11 @@ export interface UnresolvedAssign {
 }
 
 export class Scope {
-  // unresolvedAssigns :Map<ByteStr,Set<UnresolvedAssign>> | null = null
+  fun :FunDecl | null = null // when set, scope if function scope
 
   constructor(
-  public outer      :Scope | null,
-  public decls      :Map<ByteStr,Obj> | null = null,
+  public outer :Scope | null,
+  public decls :Map<ByteStr,Obj> | null = null,
   ) {}
 
   // lookup a declaration in this scope and any outer scopes
@@ -96,20 +82,43 @@ export class Scope {
   // declare registers a name in this scope.
   // If the name is already registered, null is returned.
   //
-  declare(name: ByteStr, decl :Node, x: Expr|null) :Obj | null {
-    return this.declareObj(new Obj(name, decl, x))
+  declare(name: ByteStr, decl :Node, x: Expr|null) :Obj|null {
+    const obj = new Obj(name, decl, x)
+    return this.declareObj(obj) ? obj : null
   }
 
-  declareObj(obj :Obj) :Obj | null {
+  // declareObj returns true if obj was declared, and false it's already
+  // declared.
+  //
+  declareObj(obj :Obj) :bool {
     // Note: name is interned by value in the same space as all other names in
     // this scope, meaning we can safely use the object identity of name.
     if (!this.decls) {
       this.decls = new Map<ByteStr,Obj>([[obj.name, obj]])
-    } else if (this.decls.has(obj.name)) {
+      return true
+    }
+    if (this.decls.has(obj.name)) {
+      return false
+    }
+    this.decls.set(obj.name, obj)
+    return true
+  }
+
+  // redeclareObj returns the previously declared object, if any.
+  //
+  redeclareObj(obj :Obj) :Obj|null {
+    // Note: name is interned by value in the same space as all other names in
+    // this scope, meaning we can safely use the object identity of name.
+    if (!this.decls) {
+      this.decls = new Map<ByteStr,Obj>([[obj.name, obj]])
+      return null
+    }
+    const prevobj = this.decls.get(obj.name)
+    if (prevobj === obj) {
       return null
     }
     this.decls.set(obj.name, obj)
-    return obj
+    return prevobj || null
   }
 
   // addUnresolvedAssign(ident :Ident, expr :Expr) {
@@ -131,6 +140,18 @@ export class Scope {
   //   }
   // }
 
+  // get closest function scope (could be this scope)
+  funScope() :Scope|null {
+    let s :Scope|null = this
+    while (s) {
+      if (s.fun) {
+        return s
+      }
+      s = s.outer
+    }
+    return null
+  }
+
   level() {
     let level = 0, s :Scope|null = this
     while ((s = s.outer)) {
@@ -144,6 +165,9 @@ export class Scope {
     return `Scope(level: ${this.level()}, names: (${names.join(', ')}))`
   }
 }
+
+// used by intrinsics
+const nilScope = new Scope(null)
 
 
 // ——————————————————————————————————————————————————————————————————
@@ -163,7 +187,8 @@ export class ImportDecl extends Decl {
 export class ConstDecl extends Decl {
   constructor(pos :Pos, scope :Scope,
   public idents  :Ident[],
-  public type    :Expr|null,  // null means auto type
+  public type    :Expr|null,
+    // null means auto type (values might have mixed types)
   public values  :Expr[],
   ) {
     super(pos, scope)
@@ -248,7 +273,9 @@ export class DeclStmt extends SimpleStmt {
 // ——————————————————————————————————————————————————————————————————
 // Expressions
 
-export class Expr extends Node {}
+export class Expr extends Node {
+  type :Expr|null = null
+}
 
 // Placeholder for an expression that failed to parse
 // correctly and where we can't provide a better node.
@@ -284,7 +311,9 @@ export class Ident extends Expr {
   toString() { return String(this.value) }
 }
 
-export class BasicLit extends Expr {
+export class LiteralExpr extends Expr {}
+
+export class BasicLit extends LiteralExpr {
   constructor(pos :Pos, scope :Scope,
     public tok   :token,
     public value :Uint8Array,
@@ -293,7 +322,7 @@ export class BasicLit extends Expr {
   }
 }
 
-export class StringLit extends Expr {
+export class StringLit extends LiteralExpr {
   constructor(pos :Pos, scope :Scope,
     public value :Uint8Array
   ) {
@@ -343,12 +372,16 @@ export class ParenExpr extends Expr {
 export class FunDecl extends Expr {
   // func Ident? Signature { Body }
   // func Ident? Signature
+  
+  body :Stmt|null = null // nil = forward declaration
+
   constructor(pos :Pos, scope :Scope,
-    public name :Ident|null = null, // nil = anonymous func expression
+    public name :Ident|null, // nil = anonymous func expression
     public sig  :FunSig,
-    public body :Stmt|null = null, // nil = forward declaration
+    public isInit :bool = false, // true for special "init" funs at file level
   ) {
     super(pos, scope)
+    scope.fun = this  // Mark the scope as being a "function scope"
   }
 }
 
@@ -358,6 +391,52 @@ export class FunSig extends Node {
   public result  :Expr|null,
   ) {
     super(pos, scope)
+  }
+}
+
+
+export class IntrinsicVal extends Expr {
+  constructor(
+    public name :string,
+    public type :Type,
+  ) {
+    super(0, nilScope)
+  }
+}
+
+
+export class TypeConversionExpr extends Expr {
+  constructor(pos :Pos, scope :Scope,
+    public expr :Expr,
+    public type :Type,
+  ) {
+    super(pos, scope)
+  }
+}
+
+
+// ——————————————————————————————————————————————————————————————————
+// Types
+
+export class Type extends Expr {
+  obj :Obj|null = null
+}
+
+export class IntrinsicType extends Type {
+  constructor(
+    public bitsize :int,
+    public name    :string, // only used for debugging and printing
+  ) {
+    super(0, nilScope)
+  }
+}
+
+export class StringLitType extends IntrinsicType {
+  constructor(
+    public bitsize :int,
+    public length :int,
+  ) {
+    super(bitsize, 'str')
   }
 }
 

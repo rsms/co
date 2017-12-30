@@ -1,25 +1,24 @@
-table: int32[127]
-key: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+key   = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+table = int32[127]
 
 fun init {
-  for k in 0..table.len() {
+  for k in 0..table.len {
     table[k] = key.index(char(k))
   }
 }
 
 fun decode(text str) uint8[] {
-  size: text.len >>> 2
-  data: uint8[](size * 3)
-
-  var i, j = 0, 0
+  size = text.len >>> 2
+  data = uint8[size * 3]
+  i, j = 0, 0
 
   for i < (size << 2) {
-    a: table[text.charCodeAt(i++) & 127]
-    b: table[text.charCodeAt(i++) & 127]
-    c: table[text.charCodeAt(i++) & 127]
-    d: table[text.charCodeAt(i++) & 127]
+    a = table[text[i++] & 127]
+    b = table[text[i++] & 127]
+    c = table[text[i++] & 127]
+    d = table[text[i++] & 127]
     data[j++] = a << 2 | b >>> 4
-    if c >= 0 {
+    if c >= 0 
       data[j++] = b << 4 | c >>> 2
     }
     if d >= 0 {
@@ -27,5 +26,7 @@ fun decode(text str) uint8[] {
     }
   }
 
-  return data[0, j]
+  return data[0..j]
 }
+
+// RangeExpr = Expr ".." Expr

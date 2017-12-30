@@ -1,3 +1,5 @@
+import * as utf8 from './utf8'
+
 // export function SplitFileExt(path :string) :[string, string] {
 //   let p = path.lastIndexOf('/')
 //   p = path.lastIndexOf('.', p == -1 ? 0 : p)
@@ -40,11 +42,18 @@ function bufcopy(bytes :ArrayLike<byte>, addlSize :int) {
 
 // str8buf creates a new buffer based on a string.
 // Each character in the string is interpreted as an 8-bit UTF-8 byte.
+//
 export function str8buf(s :string) :Uint8Array {
   return Uint8Array.from(
     s as any as ArrayLike<number>,
     (v: number, k: number) => s.charCodeAt(k)
   )
+}
+
+// buf8str interprets a byte array as UTF-8 text
+//
+export function buf8str(b :Uint8Array) :string {
+  return utf8.decodeToString(b)
 }
 
 
@@ -61,19 +70,12 @@ export function bufcmp(
   if (a === b) {
     return 0
   }
-  const aL = aEnd - aStart,
-        bL = bEnd - bStart
-        // end = (aEnd < bEnd ? aEnd : bEnd)
-  // if (aStart == bStart) {
-  //   for (let i = aStart; i != end; ++i) {
-  //     if (a[i] < b[i]) { return -1 }
-  //     if (b[i] < a[i]) { return 1 }
-  //   }
-  // } else {
-  for (let ai = aStart, bi = bStart; ai != aEnd && bi != bEnd; ++ai, ++bi) {
+  var ai = aStart, bi = bStart
+  for (; ai != aEnd && bi != bEnd; ++ai, ++bi) {
     if (a[ai] < b[bi]) { return -1 }
     if (b[bi] < a[ai]) { return 1 }
   }
+  var aL = aEnd - aStart, bL = bEnd - bStart
   return (
     aL < bL ? -1 :
     bL < aL ? 1 :
@@ -205,12 +207,33 @@ export class AppendBuffer {
   }
 }
 
+// debug function
+export const debuglog = DEBUG ? function(...v :any[]) {
+  let e = new Error()
+  let sframe = 'DEBUG'
 
-export function repr(obj :any) :string {
-  // TODO: something better
-  try {
-    return JSON.stringify(obj)
-  } catch (_) {
-    return String(obj)
+  // let srcloc = ''
+  // if (e.stack) {
+  //   sframe = e.stack.split(/\n/, 3)[2]
+  //   let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/(src\/.+)\)/.exec(sframe)
+  //   if (m) {
+  //     sframe = m[1]
+  //     srcloc = m[2]
+  //   }
+  // }
+
+  if (e.stack) {
+    sframe = e.stack.split(/\n/, 3)[2]
+    let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)/.exec(sframe)
+    if (m) {
+      sframe = m[1]
+    }
   }
-}
+
+  let args = Array.prototype.slice.call(arguments)
+  args.splice(0, 0, `${sframe}>`)
+  // if (srcloc) {
+  //   args.splice(args.length, 0, `(${srcloc})`)
+  // }
+  console.log.apply(console, args)
+} : function(...v :any[]){}

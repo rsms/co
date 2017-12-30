@@ -1,14 +1,12 @@
-// require('source-map-support').install()
-import './global'
 import * as parser from './parser'
 import { bindpkg } from './bind'
 import * as scanner from './scanner'
 import { Position, SrcFileSet } from './pos'
 import * as fs from 'fs'
-import { ByteStr, ByteStrSet } from './bytestr'
-import { Node, Scope, Obj, Package } from './ast'
+import { ByteStrSet } from './bytestr'
 import { astRepr } from './ast-repr'
-import { str8buf } from './util'
+import { Package, Scope, Obj } from './ast'
+import { Universe } from './universe'
 
 function main() {
   const p = new parser.Parser()
@@ -16,14 +14,17 @@ function main() {
   const errh = (p :Position, msg :string, typ :string) => {
     console.error(`${p}: ${msg} (${typ})`)
   }
+  const diagh = (p :Position, msg :string, k :parser.DiagKind) => {
+    console.log(`[diag] ${p}: ${msg} (${parser.DiagKind[k]})`)
+  }
 
   const strSet = new ByteStrSet()
   const sfileSet = new SrcFileSet()
 
-  const universe = getUniverse(strSet)
-  const pkg = new Package("example", new Scope(universe))
+  const universe = new Universe(strSet)
+  const pkg = new Package("example", new Scope(universe.scope))
 
-  const sfiles = ['example/scope.xl']
+  const sfiles = ['example/scope3a.xl']
   const files = []
 
   for (let filename of sfiles) {
@@ -32,7 +33,13 @@ function main() {
     const sfile = sfileSet.addFile(filename, sdata.length)
 
     p.initParser(
-      sfile, sdata, strSet, pkg.scope, errh, scanner.Mode.ScanComments
+      sfile,
+      sdata,
+      universe,
+      pkg.scope,
+      errh,
+      diagh,
+      scanner.Mode.ScanComments
     )
 
     const file = p.parseFile()
@@ -59,29 +66,13 @@ function main() {
   // bind and assemble package
   if (p.errorCount == 0) {
     console.log(`————————————\nbind & assemble ${pkg}`)
-    function importer(imports :Map<string,Obj>, path :string) :Promise<Obj> {
+    function importer(_imports :Map<string,Obj>, _path :string) :Promise<Obj> {
       return Promise.reject(new Error(`not found`))
     }
-    bindpkg(pkg, sfileSet, files, importer, errh).then(hasErrors => {
+    bindpkg(pkg, sfileSet, files, importer, errh).then(_hasErrors => {
       console.log('pkg:', !!pkg)
     })
   }
-}
-
-
-function getUniverse(strSet :ByteStrSet) :Scope {
-  const unidecls = new Map<ByteStr,Obj>()
-  const universe = new Scope(null, unidecls)
-  const def = (name :string) => {
-    let n = strSet.emplace(str8buf(name))
-    console.log(`"${name}" => "${n}"  ${n.hash.toString(16)}`)
-    unidecls.set(n, new Obj(n, new Node(0, universe), null))
-  }
-  def("true")
-  def("false")
-  def("nil")
-  // TODO: fixme
-  return universe
 }
 
 

@@ -14,8 +14,10 @@
     "forceConsistentCasingInFileNames": true,
     "alwaysStrict": true,
     "allowSyntheticDefaultImports": true,
+    "noEmitOnError": true,
 
     "module": "commonjs",
+    // "module": "esnext",
     "moduleResolution": "node",
     "newLine": "LF",
     "target": "es2017",
@@ -29,6 +31,7 @@
     "pretty": true
   },
   "include": [
+    "src/global.d.ts",
     "src/**/*.ts"
   ]
 }

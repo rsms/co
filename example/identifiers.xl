@@ -1,0 +1,31 @@
+a = 1
+kαβ = 2
+
+fun å {
+  x = (lol + cat / 1/3)
+  $foo = 1
+
+  grinning-face = '😀'
+
+  // a, b, c.d = 4, 5, 6 // error: invalid constant name (points to c.d)
+  c int = 4
+  yes, no bool = true, false
+
+  var face, αβ = 0, 0
+  grinning = 3
+  grinning-face = grinning - face
+  face := 1
+  face--  // == face --
+  face++
+  αβ--   // == αβ --
+  // kαβ--  // == kαβ-- // error: cannot mutate kαβ
+
+  Ꙁ_gԃ = 4
+
+  😎 = face
+
+  🕺🏽 = "yeah"
+
+  // U+1F469 U+1F3FD U+200D U+1F680
+  👩🏽‍🚀 = "astronout woman with skin tone modifier"
+}

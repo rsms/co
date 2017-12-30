@@ -13,47 +13,48 @@ const
   rune2Max = 1<<11 - 1 // 0x400
   // rune3Max = 1<<16 - 1  // 0x8000
 
-export function decode(src :ArrayLike<byte>, offset :int) :[int, int] {
-  const r = src[offset]
+export interface DecodeResult {
+  c :int // codepoint -- UniError on error
+  w :int // width in bytes -- may be 0 on error
+}
 
-  if (r < UniSelf) {
-    return [isNaN(r) ? UniError : r, 1]
+export function decode(
+  src    :ArrayLike<byte>,
+  offset :int,
+  r      :DecodeResult
+) :bool {
+  const b = src[offset]
+
+  if (b < UniSelf) {
+    r.c = isNaN(b) ? UniError : b
+    r.w = 1
+  } else {
+    const end = src.length
+
+    if ((b >> 5) == 0x6) {
+      r.c = offset + 2 > end ? UniError :
+            ((b << 6) & 0x7ff) +
+            ((src[++offset]) & 0x3f),
+      r.w = 2
+    } else if ((b >> 4) == 0xe) {
+      r.c = offset + 3 > end ? UniError :
+            ((b << 12) & 0xffff) +
+            ((src[++offset] << 6) & 0xfff) +
+            ((src[++offset]) & 0x3f),
+      r.w = 3
+    } else if ((b >> 3) == 0x1e) {
+      r.c=  offset + 4 > end ? UniError :
+            ((b << 18) & 0x1fffff) +
+            ((src[++offset] << 12) & 0x3ffff) +
+            ((src[++offset] << 6) & 0xfff) +
+             (src[++offset] & 0x3f),
+      r.w = 4
+    } else {
+      return false
+    }
   }
 
-  const end = src.length
-
-  if ((r >> 5) == 0x6) {
-    return [
-      offset + 2 > end ? UniError :
-      ((r << 6) & 0x7ff) +
-      ((src[++offset]) & 0x3f),
-      2
-    ]
-  }
-
-
-  if ((r >> 4) == 0xe) {
-    return [
-      offset + 3 > end ? UniError :
-      ((r << 12) & 0xffff) +
-      ((src[++offset] << 6) & 0xfff) +
-      ((src[++offset]) & 0x3f),
-      3
-    ]
-  }
-
-  if ((r >> 3) == 0x1e) {
-    return [
-      offset + 4 > end ? UniError :
-      ((r << 18) & 0x1fffff) +
-      ((src[++offset] << 12) & 0x3ffff) +
-      ((src[++offset] << 6) & 0xfff) +
-       (src[++offset] & 0x3f),
-      4
-    ]
-  }
-
-  return [UniError, 0]
+  return true
 }
 
 interface TextDecoderOptions {

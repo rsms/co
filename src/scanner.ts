@@ -5,7 +5,7 @@ import * as unicode from './unicode'
 import { token, lookupKeyword, prec } from './token'
 import * as Path from 'path'
 
-// An ErrorHandler may be provided to Scanner.Init. If a syntax error is
+// An ErrorHandler may be provided to Scanner.init. If a syntax error is
 // encountered and a handler was installed, the handler is called with a
 // position and an error message. The position points to the beginning of
 // the offending token.
@@ -110,6 +110,8 @@ export class Scanner {
     s.readchar()
   }
 
+  private _r :utf8.DecodeResult = {c:0,w:0}
+
   // Read the next Unicode char into s.ch.
   // s.ch < 0 means end-of-file.
   private readchar() {
@@ -123,20 +125,20 @@ export class Scanner {
         s.sfile.addLine(s.offset)
       }
 
-      let w = 1, r = s.sdata[s.rdOffset]
+      s._r.w = 1
+      s._r.c = s.sdata[s.rdOffset]
 
-      if (r >= 0x80) {
+      if (s._r.c >= 0x80) {
         // uncommon case: non-ASCII character
-        [r, w] = utf8.decode(s.sdata, s.rdOffset)
-        if (r == 0) {
-          s.errorAtOffs('illegal NUL byte in input', s.offset)
-        } else if (w == 0 && r == utf8.UniError) {
+        if (!utf8.decode(s.sdata, s.rdOffset, s._r)) {
           s.errorAtOffs('invalid UTF-8 encoding', s.offset)
+        } else if (s._r.c == 0) {
+          s.errorAtOffs('illegal NUL byte in input', s.offset)
         }
       }
 
-      s.rdOffset += w
-      s.ch = r
+      s.rdOffset += s._r.w
+      s.ch = s._r.c
     } else {
       s.offset = s.sdata.length
       if (s.ch == 0xA /*\n*/) {
@@ -145,6 +147,19 @@ export class Scanner {
       }
       s.ch = -1 // eof
     }
+  }
+
+  // undobyte "puts back" the last-read byte.
+  // note that this does NOT fully update scanner state -- after calling this
+  // function, you should either call readchar() to update s.ch and s.offset
+  // or call next().
+  //
+  private undobyte() {
+    const s = this
+    assert(s.ch < 0x80)
+    s.rdOffset -= 1
+    s.offset -= 1
+    s.endoffs = s.offset
   }
 
   // gotchar reads the next character and returns true if s.ch == ch
@@ -597,6 +612,8 @@ export class Scanner {
 
     s.insertSemi = insertSemi
 
+    // console.log(
+    //   `-> ${tokstr(s.tok)} "${utf8.decodeToString(s.byteValue())}"`)
     return
 
     } // while(true)
@@ -618,6 +635,10 @@ export class Scanner {
       unicode.isEmojiModifierBase(c) ||
       c == ZeroWidthJoiner
     ) {
+      if (lastCp == 0x2D && c == 0x2D) { // --
+        s.undobyte() // "put back" the "-" byte
+        break
+      }
       lastCp = c
       s.readchar()
       c = s.ch
@@ -636,7 +657,6 @@ export class Scanner {
     s.hash = hash >>> 0
   }
 
-
   scanIdentifier(c :int) {
     // enters past first char; c = 1st char, s.ch = 2nd char
     // c is already verified to be a valid indentifier character.
@@ -652,13 +672,17 @@ export class Scanner {
       c == 0x5F || // _
       c == 0x24    // $
     ) {
-      hash = (hash ^ c) * 0x1000193 // fnv1a
       s.readchar()
+      if (c == 0x2D && s.ch == 0x2D) { // --
+        s.undobyte() // "put back" the "-" byte
+        break
+      }
+      hash = (hash ^ c) * 0x1000193 // fnv1a
       c = s.ch
     }
 
     if (c >= utf8.UniSelf && isUniIdentCont(c)) {
-      return s.scanIdentifierU(c, hash, s.offset)
+      return s.scanIdentifierU(c, s.offset, hash)
     }
 
     s.hash = hash >>> 0
