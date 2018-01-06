@@ -44,9 +44,9 @@ fun fs2 -> 4
 
 fe0 = fun foo0(a) { 4 }
 fe1 = fun foo1(b) -> 4
-// fe2 = fun (c) { 4 }
-// fe3 = fun (d) -> 4
-// fe4 = fun -> 4
+fe2 = fun (c) { 4 }
+fe3 = fun (d) -> 4
+fe4 = fun -> 4
 // fe5 = fun (d) int 4 // error: missing function body
 
 // fun bad0(d) 4 // error: missing funtion body

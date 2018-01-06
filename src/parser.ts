@@ -10,7 +10,7 @@ import {
   u_t_i64,
   u_t_u32,
 } from './universe'
-import { debuglog } from './util'
+// import { debuglog } from './util'
 import {
   File,
   Scope,
@@ -161,15 +161,18 @@ export class Parser extends scanner.Scanner {
 
   pushScope(scope :Scope | null = null) {
     const p = this
+    if (scope) {
+      assert(scope.outer != null, 'pushing scope without outer scope')
+    }
     p.scope = scope || new Scope(p.scope)
-    // debuglog(`push ${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
+    // debuglog(`${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
   }
 
   popScope() :Scope { // returns old ("popped") scope
     const p = this
     const s = p.scope
     assert(p.scope.outer != null, 'pop scope at base scope')
-    // debuglog(`pop ${p.scope.level()} -> ${(p as any).scope.outer.level()}`)
+    // debuglog(` ${(p as any).scope.outer.level()} <- ${p.scope.level()}`)
     p.scope = p.scope.outer as Scope
     return s
   }
@@ -214,13 +217,13 @@ export class Parser extends scanner.Scanner {
     while (s) {
       const ent = s.lookupImm(x.value)
       if (ent) {
-        debuglog(`${x} found in scope#${s.level()}`)
+        // debuglog(`${x} found in scope#${s.level()}`)
         x.ent = ent
         return x
       }
       s = s.outer
     }
-    debuglog(`${x} not found`)
+    // debuglog(`${x} not found`)
     if (collectUnresolved) {
       // all local scopes are known, so any unresolved identifier
       // must be found either in the file scope, package scope
@@ -708,9 +711,12 @@ export class Parser extends scanner.Scanner {
     // "fun -> ..."
     const name = p.maybeIdent()
 
+    const scope = p.scope
+    p.pushScope(new Scope(scope)) // parmeters and body
+
     // declare in outer scope, before we parse the body, so that the body can
     // refer to the function's name
-    const d = new FunDecl(pos, p.scope, name, p.funSig(u_t_void))
+    const d = new FunDecl(pos, scope, name, p.funSig(u_t_void))
     if (name && !ctx) {
       // declare the function's name when it's not on the right-hand side of an
       // assignment.
@@ -718,8 +724,8 @@ export class Parser extends scanner.Scanner {
       p.declare(name.scope, name, d, d)
     }
 
-    p.pushScope(d.sig.scope)
     d.body = p.funBody(name)
+
     p.popScope()
 
     if (d.sig.result === u_t_void) {
@@ -911,10 +917,10 @@ export class Parser extends scanner.Scanner {
 
         // Decide declare a new ent, or store to existing one
         if (id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
-          debuglog(`store ${id}`)
+          // debuglog(`store ${id}`)
           id.ent.nstores++  // increment Nth store counter
         } else {
-          debuglog(`declare ${id}`)
+          // debuglog(`declare ${id}`)
           // since we are about to redeclare, clear any "unresolved" mark for
           // this identifier expression.
           p.unresolved.delete(id)  // may be noop
