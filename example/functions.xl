@@ -1,8 +1,12 @@
 import "foo"
 
+A string = "123"
+B = "123"
+
 fun empty0
 fun empty1()
 fun empty2() {}
+fun empty3() int {}
 
 // fun fp1(,) {} // error: unexpected ,, expecting name
 fun fp2(a) {}
@@ -27,22 +31,27 @@ fun fr3() (t0) {}
 fun fr4() (t0,) {}
 fun fr5() () {}
 fun fr6() (t0, x.t0) {}
-// fun fr7() (a t0) {} // error: unexpected name, expecting comma, or )
+fun fr7() (i32, i64) {}
+// fun fr8() (a t0) {} // error: unexpected name, expecting comma, or )
 
 // fun fsd0(b) int -> ; // error: missing function body
 // fun fsd1(b) -> ; // error: missing function body
 // fun fsd2 -> ; // error: missing function body
 
 fun fs0(b) int -> 4
-fun fs1(b) -> 4
+fun fs1(b) -> (4, 4)
 fun fs2 -> 4
 
 fe0 = fun foo0(a) { 4 }
 fe1 = fun foo1(b) -> 4
-fe2 = fun (c) { 4 }
-fe3 = fun (d) -> 4
-fe4 = fun -> 4
+// fe2 = fun (c) { 4 }
+// fe3 = fun (d) -> 4
+// fe4 = fun -> 4
 // fe5 = fun (d) int 4 // error: missing function body
 
 // fun bad0(d) 4 // error: missing funtion body
 // fun bad1(d) int 4 // error: missing funtion body
+
+// fun main {
+//   map(x -> x)
+// }

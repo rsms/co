@@ -4,7 +4,7 @@ import { token, tokstr } from './token'
 import { Pos } from './pos'
 import {
   Scope,
-  Obj,
+  Ent,
   BasicLit,
   Type,
   IntrinsicVal,
@@ -28,15 +28,22 @@ function ival(name :string, typ :IntrinsicType) :IntrinsicVal {
   return x
 }
 
+const ptrsize = 32 // TODO: target-dependant
+
+// basic types
 export const
-  u_t_nil   = ityp(0, '?')
-, u_t_bool  = ityp(1, 'bool')
+  u_t_void  = new IntrinsicType(0, 'void') // note: unnamed
+, u_t_auto  = new IntrinsicType(0, 'auto') // note: unnamed
+, u_t_nil   = new IntrinsicType(0, '?') // note: unnamed, special type for nil
+
+, u_t_bool  = ityp(1,  'bool')
 , u_t_char  = ityp(32, 'char')
-, u_t_usize = ityp(32, 'usize') // todo: target-dependent size
+, u_t_usize = ityp(ptrsize, 'usize')
 
 , u_t_i8  = ityp(7,  'i8')
 , u_t_i16 = ityp(15, 'i16')
 , u_t_i32 = ityp(31, 'i32')
+, u_t_int = ityp(ptrsize-1, 'int')
 , u_t_i64 = ityp(63, 'i64')
 
 , u_t_u8  = ityp(8,  'u8')
@@ -47,8 +54,9 @@ export const
 , u_t_f32 = ityp(32, 'f32')
 , u_t_f64 = ityp(64, 'f64')
 
+, u_t_string = ityp(ptrsize, 'string')
+
 export const universeTypeAliases = new Map<string,string>([
-  ['int',   'i32'],
   ['float', 'f64'],
   ['byte',  'u8'],
 ])
@@ -355,7 +363,7 @@ function intLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
 
   // pick type that matches the bit length
   return (
-    bits <= 31 ? u_t_i32 :
+    bits <= 31 ? u_t_int :
     bits <= 63 ? u_t_i64 :
     u_t_u64
   )
@@ -400,12 +408,12 @@ export class Universe {
     this.strSet = strSet
 
     // build scope
-    const unidecls = new Map<ByteStr,Obj>()
+    const unidecls = new Map<ByteStr,Ent>()
 
     for (let [name, t] of universeTypes) {
       // console.log(`DEF UNIVERSE TYPE "${name}"`)
       let n = strSet.emplace(str8buf(name))
-      unidecls.set(n, new Obj(n, t, t))
+      unidecls.set(n, new Ent(n, t, t))
     }
 
     for (let [aliasName, canonName] of universeTypeAliases) {
@@ -414,13 +422,13 @@ export class Universe {
       let canonNameBuf = strSet.emplace(str8buf(canonName))
       const obj = unidecls.get(canonNameBuf)
       assert(obj)
-      unidecls.set(aliasNameBuf, obj as Obj)
+      unidecls.set(aliasNameBuf, obj as Ent)
     }
 
     for (let [name, x] of universeValues) {
       // console.log(`DEF UNIVERSE VAL "${name}"`)
       let n = strSet.emplace(str8buf(name))
-      unidecls.set(n, new Obj(n, x, x))
+      unidecls.set(n, new Ent(n, x, x))
     }
 
     this.scope = new Scope(null, unidecls)

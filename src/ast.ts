@@ -24,7 +24,7 @@ export class Node {
 //       Type
 export class Field extends Node {
   constructor(pos :Pos, scope :Scope,
-  public type  :Expr|null,  // null type means "auto"
+  public type  :Expr,
   public ident :Ident|null,
     // nil means anonymous field/parameter (structs/parameters),
     // or embedded interface (interfaces)
@@ -36,10 +36,12 @@ export class Field extends Node {
 // ——————————————————————————————————————————————————————————————————
 // Scope
 
-// An Obj describes a named language entity such as a package,
+// An Ent describes a named language entity such as a package,
 // constant, type, variable, function (incl. methods), or label.
 //
-export class Obj {
+export class Ent {
+  nstores :int = 0  // tracks number of Nth stores. 0 == constant
+
   constructor(
     public name  :ByteStr,
     public decl  :Node,
@@ -52,29 +54,24 @@ export class Obj {
   }
 }
 
-export interface UnresolvedAssign {
-  ident :Ident
-  expr  :Expr
-}
-
 export class Scope {
   fun :FunDecl | null = null // when set, scope if function scope
 
   constructor(
   public outer :Scope | null,
-  public decls :Map<ByteStr,Obj> | null = null,
+  public decls :Map<ByteStr,Ent> | null = null,
   ) {}
 
   // lookup a declaration in this scope and any outer scopes
   //
-  lookup(s :ByteStr) :Obj | null {
+  lookup(s :ByteStr) :Ent | null {
     const d = this.decls && this.decls.get(s)
     return d ? d : this.outer ? this.outer.lookup(s) : null
   }
 
   // lookupImm looks up a declaration only in this scope
   //
-  lookupImm(s :ByteStr) :Obj | null {
+  lookupImm(s :ByteStr) :Ent | null {
     const d = this.decls && this.decls.get(s)
     return d || null
   }
@@ -82,63 +79,44 @@ export class Scope {
   // declare registers a name in this scope.
   // If the name is already registered, null is returned.
   //
-  declare(name: ByteStr, decl :Node, x: Expr|null) :Obj|null {
-    const obj = new Obj(name, decl, x)
-    return this.declareObj(obj) ? obj : null
+  declare(name: ByteStr, decl :Node, x: Expr|null) :Ent|null {
+    const ent = new Ent(name, decl, x)
+    return this.declareEnt(ent) ? ent : null
   }
 
-  // declareObj returns true if obj was declared, and false it's already
+  // declareEnt returns true if ent was declared, and false it's already
   // declared.
   //
-  declareObj(obj :Obj) :bool {
+  declareEnt(ent :Ent) :bool {
     // Note: name is interned by value in the same space as all other names in
     // this scope, meaning we can safely use the object identity of name.
     if (!this.decls) {
-      this.decls = new Map<ByteStr,Obj>([[obj.name, obj]])
+      this.decls = new Map<ByteStr,Ent>([[ent.name, ent]])
       return true
     }
-    if (this.decls.has(obj.name)) {
+    if (this.decls.has(ent.name)) {
       return false
     }
-    this.decls.set(obj.name, obj)
+    this.decls.set(ent.name, ent)
     return true
   }
 
-  // redeclareObj returns the previously declared object, if any.
+  // redeclareEnt returns the previously declared entity, if any.
   //
-  redeclareObj(obj :Obj) :Obj|null {
+  redeclareEnt(ent :Ent) :Ent|null {
     // Note: name is interned by value in the same space as all other names in
-    // this scope, meaning we can safely use the object identity of name.
+    // this scope, meaning we can safely use the entity identity of name.
     if (!this.decls) {
-      this.decls = new Map<ByteStr,Obj>([[obj.name, obj]])
+      this.decls = new Map<ByteStr,Ent>([[ent.name, ent]])
       return null
     }
-    const prevobj = this.decls.get(obj.name)
-    if (prevobj === obj) {
+    const prevent = this.decls.get(ent.name)
+    if (prevent === ent) {
       return null
     }
-    this.decls.set(obj.name, obj)
-    return prevobj || null
+    this.decls.set(ent.name, ent)
+    return prevent || null
   }
-
-  // addUnresolvedAssign(ident :Ident, expr :Expr) {
-  //   const u :UnresolvedAssign = { ident, expr }
-  //   if (!this.unresolvedAssigns) {
-  //     this.unresolvedAssigns = new Map<ByteStr,Set<UnresolvedAssign>>([
-  //       [ident.value, new Set<UnresolvedAssign>([u])]
-  //     ])
-  //   } else {
-  //     let s = this.unresolvedAssigns.get(ident.value)
-  //     if (s) {
-  //       s.add(u)
-  //     } else {
-  //       this.unresolvedAssigns.set(
-  //         ident.value,
-  //         new Set<UnresolvedAssign>([u])
-  //       )
-  //     }
-  //   }
-  // }
 
   // get closest function scope (could be this scope)
   funScope() :Scope|null {
@@ -184,16 +162,16 @@ export class ImportDecl extends Decl {
   }
 }
 
-export class ConstDecl extends Decl {
-  constructor(pos :Pos, scope :Scope,
-  public idents  :Ident[],
-  public type    :Expr|null,
-    // null means auto type (values might have mixed types)
-  public values  :Expr[],
-  ) {
-    super(pos, scope)
-  }
-}
+// export class ConstDecl extends Decl {
+//   constructor(pos :Pos, scope :Scope,
+//   public idents  :Ident[],
+//   public type    :Expr|null,
+//     // null means auto type (values might have mixed types)
+//   public values  :Expr[],
+//   ) {
+//     super(pos, scope)
+//   }
+// }
 
 export class VarDecl extends Decl {
   constructor(pos :Pos, scope :Scope,
@@ -232,6 +210,7 @@ export class BlockStmt extends Stmt {
   }
 }
 
+// An instance of SimpleStmt represents noop (no operation)
 export class SimpleStmt extends Stmt {}
 
 export class ExprStmt extends SimpleStmt {
@@ -298,10 +277,14 @@ export class SelectorExpr extends Expr {
   ) {
     super(pos, scope)
   }
+
+  toString() {
+    return `${this.lhs}.${this.rhs}`
+  }
 }
 
 export class Ident extends Expr {
-  obj :Obj|null = null // what this name references
+  ent :Ent|null = null // what this name references
   constructor(pos :Pos, scope :Scope,
     public value  :ByteStr, // interned in ByteStrSet
   ) {
@@ -309,6 +292,15 @@ export class Ident extends Expr {
   }
 
   toString() { return String(this.value) }
+}
+
+export class RestExpr extends Expr {
+  // ...expr
+  constructor(pos :Pos, scope :Scope,
+    public expr :Expr,
+  ) {
+    super(pos, scope)
+  }
 }
 
 export class LiteralExpr extends Expr {}
@@ -325,15 +317,6 @@ export class BasicLit extends LiteralExpr {
 export class StringLit extends LiteralExpr {
   constructor(pos :Pos, scope :Scope,
     public value :Uint8Array
-  ) {
-    super(pos, scope)
-  }
-}
-
-export class DotsType extends Expr {
-  // ...type
-  constructor(pos :Pos, scope :Scope,
-  public type :Expr|null,
   ) {
     super(pos, scope)
   }
@@ -376,8 +359,8 @@ export class FunDecl extends Expr {
   body :Stmt|null = null // nil = forward declaration
 
   constructor(pos :Pos, scope :Scope,
-    public name :Ident|null, // nil = anonymous func expression
-    public sig  :FunSig,
+    public name   :Ident|null, // nil = anonymous func expression
+    public sig    :FunSig,
     public isInit :bool = false, // true for special "init" funs at file level
   ) {
     super(pos, scope)
@@ -388,7 +371,7 @@ export class FunDecl extends Expr {
 export class FunSig extends Node {
   constructor(pos :Pos, scope :Scope,
   public params  :Field[],
-  public result  :Expr|null,
+  public result  :Expr,
   ) {
     super(pos, scope)
   }
@@ -419,7 +402,29 @@ export class TypeConversionExpr extends Expr {
 // Types
 
 export class Type extends Expr {
-  obj :Obj|null = null
+  ent :Ent|null = null
+  constructor(pos :Pos, scope :Scope) {
+    super(pos, scope)
+    this.type = this
+  }
+}
+
+export class UnresolvedType extends Type {
+  constructor(pos :Pos, scope :Scope,
+    public expr :Expr,
+  ) {
+    super(pos, scope)
+  }
+}
+
+export class RestType extends Type {
+  // ...type
+  constructor(pos :Pos, scope :Scope,
+    public type :Type,
+  ) {
+    super(pos, scope)
+    this.type = type
+  }
 }
 
 export class IntrinsicType extends Type {
@@ -431,12 +436,31 @@ export class IntrinsicType extends Type {
   }
 }
 
-export class StringLitType extends IntrinsicType {
+export class ConstStringType extends IntrinsicType {
   constructor(
     public bitsize :int,
     public length :int,
   ) {
     super(bitsize, 'str')
+  }
+}
+
+export class TupleType extends Type {
+  // TupleType = "(" Type ("," Type)+ ")"
+  constructor(pos :Pos, scope :Scope,
+  public types :Type[],
+  ) {
+    super(pos, scope)
+  }
+}
+
+export class FunType extends Type {
+  // FunType = ( Type | TupleType ) "->" Type
+  constructor(pos :Pos, scope :Scope,
+  public inputs :Type[],
+  public output :Type,
+  ) {
+    super(pos, scope)
   }
 }
 

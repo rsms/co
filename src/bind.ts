@@ -1,31 +1,29 @@
 // import { token } from './token'
 import { SrcFileSet, Pos, Position } from './pos'
 import { ErrorHandler } from './scanner'
-import { File, Package, Obj, ImportDecl } from './ast'
+import { File, Package, Ent, ImportDecl } from './ast'
 import * as utf8 from './utf8'
+import { debuglog } from './util'
 
 
-// An Importer resolves import paths to package Objects.
+// An Importer resolves import paths to package entities.
 // The imports map records the packages already imported,
 // indexed by package id (canonical import path).
 // An Importer must determine the canonical import path and
 // check the map to see if it is already present in the imports map.
 // If so, the Importer can return the map entry. Otherwise, the
 // Importer should load the package data for the given path into
-// a new *Object (pkg), record pkg in the imports map, and then
+// a new Ent (pkg), record pkg in the imports map, and then
 // return pkg.
 //
 export type Importer =
-  (imports :Map<string,Obj>, path :string) => Promise<Obj>
-
-
-// type Importer func(imports map[string]*Object, path string) (pkg :Obj, err :Error)
+  (imports :Map<string,Ent>, path :string) => Promise<Ent>
 
 
 class binder {
   errorCount = 0
-  // package global mapping of imported package ids to package objects
-  imports = new Map<string,Obj>()
+  // package global mapping of imported package ids to package entities
+  imports = new Map<string,Ent>()
 
   constructor(
     public pkg      :Package,
@@ -68,7 +66,7 @@ class binder {
       }
       const path = utf8.decodeToString(decl.path.value)
       pv.push(b.importer(b.imports, path)
-        .then((pkg :Obj) => { b.integrateImport(f, decl, pkg) })
+        .then((pkg :Ent) => { b.integrateImport(f, decl, pkg) })
         .catch(err => {
           b.error(
             `could not import ${path} (${err.message || err})`,
@@ -80,7 +78,7 @@ class binder {
     return Promise.all(pv).then(() => {})
   }
 
-  integrateImport(f :File, imp :ImportDecl, pkg :Obj) {
+  integrateImport(f :File, imp :ImportDecl, pkg :Ent) {
     // local name overrides imported package name
     let name = imp.localIdent ? imp.localIdent.value : pkg.name
 
@@ -90,12 +88,11 @@ class binder {
       //   p.declare(fileScope, pkgScope, obj)
       // }
     } else if (name.toString() != "_") { // TODO: fix efficiency
-      // declare imported package object in file scope
+      // declare imported package entities in file scope
       // (do not re-use pkg in the file scope but create
-      // a new object instead; the Decl field is different
+      // a new ent instead; the Decl field is different
       // for different files)
-      const obj = new Obj(name, imp, null, pkg.data)
-      f.scope.declareObj(obj)
+      f.scope.declareEnt(new Ent(name, imp, null, pkg.data))
     }
   }
 
@@ -105,11 +102,10 @@ class binder {
     for (let id of f.unresolved) {
       // see if the name was declared after it was referenced in the file, or
       // declared in another file in the same package
-      let obj = f.scope.lookup(id.value)
-      if (obj) {
-        // if (obj.decl instanceof VarDecl) {
-        console.log(`[bind] resolved ${id}`, id)
-        id.obj = obj
+      let ent = f.scope.lookup(id.value)
+      if (ent) {
+        debuglog(`${id}`, ent.value && ent.value.constructor.name)
+        id.ent = ent
         continue
       }
 
@@ -134,8 +130,8 @@ class binder {
 
 
 // bindpkg resolves any undefined names (usually across source files) and,
-// unless there are errors, all identifiers in the package will have Ident.obj
-// set, pointing to whatever object a name references.
+// unless there are errors, all identifiers in the package will have Ident.ent
+// set, pointing to whatever entity a name references.
 //
 // Returns false if there were errors
 //

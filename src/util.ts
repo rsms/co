@@ -210,28 +210,34 @@ export class AppendBuffer {
 // debug function
 export const debuglog = DEBUG ? function(...v :any[]) {
   let e = new Error()
-  let sframe = 'DEBUG'
-
-  // let srcloc = ''
-  // if (e.stack) {
-  //   sframe = e.stack.split(/\n/, 3)[2]
-  //   let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/(src\/.+)\)/.exec(sframe)
-  //   if (m) {
-  //     sframe = m[1]
-  //     srcloc = m[2]
-  //   }
-  // }
+  let prefix = ''
 
   if (e.stack) {
-    sframe = e.stack.split(/\n/, 3)[2]
-    let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)/.exec(sframe)
+    // let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)/.exec(e.stack.split(/\n/, 3)[2])
+    let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(
+      e.stack.split(/\n/, 3)[2]
+    )
     if (m) {
-      sframe = m[1]
+      const fun = m[1]
+      const origin = m[2]
+      if (origin) {
+        const filename = origin.split('.ts:', 1)[0]
+        if (String(v[0]).trim().indexOf('TODO') == 0) {
+          // message start with "TODO"
+          prefix = 'TODO src/' + origin + ' ' + fun + '>'
+        } else {
+          prefix = filename + '/' + fun + '>'
+        }
+      } else {
+        prefix = fun + '>'
+      }
+    } else {
+      prefix = 'DEBUG>'
     }
   }
 
   let args = Array.prototype.slice.call(arguments)
-  args.splice(0, 0, `${sframe}>`)
+  args.splice(0, 0, prefix)
   // if (srcloc) {
   //   args.splice(args.length, 0, `(${srcloc})`)
   // }

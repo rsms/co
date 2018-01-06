@@ -18,7 +18,7 @@ fun decode(text str) uint8[] {
     c = table[text[i++] & 127]
     d = table[text[i++] & 127]
     data[j++] = a << 2 | b >>> 4
-    if c >= 0 
+    if c >= 0 {
       data[j++] = b << 4 | c >>> 2
     }
     if d >= 0 {

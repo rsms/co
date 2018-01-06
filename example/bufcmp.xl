@@ -7,7 +7,7 @@ fun cmp(
   astart uint = 0, aend uint = a.len,
   bstart uint = 0, bend uint = b.len,
 ) int {
-  if (a == b) {
+  if a == b {
     0
   } else {
     var ai, bi = astart, bstart
@@ -25,4 +25,10 @@ fun cmp(
       else    -> 0
     }
   }
+}
+
+fun main {
+  a = byte[](1,2,3,4)
+  b = byte[](1,2,3,5)
+  assert(a.cmp(b) == 1)
 }

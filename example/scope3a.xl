@@ -3,6 +3,8 @@
 //  scope2 is file (imports)
 
 a = 0  // define const scope1/a  -- only consts at file/package level
+var v0 int
+bob float
 
 fun init {
   a = 1
@@ -10,6 +12,7 @@ fun init {
 
 fun f0(x int) {  // scope3; define c|v scope1/x
   print(a)
+  print(c)
   a = 2  // define v|c scope3/a
 
   b = 3  // define v|c scope3/b
@@ -22,7 +25,7 @@ fun f0(x int) {  // scope3; define c|v scope1/x
   // b := true // redeclare b, shadow other b
 }
 
-// fun print(v) {} // define fun scope1/print
+fun print(_) {} // define fun scope1/print
 
 // maybe defined in a different file
 c i64 = 0xDEADBEEF // define const scope1/c

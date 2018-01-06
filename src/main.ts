@@ -5,7 +5,7 @@ import { Position, SrcFileSet } from './pos'
 import * as fs from 'fs'
 import { ByteStrSet } from './bytestr'
 import { astRepr } from './ast-repr'
-import { Package, Scope, Obj } from './ast'
+import { Package, Scope, Ent } from './ast'
 import { Universe } from './universe'
 
 function main() {
@@ -24,7 +24,7 @@ function main() {
   const universe = new Universe(strSet)
   const pkg = new Package("example", new Scope(universe.scope))
 
-  const sfiles = ['example/scope3a.xl']
+  const sfiles = ['example/functions.xl']
   const files = []
 
   for (let filename of sfiles) {
@@ -66,7 +66,7 @@ function main() {
   // bind and assemble package
   if (p.errorCount == 0) {
     console.log(`————————————\nbind & assemble ${pkg}`)
-    function importer(_imports :Map<string,Obj>, _path :string) :Promise<Obj> {
+    function importer(_imports :Map<string,Ent>, _path :string) :Promise<Ent> {
       return Promise.reject(new Error(`not found`))
     }
     bindpkg(pkg, sfileSet, files, importer, errh).then(_hasErrors => {

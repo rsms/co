@@ -6,16 +6,17 @@ import {
   Node,
   Group,
   Ident,
+  RestExpr,
   Field,
   BasicLit,
   StringLit,
   ImportDecl,
-  ConstDecl,
+  // ConstDecl,
   VarDecl,
   TypeDecl,
-  DotsType,
   FunDecl,
   FunSig,
+  SimpleStmt,
   BlockStmt,
   ReturnStmt,
   ExprStmt,
@@ -29,8 +30,13 @@ import {
   BadExpr,
   SelectorExpr,
   TypeConversionExpr,
+  Type,
+  UnresolvedType,
+  RestType,
   IntrinsicType,
-  StringLitType,
+  ConstStringType,
+  TupleType,
+  FunType,
 } from './ast'
 import { tokstr, token } from './token'
 
@@ -40,6 +46,7 @@ class ReprCtx {
   groupIds = new Map<Group,int>()
   nextGroupId = 0
   ind :string = '  '
+  typedepth = 0
 
   groupId(g :Group) :string {
     let gid = (g as any).id || this.groupIds.get(g)
@@ -60,6 +67,59 @@ export function astRepr(n :Node, ctx: ReprCtx|null = null) :string {
 }
 
 
+function _reprt(t :Type, nl :string, c :ReprCtx) :string {
+  if (t instanceof ConstStringType) {
+    return `${t.name}[${t.length}]`
+  }
+  if (t instanceof IntrinsicType) {
+    return `${t.name}`
+  }
+  if (t instanceof TupleType) {
+    return '(' + t.types.map(t => _reprt(t, nl, c)).join(', ') + ')'
+  }
+  if (t instanceof RestType) {
+    return '...' + _reprt(t.type, nl, c)
+  }
+  if (t instanceof FunType) {
+    return (
+      '(' + t.inputs.map(it => _reprt(it, nl, c)).join(', ') + ')' +
+      '->' + _reprt(t.output, nl, c)
+    )
+  }
+  if (t instanceof UnresolvedType) {
+    return '~' + repr1(t.expr, nl, c)
+  }
+  return `???${t.constructor.name}`
+}
+
+
+function reprt0(tx :Expr|null, nl :string, c :ReprCtx) :string {
+  if (!tx) {
+    return '?'
+  }
+
+  let t :Type|null = (
+    tx instanceof Type ? tx :
+    tx.type && tx.type !== tx && tx.type instanceof Type ? tx.type :
+    null
+  )
+
+  if (t) {
+    c.typedepth++
+    const v = _reprt(t, nl, c)
+    c.typedepth--
+    return v
+  }
+
+  // unresolved
+  return '~' + repr1(tx, nl, c)
+}
+
+function reprt(tx :Expr|null, newline :string, c :ReprCtx) :string {
+  return `<${reprt0(tx, newline, c)}>`
+}
+
+
 function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :string {
   return (
     (delims[0] || '') +
@@ -69,13 +129,8 @@ function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :st
 }
 
 
-function reprt(n :Expr, newline :string, c :ReprCtx) :string {
-  const t = n.type
-  return (
-    !t ? '<?>' :
-    (t instanceof StringLitType) ? `${t.name}<${t.length}>` :
-    `<${repr1(t, newline, c)}>`
-  )
+function reprid(id :Ident) :string {
+  return utf8.decodeToString(id.value.bytes)
 }
 
 
@@ -90,15 +145,15 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
       // trim "
       s = s.substr(1, s.length-2)
     }
-    return reprt(n, newline, c) + s
+    return reprt(n.type, newline, c) + s
   }
 
   if (n instanceof Ident) {
-    return utf8.decodeToString(n.value.bytes)
+    return reprid(n)
   }
 
-  if (n instanceof DotsType) {
-    return '...' + (n.type ? repr1(n.type, newline, c) : 'auto')
+  if (n instanceof RestExpr) {
+    return '...' + repr1(n.expr, newline, c)
   }
 
   if (n instanceof BadExpr) {
@@ -108,7 +163,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   const nl2 = newline + c.ind
 
   if (n instanceof Field) {
-    let s = n.type ? repr1(n.type, nl2, c) : 'auto'
+    let s = repr1(n.type, nl2, c)
     if (n.ident) {
       s = '(' + repr1(n.ident, nl2, c) + ' ' + s + ')'
     }
@@ -118,8 +173,8 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   if (n instanceof BlockStmt) {
     return (
       n.list.length ?
-       '{' + reprv(n.list, newline, c, '') + newline + '}' :
-      '{}'
+        newline + '{' + reprv(n.list, nl2, c, '') + newline + '}' :
+        '{}'
     )
   }
 
@@ -135,13 +190,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   }
 
   if (n instanceof FunSig) {
-    let s = reprv(n.params, nl2, c) + ' -> '
-    if (n.result) {
-      s += repr1(n.result, nl2, c)
-    } else {
-      s += 'auto'
-    }
-    return s
+    return reprv(n.params, nl2, c) + ' -> ' + reprt(n.result, nl2, c)
   }
 
   if (n instanceof AssignStmt) {
@@ -160,13 +209,25 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return newline + '(DeclStmt' + ' ' + reprv(n.decls, nl2, c, '') + ')'
   }
 
+  if (n instanceof UnresolvedType) {
+    return repr1(n.expr, newline, c)
+  }
+
+  if (n instanceof SelectorExpr) {
+    return (
+      '(SEL ' +
+      repr1(n.lhs, newline, c) + '.' +
+      repr1(n.rhs, newline, c) + ')'
+    )
+  }
+
 
   // --------
 
 
   let s = '('
-  if (n instanceof Expr) {
-    s += reprt(n, newline, c)
+  if (n instanceof Expr && !c.typedepth) {
+    s += reprt(n.type, newline, c)
   }
   s += n.constructor.name
 
@@ -179,14 +240,17 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s + ' )'
   }
 
-  if (n instanceof ConstDecl || n instanceof VarDecl) {
-    if (n instanceof VarDecl && n.group) {
+  if (n instanceof VarDecl) {
+    if (n.group) {
       s += ' [#' + c.groupId(n.group) + ']'
     }
     if (n.type) {
-      s += reprt(n, newline, c)
+      s += reprt(n.type, newline, c) + ' ' + reprv(n.idents, nl2, c)
+    } else {
+      s += ' (' + n.idents.map(id =>
+        reprt(id, newline, c) + reprid(id)
+      ).join(' ') + ')'
     }
-    s += ' ' + reprv(n.idents, nl2, c)
     if (n.values) {
       s += ' ' + reprv(n.values, nl2, c)
     }
@@ -225,13 +289,6 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s + ' ' + repr1(n.x, newline, c) + ')'
   }
 
-  if (n instanceof SelectorExpr) {
-    return (
-      s + ' ' + repr1(n.lhs, newline, c) +
-      ' . ' + repr1(n.rhs, newline, c) + ')'
-    )
-  }
-
   if (n instanceof TypeConversionExpr) {
     return s + ' ' + repr1(n.expr, newline, c) + ')'
   }
@@ -249,8 +306,12 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   }
 
   if (n instanceof TupleExpr) {
-    s += reprv(n.exprs, nl2, c, '') + ')'
+    return s + ' ' + reprv(n.exprs, nl2, c, '') + ')'
   }
 
-  return '(?'+ n.constructor.name + ' ' + repr(n) + ')'
+  if (n.constructor === SimpleStmt) {
+    return 'noop'
+  }
+
+  return '(???'+ n.constructor.name + ' ' + repr(n) + ')'
 }

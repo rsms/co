@@ -2,19 +2,27 @@ import { SrcFile, Position, Pos } from './pos'
 import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ByteStr, ByteStrSet } from './bytestr'
-import { Universe, u_t_usize, u_t_i64, u_t_u32 } from './universe'
+import {
+  Universe,
+  u_t_void,
+  u_t_auto,
+  u_t_usize,
+  u_t_i64,
+  u_t_u32,
+} from './universe'
+import { debuglog } from './util'
 import {
   File,
   Scope,
-  Obj,
+  Ent,
   Node,
   Group,
   Comment,
   Ident,
+  RestExpr,
   Field,
   Decl,
   ImportDecl,
-  ConstDecl,
   VarDecl,
   TypeDecl,
   FunDecl,
@@ -23,7 +31,6 @@ import {
   // LiteralExpr,
   BasicLit,
   StringLit,
-  DotsType,
   Stmt,
   BlockStmt,
   ExprStmt,
@@ -39,9 +46,12 @@ import {
   SelectorExpr,
   TypeConversionExpr,
   Type,
-  StringLitType,
+  UnresolvedType,
+  RestType,
+  ConstStringType,
+  TupleType,
+  FunType,
 } from './ast'
-import { debuglog } from './util'
 
 // type of diagnostic
 export enum DiagKind {
@@ -152,38 +162,26 @@ export class Parser extends scanner.Scanner {
   pushScope(scope :Scope | null = null) {
     const p = this
     p.scope = scope || new Scope(p.scope)
-    debuglog(`push ${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
+    // debuglog(`push ${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
   }
 
   popScope() :Scope { // returns old ("popped") scope
     const p = this
     const s = p.scope
     assert(p.scope.outer != null, 'pop scope at base scope')
-    debuglog(`pop ${p.scope.level()} -> ${(p as any).scope.outer.level()}`)
+    // debuglog(`pop ${p.scope.level()} -> ${(p as any).scope.outer.level()}`)
     p.scope = p.scope.outer as Scope
     return s
   }
 
-  declare(scope :Scope, ident: Ident, decl :Node, x: Expr|null) :Obj|null {
+  declare(scope :Scope, ident: Ident, decl :Node, x: Expr|null) :Ent|null {
     const p = this
-    const obj = new Obj(ident.value, decl, x)
-    if (decl instanceof ConstDecl) {
-      // allow redeclaration of constants
-      const prevObj = scope.redeclareObj(obj)
-      if (prevObj) {
-        p.diag(
-          DiagKind.INFO,
-          ident + ' shadows previous declaration at ' +
-          p.sfile.position(prevObj.decl.pos).toString(),
-          ident.pos,
-        )
-        debuglog(`(redeclare) ${ident} in scope#${scope.level()}`)
-      } else { debuglog(`${ident} in scope#${scope.level()}`) }
-    } else if (!scope.declareObj(obj)) {
+    const ent = new Ent(ident.value, decl, x)
+    if (!scope.declareEnt(ent)) {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
-    else { debuglog(`${ident} in scope#${scope.level()}`) }
-    return obj
+    // else { debuglog(`${ident} in scope#${scope.level()}`) }
+    return ent
   }
 
   declarev(scope :Scope, idents: Ident[], decl :Node, xs: Expr[]|null) {
@@ -194,7 +192,7 @@ export class Parser extends scanner.Scanner {
   }
 
   // If x is an identifier, resolve attempts to resolve x by looking up
-  // the object it denotes. If no object is found and collectUnresolved is
+  // the entity it denotes. If no entity is found and collectUnresolved is
   // set, x is marked as unresolved and collected in the list of unresolved
   // identifiers.
   // Returns the input expression
@@ -206,7 +204,7 @@ export class Parser extends scanner.Scanner {
       return x
     }
 
-    assert(x.obj == null, "identifier already declared or resolved")
+    assert(x.ent == null, "identifier already declared or resolved")
     if (x.value === p._id__) {
       return x
     }
@@ -214,10 +212,10 @@ export class Parser extends scanner.Scanner {
     // try to resolve the identifier
     let s :Scope|null = x.scope
     while (s) {
-      const obj = s.lookupImm(x.value)
-      if (obj) {
+      const ent = s.lookupImm(x.value)
+      if (ent) {
         debuglog(`${x} found in scope#${s.level()}`)
-        x.obj = obj
+        x.ent = ent
         return x
       }
       s = s.outer
@@ -237,7 +235,7 @@ export class Parser extends scanner.Scanner {
   parseFile() :File {
     const p = this
     const imports = p.parseImports()
-    const decls = p.parseBody()
+    const decls = p.parseFileBody()
 
     return new File(
       p.sfile,
@@ -301,7 +299,7 @@ export class Parser extends scanner.Scanner {
     return d
   }
 
-  parseBody() :Decl[] {
+  parseFileBody() :Decl[] {
     const p = this
     const decls = [] as Decl[]
 
@@ -310,7 +308,7 @@ export class Parser extends scanner.Scanner {
       switch (p.tok) {
         case token.VAR:
           p.next() // consume "var"
-          p.appendGroup(decls, p.varDecl)
+          p.appendGroup(decls, p.varDeclExplicit)
           break
 
         case token.TYPE:
@@ -321,7 +319,7 @@ export class Parser extends scanner.Scanner {
         case token.NAME:
           const pos = p.pos
           const idents = p.identList(p.ident())
-          decls.push(p.constDecl(pos, idents))
+          decls.push(p.varDecl(pos, idents))
           break
 
         case token.FUN:
@@ -393,48 +391,98 @@ export class Parser extends scanner.Scanner {
     return d
   }
 
-  // getType returns the concrete type of n, or null if not known.
+  // resolveType attempts to resolve or infer the type of n.
+  // Returns UnresolvedType if the type refers to an undefined identifier.
+  // May mutate n.type
   //
-  getType(n :Node) :Type|null {
+  maybeResolveType(n :Expr) :Type|null {
     const p = this
+
     if (n instanceof Type) {
       return n
-    } else if (n instanceof Expr) {
-      if (n.type) {
-        return p.getType(n.type)
-      }
-      if (n instanceof Ident && n.obj) {
-        if (n.obj.value) {
-          return p.getType(n.obj.value)
-        }
-        if (n.obj.decl) {
-          return p.getType(n.obj.decl)
-        }
-      }
-    } else if (n instanceof VarDecl && n.type) {
-      return p.getType(n.type)
     }
-    return null
+
+    if (n.type) {
+      return p.resolveType(n.type)
+    }
+
+    if (n instanceof Ident) {
+      if (n.ent) {
+        if (n.ent.value) {
+          return p.maybeResolveType(n.ent.value)
+        }
+        if (n.ent.decl instanceof Expr) {
+          return p.maybeResolveType(n.ent.decl)
+        }
+      }
+      // else: unresolved -- unknown type
+      return null
+    }
+
+    if (n instanceof FunDecl) {
+      const s = n.sig
+      return new FunType(
+        s.pos,
+        s.scope,
+        s.params.map(field => p.resolveType(field.type)),
+        p.resolveType(s.result),
+      )
+    }
+
+    if (n instanceof TupleExpr) {
+      let types :Type[] = []
+      for (const x1 of n.exprs) {
+        const t = p.resolveType(x1)
+        if (!t) {
+          return null
+        }
+        types.push(t)
+      }
+      return new TupleType(n.pos, n.scope, types)
+    }
+
+    if (n instanceof RestExpr) {
+      let t = n.expr && p.resolveType(n.expr) || u_t_auto
+      return new RestType(n.pos, n.scope, t)
+    }
+
+
+    return null  // unknown type
   }
 
-  // resolveType attempts to resolve or infer expr.type. May mutate x.
+  // resolveType attempts to resolve or infer the type of n.
+  // Returns UnresolvedType if the type refers to an undefined identifier.
+  // May mutate n.type
   //
-  resolveType(x :Expr) :Type|null {
+  resolveType(n :Expr) :Type {
     const p = this
 
-    if (x.type instanceof Type) {
-      return x.type  // already known
+    if (n instanceof Type) {
+      return n
     }
 
-    // debuglog(`of`, x)
-    const t = p.getType(x)
-    if (x.type = t) {
-      return t
+    if ((n as any).type instanceof Type) {
+      return (n as any).type
     }
 
-    debuglog(`TODO try to infer type of`, x)
+    let t = p.maybeResolveType(n)
 
-    return null
+    if (!t) {
+      t = new UnresolvedType(n.pos, n.scope, n)
+      if (
+        n instanceof SelectorExpr &&
+        n.lhs instanceof Ident &&
+        n.lhs.ent
+      ) {
+        // Partially resolved selector
+        // "a.B undefined (type <typeof(a)> has no field or method B)"
+        p.syntaxError(`${n} undefined`, n.pos)
+      }
+    }
+
+    n.type = t
+
+    return t
   }
 
   // resolveTypes calls resolveType on each of the input expressions.
@@ -461,42 +509,43 @@ export class Parser extends scanner.Scanner {
   // returned, containing x.
   // Otherwise null is returned.
   //
-  fitType(targettyp :Type, x :Expr, ctx :exprCtx) :Expr|null {
-    const p = this
+  // fitType(targettyp :Type, x :Expr, ctx :exprCtx) :Expr|null {
+  //   const p = this
 
-    p.resolveType(x)
+  //   p.resolveType(x)
 
-    if (!x.type) {
-      // unable to infer type (may be resolved in post-resolve)
-      return null
-    }
+  //   if (!x.type) {
+  //     // unable to infer type (may be resolved in post-resolve)
+  //     return null
+  //   }
 
-    if (x.type === targettyp) {
-      return x
-    }
+  //   if (x.type === targettyp) {
+  //     return x
+  //   }
 
-    return p.convertType(targettyp, x)
-  }
+  //   return p.convertType(targettyp, x)
+  // }
 
-  // fitTypes compares the type of each expression against typ.
-  // Returns a list of expressions which might contains conversion expressions.
-  //
-  fitTypes(targettyp :Type, xs :Expr[], ctx :exprCtx) :Expr[] {
-    const p = this
-    let xs2 :Expr[] | null = null
+  // // fitTypes compares the type of each expression against typ.
+  // // Returns a list of expressions which might contains conversion expressions.
+  // //
+  // fitTypes(targettyp :Type, xs :Expr[], ctx :exprCtx) :Expr[] {
+  //   const p = this
+  //   let xs2 :Expr[] | null = null
 
-    for (let x of xs) {
-      let x2 = p.fitType(targettyp, x, ctx) || x
-      if (x2 !== x) {
-        if (!xs2) { xs2 = [x2] } else { xs2.push(x2) }
-      }
-    }
+  //   for (let x of xs) {
+  //     let x2 = p.fitType(targettyp, x, ctx) || x
+  //     if (x2 !== x) {
+  //       if (!xs2) { xs2 = [x2] } else { xs2.push(x2) }
+  //     }
+  //   }
 
-    return xs2 || xs
-  }
+  //   return xs2 || xs
+  // }
 
-  constDecl(pos :Pos, idents :Ident[]) :VarDecl {
-    // ConstSpec = IdentifierList [ Type ] "=" ExpressionList
+  varDecl(pos :Pos, idents :Ident[]) :VarDecl {
+    // VarDecl = IdentifierList
+    //           ( Type [ "=" ExpressionList ] | "=" ExpressionList )
     const p = this
     const typ = p.maybeType()
     let isError = false
@@ -507,20 +556,12 @@ export class Parser extends scanner.Scanner {
     const d = new VarDecl(pos, scope, idents, null, typ, null)
 
     if (p.got(token.ASSIGN)) {
+      // e.g. x, y = 1, 2
       d.values = p.exprList(/*ctx=*/d)
       isError = !p.checkDeclLen(idents, d.values.length, 'constants')
-    } else {
-      /*if (p.got(token.SET_ASSIGN)) {
-        // e.g. `x := 4`
-        p.syntaxError("variable assignment at top level", pos)
-      } else */
-      if (typ) {
-        // e.g. `x int`
-        p.syntaxError("const declaration cannot have type without value", pos)
-      } else {
-        // e.g. `x`
-        p.syntaxError("unexpected identifier", pos)
-      }
+    } else if (!typ) {
+      // e.g. `x` -- missing type or values
+      p.syntaxError("unexpected identifier", pos)
       isError = true
       d.values = [p.bad()]
       p.advanceUntil(token.SEMICOLON)
@@ -534,16 +575,14 @@ export class Parser extends scanner.Scanner {
       // e.g. "var x, y int = 1, 0x3"
       const t = p.resolveType(d.type)
       d.type = t
-      // if (t) { // TODO XXX DEBUG
-      //   d.values = p.fitTypes(t, d.values, d)
-      // }
-      // copy type to names
       d.idents.forEach(ident => { ident.type = t })
     } else {
+      assert(d.values, "no type and no vals")
+      let vals = d.values as Expr[]
       // e.g. "var x, y = 1, 0x3"
-      p.resolveTypes(d.values)
+      p.resolveTypes(vals)
       // copy types of values to names
-      d.values.forEach((v, i) => {
+      vals.forEach((v, i) => {
         let ident = d.idents[i] as Ident // we have checked len already
         ident.type = v.type
       })
@@ -554,9 +593,9 @@ export class Parser extends scanner.Scanner {
     return d
   }
 
-  varDecl = (group :Group|null, nth :int) :VarDecl => {
-    // VarSpec = IdentifierList
-    //   ( Type [ "=" ExpressionList ] | "=" ExpressionList )
+  varDeclExplicit = (group :Group|null, nth :int) :VarDecl => {
+    // VarDeclEx = "var" IdentifierList
+    //             ( Type [ "=" ExpressionList ] | "=" ExpressionList )
     const p = this
     const pos = p.pos
     const idents = p.identList(p.ident())
@@ -607,7 +646,7 @@ export class Parser extends scanner.Scanner {
 
     // new scope for parameters, signature and body
     p.pushScope(new Scope(p.scope))
-    const d = new FunDecl(pos, p.scope, name, p.funSig(), isInitFun)
+    const d = new FunDecl(pos, p.scope, name, p.funSig(u_t_void), isInitFun)
 
     if (isInitFun) {
       // check initfun signature (should be empty)
@@ -626,23 +665,34 @@ export class Parser extends scanner.Scanner {
 
     // parse body
     if (isInitFun || p.tok != token.SEMICOLON) {
-      if (isInitFun) {
-        p.initfnest++
-      }
+      
+      if (isInitFun) { p.initfnest++ }
+
       d.body = p.funBody(name)
-      if (isInitFun) {
-        p.initfnest--
-      }
+
+      if (isInitFun) { p.initfnest-- }
     }
 
     p.popScope()
+
+    if (d.sig.result === u_t_void) {
+      // no result type specified
+      // - if the body is a single expression, result is that expression
+      // - otherwise void (no result)
+      d.sig.result = d.body instanceof ExprStmt ? d.body.expr : u_t_void
+    }
+
+    p.resolveType(d)
 
     return d
   }
 
   // TODO: maybeFunExpr() :Expr -- FunDecl or some other expr
 
-  funExpr(ctx :exprCtx) :FunDecl {
+  funStmt(ctx :exprCtx) :FunDecl {
+    // FunStmt = "fun" FunName? Signature FunBody
+    // FunBody  = ( Block | "->" Stmt )
+
     // FunExpr = "fun" FunName? Signature FunBody
     // FunName = identifier
     // FunBody  = ( Block | "->" Stmt )
@@ -660,7 +710,7 @@ export class Parser extends scanner.Scanner {
 
     // declare in outer scope, before we parse the body, so that the body can
     // refer to the function's name
-    const d = new FunDecl(pos, p.scope, name, p.funSig())
+    const d = new FunDecl(pos, p.scope, name, p.funSig(u_t_void))
     if (name && !ctx) {
       // declare the function's name when it's not on the right-hand side of an
       // assignment.
@@ -672,15 +722,24 @@ export class Parser extends scanner.Scanner {
     d.body = p.funBody(name)
     p.popScope()
 
+    if (d.sig.result === u_t_void) {
+      // no result type specified
+      // - if the body is a single expression, result is that expression
+      // - otherwise void (no result)
+      d.sig.result = d.body instanceof ExprStmt ? d.body.expr : u_t_void
+    }
+
+    p.resolveType(d)
+
     return d
   }
 
-  funSig(): FunSig {
+  funSig(defaultType :Type): FunSig {
     // Signature = ( Parameters Result? | Type )?
     const p = this
     const pos = p.pos
     const params = p.tok == token.LPAREN ? p.parameters() : []
-    const result = p.maybeType()
+    const result = p.maybeType() || defaultType
     return new FunSig(pos, p.scope, params, result)
   }
 
@@ -693,22 +752,22 @@ export class Parser extends scanner.Scanner {
     p.want(token.LPAREN)
 
     const fields = [] as Field[]
-    let seenDotsType = false
+    let seenRestExpr = false
 
     while (p.tok != token.RPAREN) {
-      let f = new Field(p.pos, p.scope, null, null)
+      let f = new Field(p.pos, p.scope, u_t_auto, null)
 
       f.ident = p.ident()
       p.declare(f.ident.scope, f.ident, f, null) // in function scope
 
       if (p.tok == token.ELLIPSIS) {
         // e.g. "fun foo(ident ... type)"
-        f.type = p.dotsType()
-        if (seenDotsType) {
+        f.type = p.restExpr(u_t_auto)
+        if (seenRestExpr) {
           p.syntaxError("can only use ... with final parameter in list")
           continue  // skip this field
         } else {
-          seenDotsType = true
+          seenRestExpr = true
         }
       } else if (
         p.tok != token.COMMA &&
@@ -749,10 +808,11 @@ export class Parser extends scanner.Scanner {
         return s
       }
     }
+    // error
     if (funcname) {
-      p.syntaxError(`${funcname} is missing function body`)
+      p.syntaxError(`${funcname} is missing function body`, pos)
     } else {
-      p.syntaxError("missing function body")
+      p.syntaxError("missing function body", pos)
     }
     return new SimpleStmt(pos, p.scope)
   }
@@ -805,6 +865,24 @@ export class Parser extends scanner.Scanner {
     return list
   }
 
+  // shouldStoreToEnt returns true if entis within atScope in such a way
+  // that "ent = value" means "store value to ent".
+  //
+  shouldStoreToEnt(ent :Ent, atScope :Scope) :bool {
+    const p = this
+    return (
+      ent.scope === atScope  // same scope
+      ||
+      ( ent.scope !== p.filescope &&
+        ( ( ent.scope === p.pkgscope &&
+            atScope.fun && atScope.fun.isInit )
+          ||
+          ent.scope.funScope() === atScope.funScope()
+        )
+      )
+    )
+  }
+
   assignment(lhs :Expr[]) :AssignStmt {
     // Assignment = ExprList "=" ExprList
     const p = this
@@ -818,49 +896,30 @@ export class Parser extends scanner.Scanner {
     // Check each left-hand identifier against scope and unresolved.
     // Note that exprList already has called p.resolve on all ids.
     //
-    // If an id has an obj (i.e. was resolved to something), then we simply
+    // If an id has an ent (i.e. was resolved to something), then we simply
     // register the assignment with it so that we can later bind.
     //
-    // If an id is unresolved (doesn't have an obj), the semantics are:
+    // If an id is unresolved (doesn't have an ent), the semantics are:
     // - assume it's a constant definition and declare it as such
     // - register the assignment so that if we later find a var in the outer
     //   scope, we can convert the declaration to an assignment.
     //
     for (let i = 0; i < lhs.length; ++i) {
-      const x = lhs[i]
-      if (x instanceof Ident) {
+      const id = lhs[i]
+      if (id instanceof Ident) {
         assert(s.rhs[i])
 
-        // TODO: clean up this code
-
-        if (x.obj) {
-          // is resolved -- decide if we should redeclare this identifier.          
-          // continue with redeclaring the identifier, unless ...
-
-          if (x.obj.scope === x.scope) {  // same scope
-            continue
-          } // else: definition and reference are in different scopes, AND
-
-          if (x.obj.scope !== p.filescope) {
-            // only imports are declared at filescope, and they are constant
-            // redeclare!
-            if (x.obj.scope === p.pkgscope) {
-              if (x.scope.fun && x.scope.fun.isInit) {
-                // def is at package level and we are in init fun
-                continue
-              }
-              // else: pkg-level vars are immutable -- redeclare!
-            } else if (x.obj.scope.funScope() === x.scope.funScope()) {
-              // defined in same function scope -- reference
-              continue
-            }
-          }
+        // Decide declare a new ent, or store to existing one
+        if (id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
+          debuglog(`store ${id}`)
+          id.ent.nstores++  // increment Nth store counter
+        } else {
+          debuglog(`declare ${id}`)
+          // since we are about to redeclare, clear any "unresolved" mark for
+          // this identifier expression.
+          p.unresolved.delete(id)  // may be noop
+          p.declare(id.scope, id, s, s.rhs[i])
         }
-
-        // since we are about to redeclare, clear any "unresolved" mark for
-        // this identifier expression.
-        p.unresolved.delete(x)
-        p.declare(x.scope, x, s, s.rhs[i])
       }
     }
 
@@ -871,23 +930,6 @@ export class Parser extends scanner.Scanner {
   //            | Assignment | ShortVarDecl .
   simpleStmt(lhs :Expr[]) :SimpleStmt {
     const p = this
-
-    // if (p.tok == token.ASSIGN ||
-    //     (p.tok == token.NAME && lhs[lhs.length-1] instanceof Ident)
-    //     // type following name, e.g. "a f32 = 3"
-    // ) {
-    //   // check lhs to make sure there are all identifiers
-    //   for (let e of lhs) {
-    //     if (!(e instanceof Ident)) {
-    //       // e.g. "a, b.c = 1, 2"
-    //       p.next() // consume "="
-    //       p.syntaxError("invalid constant name", e.pos)
-    //       p.exprList(/*ctx=*/s)  // consume RHS
-    //       return new ExprStmt(pos, p.scope, p.bad(pos))
-    //     }
-    //   }
-    //   return new DeclStmt(pos, p.scope, [p.constDecl(pos, lhs as Ident[])])
-    // }
 
     // Note: token.SET_ASSIGN ":=" is currently unused
     // we could use it to allow shadowing in same scope, e.g.
@@ -918,8 +960,8 @@ export class Parser extends scanner.Scanner {
         // check operand type
         const operand = lhs[0]
         if (operand instanceof Ident &&
-            operand.obj &&
-            !(operand.obj.decl instanceof VarDecl)
+            operand.ent &&
+            !(operand.ent.decl instanceof VarDecl)
         ) {
           p.syntaxError(`cannot mutate ${operand}`, operand.pos)
         }
@@ -968,7 +1010,7 @@ export class Parser extends scanner.Scanner {
         return s
 
       case token.VAR:
-        return p.declStmt(p.varDecl)
+        return p.declStmt(p.varDeclExplicit)
 
       case token.TYPE:
         return p.declStmt(p.typeDecl)
@@ -1210,7 +1252,7 @@ export class Parser extends scanner.Scanner {
         return p.parenOrTupleExpr(keepParens, ctx)
 
       case token.FUN:
-        return p.funExpr(ctx)
+        return p.funStmt(ctx)
 
       // case _Lbrack, _Chan, _Map, _Struct, _Interface:
       //   return p.type_() // othertype
@@ -1223,7 +1265,9 @@ export class Parser extends scanner.Scanner {
           const x = new BasicLit(p.pos, p.scope, p.tok, p.takeByteValue())
           x.type = p.universe.basicLitType(
             x,
-            ctx && p.getType(ctx),
+            (ctx && ctx instanceof VarDecl && ctx.type ?
+              p.maybeResolveType(ctx.type) : null
+            ),
             p.basicLitErrH
           )
           p.next() // consume literal
@@ -1248,7 +1292,7 @@ export class Parser extends scanner.Scanner {
     const p = this
     assert(p.tok == token.STRING)
     const n = new StringLit(p.pos, p.scope, p.takeByteValue())
-    n.type = new StringLitType(u_t_usize.bitsize, n.value.length)
+    n.type = new ConstStringType(u_t_usize.bitsize, n.value.length)
     p.next()
     return n
   }
@@ -1258,15 +1302,8 @@ export class Parser extends scanner.Scanner {
     // TupleExpr = "(" Expr ("," Expr)+ ","? ")"
     // ParenExpr = "(" Expr ","? ")"
     const p = this
-    p.want(token.LPAREN)
-
     const pos = p.pos
-    const x = p.expr(ctx)
-
-    if (p.got(token.RPAREN)) {
-      // ParenExpr
-      return keepParens ? new ParenExpr(pos, p.scope, x) : x
-    }
+    p.want(token.LPAREN)
 
     const l = []
     while (true) {
@@ -1281,7 +1318,10 @@ export class Parser extends scanner.Scanner {
     p.want(token.RPAREN)
 
     return (
-      l.length == 1 ? new ParenExpr(pos, p.scope, l[0]) :
+      l.length == 1 ? (
+        keepParens ? new ParenExpr(pos, p.scope, l[0]) :
+        l[0]
+      ) :
       new TupleExpr(pos, p.scope, l)
     )
   }
@@ -1302,24 +1342,30 @@ export class Parser extends scanner.Scanner {
   //          | InterfaceType | SliceType | MapType | Channel_Type
   maybeType() :Expr|null {
     const p = this
+    let x :Expr|null = null
+
     switch (p.tok) {
 
       // TODO: all other types
 
       case token.NAME:
-        return p.dotident(p.resolve(p.ident()))
+        x = p.dotident(p.resolve(p.ident()))
+        break
 
       case token.LPAREN:
         const t = p.tupleType()
-        return (
+        x = (
           t.exprs.length == 0 ? null :        // "()"  => null
           t.exprs.length == 1 ? t.exprs[0] :  // "(a)" => "a"
           t                                   // "(a, b)"
         )
+        break
 
       default:
         return null
     }
+
+    return x && p.resolveType(x) || null
   }
 
   type() :Expr {
@@ -1333,12 +1379,14 @@ export class Parser extends scanner.Scanner {
     return t
   }
 
-  dotsType() :DotsType {
-    // DotsType = "..." Type?
+  restExpr(defaultType :Type) :RestExpr {
+    // RestExpr = "..." Expr?
     const p = this
     const pos = p.pos
     p.want(token.ELLIPSIS)
-    return new DotsType(pos, p.scope, p.maybeType())
+    const rt = new RestExpr(pos, p.scope, p.maybeType() || defaultType)
+    p.resolveType(rt)
+    return rt
   }
 
   tupleType() :TupleExpr {
@@ -1520,9 +1568,10 @@ export class Parser extends scanner.Scanner {
 
   syntaxErrorAt(position :Position, msg :string) {
     const p = this
-    if (p.tok == token.EOF) {
-      return // avoid meaningless follow-up errors
-    }
+
+    // if (p.tok == token.EOF) {
+    //   return // avoid meaningless follow-up errors
+    // }
 
     // add punctuation etc. as needed to msg
     if (msg == "") {
