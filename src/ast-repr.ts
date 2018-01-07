@@ -29,7 +29,7 @@ import {
   TupleExpr,
   BadExpr,
   SelectorExpr,
-  TypeConversionExpr,
+  TypeConvExpr,
   Type,
   UnresolvedType,
   RestType,
@@ -149,7 +149,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   }
 
   if (n instanceof Ident) {
-    return reprid(n)
+    return (c.typedepth ? '' : reprt(n.type, newline, c)) + reprid(n)
   }
 
   if (n instanceof RestExpr) {
@@ -289,13 +289,15 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s + ' ' + repr1(n.x, newline, c) + ')'
   }
 
-  if (n instanceof TypeConversionExpr) {
+  if (n instanceof TypeConvExpr) {
     return s + ' ' + repr1(n.expr, newline, c) + ')'
   }
 
   if (n instanceof FunDecl) {
     s += ' '
-    if (n.name) {
+    if (n.isInit) {
+      s += 'init '
+    } else if (n.name) {
       s += repr1(n.name, newline, c) + ' '
     }
     s += repr1(n.sig, newline, c)

@@ -17,11 +17,13 @@ function panic(msg) {
 
 function assert() {
   if (DEBUG) { // for DCE
-    var cond = arguments[0], msg = arguments[1]
+    var cond = arguments[0]
+      , msg = arguments[1]
+      , cons = arguments[2] || assert
     if (!cond) {
-      var e, stack = _stackTrace(assert)
+      var e, stack = _stackTrace(cons)
       console.error('assertion failure:', msg || cond)
-      console.error(_stackTrace(assert))
+      console.error(_stackTrace(cons))
       process.exit(3)
     }
   }

@@ -14,7 +14,7 @@ declare function panic(msg :any, ...v :any[]) :void
 // message, stack trace and exits the process.
 // assert is removed in release builds
 //
-declare function assert(cond :any, msg? :string) :void
+declare function assert(cond :any, msg? :string, cons? :Function) :void
 
 // repr resturns a detailed string representation of the input
 //

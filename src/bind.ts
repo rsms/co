@@ -1,9 +1,9 @@
 // import { token } from './token'
-import { SrcFileSet, Pos, Position } from './pos'
-import { ErrorHandler } from './scanner'
-import { File, Package, Ent, ImportDecl } from './ast'
+import { SrcFileSet, Pos } from './pos'
+import { ErrorCode, ErrorHandler, ErrorReporter } from './error'
 import * as utf8 from './utf8'
 import { debuglog } from './util'
+import { File, Package, Ent, ImportDecl, UnresolvedType } from './ast'
 
 
 // An Importer resolves import paths to package entities.
@@ -20,31 +20,36 @@ export type Importer =
   (imports :Map<string,Ent>, path :string) => Promise<Ent>
 
 
-class binder {
+// pkgBinder resolves a ast.Package and its ast.File s
+//
+class pkgBinder extends ErrorReporter {
   errorCount = 0
-  // package global mapping of imported package ids to package entities
+  // package-global mapping of imported package ids to package entities
   imports = new Map<string,Ent>()
 
   constructor(
     public pkg      :Package,
     public fset     :SrcFileSet,
-    public files    :File[],
     public importer :Importer|null,
-    public errh     :ErrorHandler|null,
-  ) {}
+    errh            :ErrorHandler|null,
+  ) {
+    super('E_RESOLVE', errh)
+  }
 
   bind() :Promise<void> {
     const b = this
 
     // complete file scopes with imports and resolve identifiers
-    return Promise.all(b.files.map(f => this.resolveImports(f))).then(() => {
+    return Promise.all(
+      b.pkg.files.map(f => this.resolveImports(f))
+    ).then(() => {
       // stop if any imports failed
       if (b.errorCount > 0) {
         return
       }
 
       // resolve identifiers in files
-      for (let f of b.files) {
+      for (let f of b.pkg.files) {
         b.resolve(f)
       }
     })
@@ -99,32 +104,30 @@ class binder {
   resolve(f :File) {
     const b = this
 
-    for (let id of f.unresolved) {
+    if (f.unresolved) for (let id of f.unresolved) {
       // see if the name was declared after it was referenced in the file, or
       // declared in another file in the same package
       let ent = f.scope.lookup(id.value)
-      if (ent) {
-        debuglog(`${id}`, ent.value && ent.value.constructor.name)
-        id.ent = ent
+
+      if (!ent) { // truly undefined
+        b.error(`${id} undefined`, id.pos)
         continue
       }
 
-      // truly undefined
-      b.error(`${id} undefined`, id.pos)
+      debuglog(`${id}`, ent.value && ent.value.constructor.name)
+
+      id.ent = ent
+      ent.reads.add(id) // register "read reference"
+
+      if (id.type instanceof UnresolvedType && ent.value) {
+        id.type = ent.value.type
+      }
     }
   }
 
-  error(msg :string, pos :Pos, typ? :string) {
+  error(msg :string, pos :Pos, c? :ErrorCode) {
     const b = this
-    b.errorAt(msg, b.fset.position(pos), typ)
-  }
-
-  errorAt(msg :string, position :Position, typ :string = 'E_BIND') {
-    const b = this
-    if (b.errh) {
-      b.errh(position, msg, typ)
-    }
-    b.errorCount++
+    b.errorAt(msg, b.fset.position(pos), c)
   }
 }
 
@@ -138,10 +141,9 @@ class binder {
 export function bindpkg(
   pkg :Package,
   fset :SrcFileSet,
-  files :File[],
   importer :Importer|null,
   errh :ErrorHandler,
 ) :Promise<bool> {
-  const b = new binder(pkg, fset, files, importer, errh)
+  const b = new pkgBinder(pkg, fset, importer, errh)
   return b.bind().then(() => b.errorCount != 0)
 }

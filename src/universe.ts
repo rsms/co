@@ -28,7 +28,7 @@ function ival(name :string, typ :IntrinsicType) :IntrinsicVal {
   return x
 }
 
-const ptrsize = 32 // TODO: target-dependant
+const uintz :number = 32 // TODO: target-dependant
 
 // basic types
 export const
@@ -37,13 +37,13 @@ export const
 , u_t_nil   = new IntrinsicType(0, '?') // note: unnamed, special type for nil
 
 , u_t_bool  = ityp(1,  'bool')
-, u_t_char  = ityp(32, 'char')
-, u_t_usize = ityp(ptrsize, 'usize')
+
+, u_t_uint = ityp(uintz, 'uint')
+, u_t_int  = ityp(uintz-1, 'int')
 
 , u_t_i8  = ityp(7,  'i8')
 , u_t_i16 = ityp(15, 'i16')
 , u_t_i32 = ityp(31, 'i32')
-, u_t_int = ityp(ptrsize-1, 'int')
 , u_t_i64 = ityp(63, 'i64')
 
 , u_t_u8  = ityp(8,  'u8')
@@ -54,12 +54,409 @@ export const
 , u_t_f32 = ityp(32, 'f32')
 , u_t_f64 = ityp(64, 'f64')
 
-, u_t_string = ityp(ptrsize, 'string')
+, u_t_string = ityp(uintz, 'string')
 
 export const universeTypeAliases = new Map<string,string>([
-  ['float', 'f64'],
-  ['byte',  'u8'],
+  ['byte', 'u8'],
+  ['char', 'u32'],
 ])
+
+
+// type compatibility
+export enum TypeCompat {
+  NO = 0,   // not compatible
+  LOSSY,    // can be converted at a loss
+  LOSSLESS, // can be converted safely without loss
+}
+
+// maps destination type to receiver types and their compatbility type
+const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
+
+  [u_t_u64, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSLESS],
+    [u_t_int,  TypeCompat.LOSSLESS],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSLESS],
+    [u_t_i64, TypeCompat.LOSSLESS],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, TypeCompat.LOSSLESS],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_i64, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, uintz <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+    [u_t_int,  TypeCompat.LOSSLESS],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSLESS],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, TypeCompat.LOSSLESS],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_u32, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+    [u_t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSLESS],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_i32, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+    [u_t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_uint, new Map<IntrinsicType,TypeCompat>([
+    [u_t_int, TypeCompat.LOSSLESS],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSLESS],
+    [u_t_i64, uintz >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, uintz >= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+    [u_t_u64, uintz >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_int, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSLESS],
+    [u_t_i64, uintz >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, uintz >= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_u16, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+    [u_t_int,  TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSY],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u32, TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_i16, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+    [u_t_int,  TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSY],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSY],
+    [u_t_u32, TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_u8, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+    [u_t_int,  TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSY],
+    [u_t_i32, TypeCompat.LOSSY],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u16, TypeCompat.LOSSY],
+    [u_t_u32, TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_i8, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+    [u_t_int,  TypeCompat.LOSSY],
+
+    [u_t_i16, TypeCompat.LOSSY],
+    [u_t_i32, TypeCompat.LOSSY],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSY],
+    [u_t_u16, TypeCompat.LOSSY],
+    [u_t_u32, TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSY],
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_f32, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, TypeCompat.LOSSY],
+    [u_t_int,  TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSY],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, TypeCompat.LOSSY],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f64, TypeCompat.LOSSY],
+  ])],
+
+  [u_t_f64, new Map<IntrinsicType,TypeCompat>([
+    [u_t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+    [u_t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [u_t_i8,  TypeCompat.LOSSLESS],
+    [u_t_i16, TypeCompat.LOSSLESS],
+    [u_t_i32, TypeCompat.LOSSLESS],
+    [u_t_i64, TypeCompat.LOSSY],
+
+    [u_t_u8,  TypeCompat.LOSSLESS],
+    [u_t_u16, TypeCompat.LOSSLESS],
+    [u_t_u32, TypeCompat.LOSSLESS],
+    [u_t_u64, TypeCompat.LOSSY],
+
+    [u_t_f32, TypeCompat.LOSSLESS],
+  ])],
+])
+
+export function basicTypeCompat(
+  dst :IntrinsicType,
+  src :IntrinsicType,
+) :TypeCompat {
+  assert(dst !== src, "same type is always compatible")
+  let s = typeCompatMap.get(dst)
+  return s && s.get(src) || TypeCompat.NO
+}
+
+TEST("basicTypeCompat", () => {
+  function assertTypeCompat(
+    dst :IntrinsicType,
+    src :IntrinsicType,
+    expect :TypeCompat,
+    cons :Function,
+  ) {
+    const r = basicTypeCompat(dst, src)
+    assert(
+      r === expect,
+      `${dst}(${src}) == ${TypeCompat[r]} (expected ${TypeCompat[expect]})`,
+      cons
+    )
+  }
+
+  function assert_LOSSLESS(dst :IntrinsicType, src :IntrinsicType) {
+    assertTypeCompat(dst, src, TypeCompat.LOSSLESS, assert_LOSSLESS)
+  }
+
+  function assert_LOSSY(dst :IntrinsicType, src :IntrinsicType) {
+    assertTypeCompat(dst, src, TypeCompat.LOSSY, assert_LOSSY)
+  }
+
+  // u64
+  assert_LOSSLESS(u_t_u64, u_t_uint)
+  assert_LOSSLESS(u_t_u64, u_t_int)
+  assert_LOSSLESS(u_t_u64, u_t_i64)
+  assert_LOSSLESS(u_t_u64, u_t_u32)
+  assert_LOSSLESS(u_t_u64, u_t_i32)
+  assert_LOSSLESS(u_t_u64, u_t_u16)
+  assert_LOSSLESS(u_t_u64, u_t_i16)
+  assert_LOSSLESS(u_t_u64, u_t_u8)
+  assert_LOSSLESS(u_t_u64, u_t_i8)
+  assert_LOSSY   (u_t_u64, u_t_f32)
+  assert_LOSSY   (u_t_u64, u_t_f64)
+
+  // i64
+  assert_LOSSLESS(u_t_i64, u_t_uint)
+  if (uintz == 64) {
+    assert_LOSSY(u_t_i64, u_t_int)
+  } else {
+    assert_LOSSLESS(u_t_i64, u_t_int)
+  }
+  assert_LOSSY   (u_t_i64, u_t_u64)
+  assert_LOSSLESS(u_t_i64, u_t_u32)
+  assert_LOSSLESS(u_t_i64, u_t_i32)
+  assert_LOSSLESS(u_t_i64, u_t_u16)
+  assert_LOSSLESS(u_t_i64, u_t_i16)
+  assert_LOSSLESS(u_t_i64, u_t_u8)
+  assert_LOSSLESS(u_t_i64, u_t_i8)
+  assert_LOSSY   (u_t_i64, u_t_f32)
+  assert_LOSSY   (u_t_i64, u_t_f64)
+
+  // u32
+  if (uintz == 64) {
+    assert_LOSSY(u_t_u32, u_t_uint)
+    assert_LOSSY(u_t_u32, u_t_int)
+  } else {
+    assert_LOSSLESS(u_t_u32, u_t_uint)
+    assert_LOSSLESS(u_t_u32, u_t_int)
+  }
+  assert_LOSSY   (u_t_u32, u_t_u64)
+  assert_LOSSY   (u_t_u32, u_t_i64)
+  assert_LOSSLESS(u_t_u32, u_t_i32)
+  assert_LOSSLESS(u_t_u32, u_t_u16)
+  assert_LOSSLESS(u_t_u32, u_t_i16)
+  assert_LOSSLESS(u_t_u32, u_t_u8)
+  assert_LOSSLESS(u_t_u32, u_t_i8)
+  assert_LOSSY   (u_t_u32, u_t_f32)
+  assert_LOSSY   (u_t_u32, u_t_f64)
+
+  // i32
+  assert_LOSSY   (u_t_i32, u_t_uint)
+  if (uintz == 64) {
+    assert_LOSSY(u_t_i32, u_t_int)
+  } else {
+    assert_LOSSLESS(u_t_i32, u_t_int)
+  }
+  assert_LOSSY   (u_t_i32, u_t_u64)
+  assert_LOSSY   (u_t_i32, u_t_i64)
+  assert_LOSSY   (u_t_i32, u_t_u32)
+  assert_LOSSLESS(u_t_i32, u_t_u16)
+  assert_LOSSLESS(u_t_i32, u_t_i16)
+  assert_LOSSLESS(u_t_i32, u_t_u8)
+  assert_LOSSLESS(u_t_i32, u_t_i8)
+  assert_LOSSY   (u_t_i32, u_t_f32)
+  assert_LOSSY   (u_t_i32, u_t_f64)
+
+  // u16
+  assert_LOSSY   (u_t_u16, u_t_uint)
+  assert_LOSSY   (u_t_u16, u_t_int)
+  assert_LOSSY   (u_t_u16, u_t_u64)
+  assert_LOSSY   (u_t_u16, u_t_i64)
+  assert_LOSSY   (u_t_u16, u_t_u32)
+  assert_LOSSY   (u_t_u16, u_t_i32)
+  assert_LOSSLESS(u_t_u16, u_t_i16)
+  assert_LOSSLESS(u_t_u16, u_t_u8)
+  assert_LOSSLESS(u_t_u16, u_t_i8)
+  assert_LOSSY   (u_t_u16, u_t_f32)
+  assert_LOSSY   (u_t_u16, u_t_f64)
+
+  // i16
+  assert_LOSSY   (u_t_i16, u_t_uint)
+  assert_LOSSY   (u_t_i16, u_t_int)
+  assert_LOSSY   (u_t_i16, u_t_u64)
+  assert_LOSSY   (u_t_i16, u_t_i64)
+  assert_LOSSY   (u_t_i16, u_t_u32)
+  assert_LOSSY   (u_t_i16, u_t_i32)
+  assert_LOSSY   (u_t_i16, u_t_u16)
+  assert_LOSSLESS(u_t_i16, u_t_u8)
+  assert_LOSSLESS(u_t_i16, u_t_i8)
+  assert_LOSSY   (u_t_i16, u_t_f32)
+  assert_LOSSY   (u_t_i16, u_t_f64)
+
+  // u8
+  assert_LOSSY   (u_t_u8, u_t_uint)
+  assert_LOSSY   (u_t_u8, u_t_int)
+  assert_LOSSY   (u_t_u8, u_t_u64)
+  assert_LOSSY   (u_t_u8, u_t_i64)
+  assert_LOSSY   (u_t_u8, u_t_u32)
+  assert_LOSSY   (u_t_u8, u_t_i32)
+  assert_LOSSY   (u_t_u8, u_t_u16)
+  assert_LOSSY   (u_t_u8, u_t_i16)
+  assert_LOSSLESS(u_t_u8, u_t_i8)
+  assert_LOSSY   (u_t_u8, u_t_f32)
+  assert_LOSSY   (u_t_u8, u_t_f64)
+
+  // i8
+  assert_LOSSY   (u_t_i8, u_t_uint)
+  assert_LOSSY   (u_t_i8, u_t_int)
+  assert_LOSSY   (u_t_i8, u_t_u64)
+  assert_LOSSY   (u_t_i8, u_t_i64)
+  assert_LOSSY   (u_t_i8, u_t_u32)
+  assert_LOSSY   (u_t_i8, u_t_i32)
+  assert_LOSSY   (u_t_i8, u_t_u16)
+  assert_LOSSY   (u_t_i8, u_t_i16)
+  assert_LOSSY   (u_t_i8, u_t_u8)
+  assert_LOSSY   (u_t_i8, u_t_f32)
+  assert_LOSSY   (u_t_i8, u_t_f64)
+
+  // f64
+  if (uintz <= 32) {
+    assert_LOSSLESS(u_t_f64, u_t_uint)
+    assert_LOSSLESS(u_t_f64, u_t_int)
+  } else {
+    assert_LOSSY   (u_t_f64, u_t_uint)
+    assert_LOSSY   (u_t_f64, u_t_int)
+  }
+  assert_LOSSY   (u_t_f64, u_t_u64)
+  assert_LOSSY   (u_t_f64, u_t_i64)
+  assert_LOSSLESS(u_t_f64, u_t_u32)
+  assert_LOSSLESS(u_t_f64, u_t_i32)
+  assert_LOSSLESS(u_t_f64, u_t_u16)
+  assert_LOSSLESS(u_t_f64, u_t_i16)
+  assert_LOSSLESS(u_t_f64, u_t_u8)
+  assert_LOSSLESS(u_t_f64, u_t_i8)
+  assert_LOSSLESS(u_t_f64, u_t_f32)
+
+  // f32
+  assert_LOSSY   (u_t_f32, u_t_uint)
+  assert_LOSSY   (u_t_f32, u_t_int)
+  assert_LOSSY   (u_t_f32, u_t_u64)
+  assert_LOSSY   (u_t_f32, u_t_i64)
+  assert_LOSSY   (u_t_f32, u_t_u32)
+  assert_LOSSY   (u_t_f32, u_t_i32)
+  assert_LOSSLESS(u_t_f32, u_t_u16)
+  assert_LOSSLESS(u_t_f32, u_t_i16)
+  assert_LOSSLESS(u_t_f32, u_t_u8)
+  assert_LOSSLESS(u_t_f32, u_t_i8)
+  assert_LOSSY   (u_t_f32, u_t_f64)
+})
 
 
 // ————————————————————————————————————————————————————————————————
@@ -378,7 +775,7 @@ function floatLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
 function charLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
 ) :IntrinsicType {
   // TODO reqt
-  return u_t_char
+  return u_t_u32
 }
 
 const basicLitTypesFitters = new Map<token,basicLitTypeFitter>([

@@ -98,7 +98,7 @@ const keywordsJS = genBTree(cdat, new Map([
   ["switch",  "token.SWITCH"],
   ["symbol",  "token.SYMBOL"],
   ["type",  "token.TYPE"],
-  ["var",   "token.VAR"],
+  // ["var",   "token.VAR"],
 ]))
 
 console.log(

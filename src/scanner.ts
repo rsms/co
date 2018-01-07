@@ -2,15 +2,10 @@ import { AppendBuffer, bufcmp, str8buf } from './util'
 import { Pos, Position, SrcFile } from './pos'
 import * as utf8 from './utf8'
 import * as unicode from './unicode'
+import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { token, lookupKeyword, prec } from './token'
 import * as Path from 'path'
 
-// An ErrorHandler may be provided to Scanner.init. If a syntax error is
-// encountered and a handler was installed, the handler is called with a
-// position and an error message. The position points to the beginning of
-// the offending token.
-//
-export type ErrorHandler = (pos :Position, msg :string, typ :string) => void
 
 export enum Mode {
   None = 0,
@@ -32,7 +27,7 @@ enum istrOne { OFF, WAIT, CONT }
 // A Scanner holds the scanner's internal state while processing a given text.
 // It must be initialized via init before use or resue.
 //
-export class Scanner {
+export class Scanner extends ErrorReporter {
   // immutable state (only changed by init())
   // Note: `undefined as any as X` is a workaround for a TypeScript issue
   // where members are otherwise not initialized at construction which causes
@@ -40,7 +35,6 @@ export class Scanner {
   public sfile :SrcFile = undefined as any as SrcFile // source file handle
   public sdata :Uint8Array = undefined as any as Uint8Array // source data
   public dir   :string = ''   // directory portion of file.name
-  public errh  :ErrorHandler|null = null // error reporting
   public mode  :Mode = 0         // scanning mode
 
   // scanning state
@@ -69,6 +63,10 @@ export class Scanner {
   // public state - ok to modify
   public errorCount :int = 0 // number of errors encountered
 
+  constructor() {
+    super('E_SYNTAX')
+  }
+
   // Init prepares the scanner s to tokenize the text sdata by setting the
   // scanner at the beginning of sdata. The scanner uses the file set file
   // for position information and it adds line information for each line.
@@ -84,7 +82,12 @@ export class Scanner {
   // Note that Init may call errh if there is an error in the first character
   // of the file.
   //
-  init(sfile :SrcFile, sdata :Uint8Array, errh? :ErrorHandler|null, m :Mode =Mode.None) {
+  init(
+    sfile :SrcFile,
+    sdata :Uint8Array,
+    errh? :ErrorHandler|null,
+    mode  :Mode =Mode.None,
+  ) {
     const s = this
     // Explicitly initialize all fields since a scanner may be reused
     if (sfile.size != sdata.length) {
@@ -97,7 +100,7 @@ export class Scanner {
     s.dir = Path.dirname(sfile.name)
     s.sdata = sdata
     s.errh = errh || null
-    s.mode = m
+    s.mode = mode
   
     s.ch = 0x20 /*' '*/
     s.tok = token.EOF
@@ -201,22 +204,14 @@ export class Scanner {
 
   // Increment errorCount and call any error handler
   //
-  error(msg :string, p :Pos = this.pos, typ? :string) {
+  error(msg :string, pos :Pos = this.pos, code? :ErrorCode) {
     const s = this
-    s.errorAt(s.sfile.position(p), msg, typ)
+    s.errorAt(msg, s.sfile.position(pos), code)
   }
 
-  errorAtOffs(msg :string, offs :int, typ? :string) {
+  errorAtOffs(msg :string, offs :int, code? :ErrorCode) {
     const s = this
-    s.errorAt(s.sfile.position(s.sfile.pos(offs)), msg, typ)
-  }
-
-  errorAt(position :Position, msg :string, typ :string = 'E_SYNTAX') {
-    const s = this
-    if (s.errh) {
-      s.errh(position, msg, typ)
-    }
-    s.errorCount++
+    s.errorAt(msg, s.sfile.position(s.sfile.pos(offs)), code)
   }
 
   // Scan the next token

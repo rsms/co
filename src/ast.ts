@@ -1,6 +1,7 @@
 import { Pos, SrcFile } from './pos'
 import { ByteStr } from './bytestr'
 import { token } from './token'
+import * as utf8 from './utf8'
 
 let nextgid = 0; export class Group { id = nextgid++ } // DEBUG
 // export class Group {}
@@ -18,6 +19,10 @@ export class Node {
     public scope :Scope,
     // public comments? :Comment[],
   ) {}
+
+  toString() :string {
+    return this.constructor.name
+  }
 }
 
 // Ident Type
@@ -39,8 +44,28 @@ export class Field extends Node {
 // An Ent describes a named language entity such as a package,
 // constant, type, variable, function (incl. methods), or label.
 //
+// VARIABLES
+//
+//   decl
+//    | value
+//    ↓   ↓
+//    x = 0 ; x¹ = 3 ; print(x²)
+//            ↑              ↑
+//         writes++       reads.add(x²)
+//
+//
+// FUNCTIONS
+//
+//    fun a() { ... };  a¹()
+//    ~~~~~~~~~~~~~~~   ↑
+//           ↑       reads.add(x²)
+//      decl==value
+//
+//
 export class Ent {
-  nstores :int = 0  // tracks number of Nth stores. 0 == constant
+  writes :int = 0          // Tracks stores. None == constant
+  reads = new Set<Ident>() // Tracks references to this ent. None == unused
+    // writes and reads does NOT include the definition/declaration itself.
 
   constructor(
     public name  :ByteStr,
@@ -48,6 +73,10 @@ export class Ent {
     public value :Expr|null,
     public data  :any = null,
   ) {}
+
+  get isConstant() :bool {
+    return this.writes == 0
+  }
 
   get scope() :Scope {
     return this.decl.scope
@@ -60,6 +89,7 @@ export class Scope {
   constructor(
   public outer :Scope | null,
   public decls :Map<ByteStr,Ent> | null = null,
+  public isFunScope :bool = false, // if the scope is that of a function
   ) {}
 
   // lookup a declaration in this scope and any outer scopes
@@ -253,7 +283,7 @@ export class DeclStmt extends SimpleStmt {
 // Expressions
 
 export class Expr extends Node {
-  type :Expr|null = null
+  type :Type|null = null
 }
 
 // Placeholder for an expression that failed to parse
@@ -312,6 +342,10 @@ export class BasicLit extends LiteralExpr {
   ) {
     super(pos, scope)
   }
+
+  toString() :string {
+    return utf8.decodeToString(this.value)
+  }
 }
 
 export class StringLit extends LiteralExpr {
@@ -319,6 +353,10 @@ export class StringLit extends LiteralExpr {
     public value :Uint8Array
   ) {
     super(pos, scope)
+  }
+
+  toString() :string {
+    return JSON.stringify(utf8.decodeToString(this.value))
   }
 }
 
@@ -388,7 +426,7 @@ export class IntrinsicVal extends Expr {
 }
 
 
-export class TypeConversionExpr extends Expr {
+export class TypeConvExpr extends Expr {
   constructor(pos :Pos, scope :Scope,
     public expr :Expr,
     public type :Type,
@@ -425,6 +463,10 @@ export class RestType extends Type {
     super(pos, scope)
     this.type = type
   }
+
+  toString() :string {
+    return `...${this.type}`
+  }
 }
 
 export class IntrinsicType extends Type {
@@ -433,6 +475,10 @@ export class IntrinsicType extends Type {
     public name    :string, // only used for debugging and printing
   ) {
     super(0, nilScope)
+  }
+
+  toString() :string {
+    return this.name
   }
 }
 
@@ -443,6 +489,10 @@ export class ConstStringType extends IntrinsicType {
   ) {
     super(bitsize, 'str')
   }
+
+  toString() :string {
+    return `str[${this.length}]`
+  }
 }
 
 export class TupleType extends Type {
@@ -451,6 +501,10 @@ export class TupleType extends Type {
   public types :Type[],
   ) {
     super(pos, scope)
+  }
+
+  toString() :string {
+    return '(' + this.types.map(t => t.toString()).join(', ') + ')'
   }
 }
 
@@ -474,13 +528,15 @@ export class File {
   constructor(
     public sfile      :SrcFile,
     public scope      :Scope,
-    public imports    :ImportDecl[] | null, // imports in this file
-    public decls      :Decl[],              // top-level declarations
-    public unresolved :Set<Ident>,          // unresolved identifiers
+    public imports    :ImportDecl[] | null,  // imports in this file
+    public decls      :Decl[],               // top-level declarations
+    public unresolved :Set<Ident> | null,    // unresolved references
   ) {}
 }
 
 export class Package {
+  files :File[] = []
+
   constructor(
     public name :string,
     public scope :Scope,

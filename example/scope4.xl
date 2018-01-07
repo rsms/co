@@ -2,9 +2,8 @@
 //  scope1 is package
 //  scope2 is file (imports)
 
-a = 0  // define const scope1/a  -- only consts at file/package level
-var v0 int
-bob float
+a i64 = 0  // define const scope1/a  -- only consts at file/package level
+bob f32
 
 fun init {
   a = 1
@@ -22,7 +21,7 @@ fun f0(x int) {  // scope3; define c|v scope1/x
     b = 5 // store scope3/b
   }
 
-  // b := true // redeclare b, shadow other b
+  d = c
 }
 
 fun print(_) {} // define fun scope1/print
