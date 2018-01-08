@@ -1,0 +1,44 @@
+fun ok0 {
+  return
+}
+
+fun ok1 int {
+  return 3
+}
+
+fun ok2 int {
+  x = 3
+  return x
+}
+
+fun ok3 int {
+  x = 0; x = 3
+  return x
+}
+
+fun ok4 int {
+  x = 0; x = 3
+  return x
+}
+
+fun err0() int {
+  x = 12.3; x = 4.5
+  return x // error: cannot use "x" (type f64) as return type int
+}
+
+fun err1() int {
+  x = 12.3
+  return x // error: constant x truncated to int
+}
+
+fun err2() int {
+  return 12.3 // error: constant 12.3 truncated to int
+}
+
+fun err3() {
+  return 12.3 // error: function does not return a value
+}
+
+fun err4() int {
+  return // error: missing return value
+}

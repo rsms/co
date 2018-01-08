@@ -9,6 +9,8 @@ fun init {
   a = 1
 }
 
+fun foo() f32 -> 1.23
+
 fun f0(x int) {  // scope3; define c|v scope1/x
   print(a)
   print(c)
@@ -22,6 +24,12 @@ fun f0(x int) {  // scope3; define c|v scope1/x
   }
 
   d = c
+
+  foores = foo()
+}
+
+fun ok4() (int, f64) {
+  return 3, 4.5
 }
 
 fun print(_) {} // define fun scope1/print

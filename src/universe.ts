@@ -2,6 +2,7 @@ import { ByteStr, ByteStrSet } from './bytestr'
 import { str8buf, buf8str, bufcmp } from './util'
 import { token, tokstr } from './token'
 import { Pos } from './pos'
+import { TypeSet } from './typeset'
 import {
   Scope,
   Ent,
@@ -798,11 +799,13 @@ export const
 
 
 export class Universe {
-  readonly strSet :ByteStrSet
-  readonly scope  :Scope
+  readonly strSet  :ByteStrSet
+  readonly typeSet :TypeSet
+  readonly scope   :Scope
 
-  constructor(strSet :ByteStrSet) {
+  constructor(strSet :ByteStrSet, typeSet :TypeSet) {
     this.strSet = strSet
+    this.typeSet = typeSet
 
     // build scope
     const unidecls = new Map<ByteStr,Ent>()
@@ -843,6 +846,24 @@ export class Universe {
     let f = basicLitTypesFitters.get(x.tok) as basicLitTypeFitter
     assert(f, `missing type fitter for ${tokstr(x.tok)}`)
     return f(x, reqType || null, errh)
+  }
+
+  // internType potentially returns an equivalent type (t1.equals(t2) == true)
+  // if previously seen. Otherwise it registers t for future calls to this
+  // function and returns t as-is. Populates typeSet.
+  //
+  // The trade-offs are as follows:
+  //
+  //  [-] slower to parse files with many different types because of
+  //      intern-miss overhead.
+  //
+  //  [+] faster to parse files with few types that are used many times
+  //      (common case), since type equality testing is cheap for correct code.
+  //
+  //  [+] uses less memory (fewer resident Type instances).
+  //
+  internType(t :Type) :Type {
+    return this.typeSet.intern(t)
   }
 
 }

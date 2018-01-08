@@ -3,6 +3,7 @@ import { SrcFileSet, Pos } from './pos'
 import { ErrorCode, ErrorHandler, ErrorReporter } from './error'
 import * as utf8 from './utf8'
 import { debuglog } from './util'
+import { TypeResolver } from './resolve'
 import { File, Package, Ent, ImportDecl, UnresolvedType } from './ast'
 
 
@@ -31,6 +32,7 @@ class pkgBinder extends ErrorReporter {
     public pkg      :Package,
     public fset     :SrcFileSet,
     public importer :Importer|null,
+    public types    :TypeResolver,
     errh            :ErrorHandler|null,
   ) {
     super('E_RESOLVE', errh)
@@ -38,24 +40,34 @@ class pkgBinder extends ErrorReporter {
 
   bind() :Promise<void> {
     const b = this
+    //
+    // binding happens in three steps:
+    //
+    // 1. imports are resolved
+    // 2. identifiers are resolved in all files (and across the package)
+    // 3. types are resolved across the package
+    //
 
-    // complete file scopes with imports and resolve identifiers
+    // step 1: complete file scopes with imports
     return Promise.all(
-      b.pkg.files.map(f => this.resolveImports(f))
+      b.pkg.files.map(f => this._bind1(f))
     ).then(() => {
-      // stop if any imports failed
       if (b.errorCount > 0) {
-        return
+        return  // stop when imports failed
       }
 
-      // resolve identifiers in files
+      // step 2: resolve identifiers
       for (let f of b.pkg.files) {
-        b.resolve(f)
+        b._bind2(f)
       }
+
+      // step 3: resolve types
+      b._bind3()
     })
   }
 
-  resolveImports(f :File) :Promise<void> {
+  _bind1(f :File) :Promise<void> {
+    // step 1: complete file scopes with imports
     const b = this
 
     if (!f.imports || f.imports.length == 0) {
@@ -101,7 +113,8 @@ class pkgBinder extends ErrorReporter {
     }
   }
 
-  resolve(f :File) {
+  _bind2(f :File) {
+    // step 2: resolve identifiers
     const b = this
 
     if (f.unresolved) for (let id of f.unresolved) {
@@ -116,11 +129,44 @@ class pkgBinder extends ErrorReporter {
 
       debuglog(`${id}`, ent.value && ent.value.constructor.name)
 
-      id.ent = ent
-      ent.reads.add(id) // register "read reference"
+      id.refEnt(ent) // reference ent
 
-      if (id.type instanceof UnresolvedType && ent.value) {
-        id.type = ent.value.type
+      let t = id.type
+      if (t instanceof UnresolvedType && ent.value) {
+        id.type = b.types.resolve(ent.value)
+        assert(!(id.type instanceof UnresolvedType), 'TODO still unresolved')
+        
+        // delegate type to any expressions that reference this type
+        if (t.refs) for (let ref of t.refs) {
+          ref.type = id.type
+        }
+      }
+    }
+  }
+
+  _bind3() {
+    // step 3: resolve types
+    const b = this
+
+    for (let ut of b.types.unresolved) {
+      const t = ut.expr.type
+
+      if (!(t instanceof UnresolvedType)) {
+        // was probably resolved during step 2
+        continue
+      }
+  
+      // attempt to resolve the type now that we can see the entire package
+      const restyp = b.types.resolve(ut.expr)
+      if (restyp instanceof UnresolvedType) {
+        b.error(`undefined type ${ut.expr}`, ut.expr.pos)
+      } else {
+        // succeeded in resolving the type.
+        // delegate type to any expressions that reference this type.
+        if (t.refs) for (let ref of t.refs) {
+          console.log(`ref[1] ${ref}`) // TODO: test this scenario
+          ref.type = restyp
+        }
       }
     }
   }
@@ -139,11 +185,12 @@ class pkgBinder extends ErrorReporter {
 // Returns false if there were errors
 //
 export function bindpkg(
-  pkg :Package,
-  fset :SrcFileSet,
+  pkg      :Package,
+  fset     :SrcFileSet,
   importer :Importer|null,
-  errh :ErrorHandler,
+  typeres  :TypeResolver,
+  errh     :ErrorHandler,
 ) :Promise<bool> {
-  const b = new pkgBinder(pkg, fset, importer, errh)
+  const b = new pkgBinder(pkg, fset, importer, typeres, errh)
   return b.bind().then(() => b.errorCount != 0)
 }

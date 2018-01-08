@@ -297,6 +297,10 @@ export class TupleExpr extends Expr {
   ) {
     super(pos, scope)
   }
+
+  toString() {
+    return `(${this.exprs.map(x => x.toString()).join(', ')})`
+  }
 }
 
 export class SelectorExpr extends Expr {
@@ -322,6 +326,24 @@ export class Ident extends Expr {
   }
 
   toString() { return String(this.value) }
+
+  // ref registers a reference to this ent from an identifier
+  //
+  refEnt(ent :Ent) {
+    assert(this !== ent.decl, "ref declaration")
+    ent.reads.add(this)
+    this.ent = ent
+  }
+
+  // ref unregisters a reference to this ent from an identifier
+  //
+  unrefEnt() {
+    assert(this.ent, "null ent")
+    const ent = this.ent as Ent
+    const _ok = ent.reads.delete(this)
+    assert(_ok, "ent not referenced")
+    this.ent = null
+  }
 }
 
 export class RestExpr extends Expr {
@@ -374,7 +396,7 @@ export class CallExpr extends Expr {
   // Fun(ArgList[0], ArgList[1], ...)
   constructor(pos :Pos, scope :Scope,
   public fun     :Expr,
-  public argList :Expr[],
+  public args    :Expr[],
   public hasDots :bool,  // last argument is followed by ...
   ) {
     super(pos, scope)
@@ -441,17 +463,82 @@ export class TypeConvExpr extends Expr {
 
 export class Type extends Expr {
   ent :Ent|null = null
+
   constructor(pos :Pos, scope :Scope) {
     super(pos, scope)
     this.type = this
   }
+
+  equals(other :Type) :bool {
+    return this === other
+  }
 }
 
 export class UnresolvedType extends Type {
+  refs :Expr[]|null = null  // things that references this type
+
   constructor(pos :Pos, scope :Scope,
     public expr :Expr,
   ) {
     super(pos, scope)
+  }
+
+  addRef(x :Expr) {
+    if (!this.refs) {
+      this.refs = [x]
+    } else {
+      this.refs.push(x)
+    }
+  }
+
+  toString() {
+    return this.expr.toString()
+  }
+}
+
+export class IntrinsicType extends Type {
+  constructor(
+    public bitsize :int,
+    public name    :string, // only used for debugging and printing
+  ) {
+    super(0, nilScope)
+  }
+
+  toString() :string {
+    return this.name
+  }
+
+  equals(other :Type) :bool {
+    return (
+      this === other ||
+      (other instanceof ConstStringType && this.name == 'string')
+    )
+  }
+}
+
+export class ConstStringType extends IntrinsicType {
+  constructor(
+    public bitsize :int,
+    public length :int,
+  ) {
+    super(bitsize, 'str')
+  }
+
+  toString() :string {
+    return `str[${this.length}]`
+  }
+
+  equals(other :Type) :bool {
+    return (
+      this === other ||
+      ( other instanceof ConstStringType &&
+        this.bitsize == other.bitsize &&
+        this.length == other.length
+      ) ||
+      ( other instanceof IntrinsicType &&
+        other.name == 'string'
+      )
+    )
   }
 }
 
@@ -467,31 +554,12 @@ export class RestType extends Type {
   toString() :string {
     return `...${this.type}`
   }
-}
 
-export class IntrinsicType extends Type {
-  constructor(
-    public bitsize :int,
-    public name    :string, // only used for debugging and printing
-  ) {
-    super(0, nilScope)
-  }
-
-  toString() :string {
-    return this.name
-  }
-}
-
-export class ConstStringType extends IntrinsicType {
-  constructor(
-    public bitsize :int,
-    public length :int,
-  ) {
-    super(bitsize, 'str')
-  }
-
-  toString() :string {
-    return `str[${this.length}]`
+  equals(other :Type) :bool {
+    return (
+      this === other ||
+      other instanceof RestType && this.type.equals(other.type)
+    )
   }
 }
 
@@ -506,6 +574,16 @@ export class TupleType extends Type {
   toString() :string {
     return '(' + this.types.map(t => t.toString()).join(', ') + ')'
   }
+
+  equals(other :Type) :bool {
+    return (
+      this === other ||
+      ( other instanceof TupleType &&
+        this.types.length == other.types.length &&
+        this.types.every((t, i) => t.equals(other.types[i]))
+      )
+    )
+  }
 }
 
 export class FunType extends Type {
@@ -515,6 +593,17 @@ export class FunType extends Type {
   public output :Type,
   ) {
     super(pos, scope)
+  }
+
+  equals(other :Type) :bool {
+    return (
+      this === other ||
+      ( other instanceof FunType &&
+        this.output.equals(other.output) &&
+        this.inputs.length == other.inputs.length &&
+        this.inputs.every((t, i) => t.equals(other.inputs[i]))
+      )
+    )
   }
 }
 

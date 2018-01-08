@@ -1,5 +1,5 @@
-import { SrcFile, Pos, NoPos } from './pos'
-import { u_t_auto, TypeCompat, basicTypeCompat } from './universe'
+import { SrcFileSet, Pos, NoPos } from './pos'
+import { u_t_auto, TypeCompat, basicTypeCompat, Universe } from './universe'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { debuglog } from './util'
 import {
@@ -11,6 +11,7 @@ import {
   TupleExpr,
   SelectorExpr,
   TypeConvExpr,
+  CallExpr,
   Type,
   IntrinsicType,
   UnresolvedType,
@@ -21,21 +22,26 @@ import {
 
 
 export class TypeResolver extends ErrorReporter {
-  sfile :SrcFile
+  fset       :SrcFileSet
+  universe   :Universe
+  unresolved :Set<UnresolvedType>
 
   constructor() {
     super('E_RESOLVE')
   }
 
-  init(sfile :SrcFile, errh :ErrorHandler|null) {
+  init(fset :SrcFileSet, universe :Universe, errh :ErrorHandler|null) {
+    // note: normally initialized per package (not per file)
     const r = this
-    r.sfile = sfile
     r.errh = errh
+    r.fset = fset
+    r.universe = universe
+    r.unresolved = new Set<UnresolvedType>()
   }
 
   error(msg :string, pos :Pos = NoPos, typ? :ErrorCode) {
     const r = this
-    r.errorAt(msg, r.sfile.position(pos), typ)
+    r.errorAt(msg, r.fset.position(pos), typ)
   }
 
   // resolve attempts to resolve or infer the type of n.
@@ -47,15 +53,19 @@ export class TypeResolver extends ErrorReporter {
       return n
     }
 
-    if ((n as any).type instanceof Type) {
-      return (n as any).type
+    if (n.type instanceof Type && n.type.constructor !== UnresolvedType) {
+      return n.type
     }
 
     const r = this
     let t = r.maybeResolve(n)
 
     if (!t) {
-      t = r.unresolved(n)
+      if (n.type) {
+        return n.type
+      }
+
+      t = r.markUnresolved(n)
 
       // error failing to resolve field of known type
       if (
@@ -85,7 +95,7 @@ export class TypeResolver extends ErrorReporter {
       return n
     }
 
-    if (n.type) {
+    if (n.type && n.type.constructor !== UnresolvedType) {
       return r.resolve(n.type)
     }
 
@@ -104,12 +114,12 @@ export class TypeResolver extends ErrorReporter {
 
     if (n instanceof FunDecl) {
       const s = n.sig
-      return new FunType(
+      return r.universe.internType(new FunType(
         s.pos,
         s.scope,
         s.params.map(field => r.resolve(field.type)),
         r.resolve(s.result),
-      )
+      ))
     }
 
     if (n instanceof TupleExpr) {
@@ -121,23 +131,36 @@ export class TypeResolver extends ErrorReporter {
         }
         types.push(t)
       }
-      return new TupleType(n.pos, n.scope, types)
+      return r.universe.internType(new TupleType(n.pos, n.scope, types))
     }
 
     if (n instanceof RestExpr) {
       let t = n.expr && r.resolve(n.expr) || u_t_auto
-      return new RestType(n.pos, n.scope, t)
+      return r.universe.internType(new RestType(n.pos, n.scope, t))
     }
 
+    if (n instanceof CallExpr) {
+      const funtype = r.resolve(n.fun)
+      for (let arg of n.args) {
+        r.resolve(arg)
+      }
+      if (funtype instanceof FunType) {
+        return funtype.output
+      }
+      return null  // unknown
+    }
+
+    debuglog(`TODO handle ${n.constructor.name}`)
     return null  // unknown type
   }
 
   // registerUnresolved registers expr as having an unresolved type.
   // Does NOT set expr.type but instead returns an UnresolvedType object.
   //
-  unresolved(expr :Expr) :UnresolvedType {
+  markUnresolved(expr :Expr) :UnresolvedType {
     const t = new UnresolvedType(expr.pos, expr.scope, expr)
     debuglog(`expr ${expr}`)
+    this.unresolved.add(t)
     return t
   }
 
@@ -160,7 +183,7 @@ export class TypeResolver extends ErrorReporter {
   convert(t :Type, x :Expr) :Expr|null {
     const xt = this.resolve(x)
 
-    if (xt === t) {
+    if (xt.equals(t)) {
       return x
     }
 
@@ -174,6 +197,9 @@ export class TypeResolver extends ErrorReporter {
         case TypeCompat.NO: break
         case TypeCompat.LOSSY: {
           this.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV')
+          // TODO: ^ use diag instead with DiagKind.ERROR as the default, so
+          // that user code can override this error into a warning instead, as
+          // it's still valid to perform a lossy conversion.
           return new TypeConvExpr(x.pos, x.scope, x, t)
         }
         case TypeCompat.LOSSLESS: {
@@ -185,13 +211,6 @@ export class TypeResolver extends ErrorReporter {
     // TODO: figure out a scalable type conversion system
     // TODO: conversion of other types
 
-    this.error(
-      (xt instanceof UnresolvedType ?
-        `cannot convert "${x}" to type ${t}` :
-        `cannot convert "${x}" (type ${xt}) to type ${t}`
-      ),
-      x.pos
-    )
     return null
   }
 

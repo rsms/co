@@ -4,9 +4,16 @@ import * as scanner from './scanner'
 import { Position, SrcFileSet } from './pos'
 import * as fs from 'fs'
 import { ByteStrSet } from './bytestr'
+import { TypeSet } from './typeset'
 import { astRepr } from './ast-repr'
-import { Package, Scope, Ent, File } from './ast'
+import { Package, Scope, Ent } from './ast'
 import { Universe } from './universe'
+import { TypeResolver } from './resolve'
+import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
+
+
+const reprOptions = {colors:stdoutSupportsStyle}
+
 
 interface ParseResults {
   pkg     :Package
@@ -18,18 +25,22 @@ function parsePkg(
   sources  :string[],
   universe :Universe,
   parser   :Parser,
+  typeres  :TypeResolver,
 ) :Promise<ParseResults> {
 
   const pkg = new Package(name, new Scope(universe.scope))
   const sfileSet = new SrcFileSet()
 
   const errh = (p :Position, msg :string, typ :string) => {
-    console.error(`${p}: ${msg} (${typ})`)
+    console.error(stdoutStyle.red(`${p}: ${msg} (${typ})`))
   }
 
   const diagh = (p :Position, msg :string, k :DiagKind) => {
-    console.log(`[diag] ${p}: ${msg} (${DiagKind[k]})`)
+    const m = `[diag] ${p}: ${msg} (${DiagKind[k]})`
+    console.log(k == DiagKind.INFO ? stdoutStyle.cyan(m) : stdoutStyle.lightyellow(m))
   }
+
+  typeres.init(sfileSet, universe, errh)
 
   for (let filename of sources) {
     console.log(
@@ -44,6 +55,7 @@ function parsePkg(
       sdata,
       universe,
       pkg.scope,
+      typeres,
       errh,
       diagh,
       scanner.Mode.ScanComments
@@ -55,24 +67,24 @@ function parsePkg(
     if (file.imports) {
       console.log(`${file.imports.length} imports`)
       for (let imp of file.imports) {
-        console.log(astRepr(imp))
+        console.log(astRepr(imp, reprOptions))
       }
     }
 
     if (file.unresolved) {
       console.log(`${file.unresolved.size} unresolved references`)
       for (let ident of file.unresolved) {
-        console.log(' - ' + astRepr(ident))
+        console.log(' - ' + astRepr(ident, reprOptions))
       }
     }
 
     console.log(`${file.decls.length} declarations`)
     for (let decl of file.decls) {
-      console.log(astRepr(decl))
+      console.log(astRepr(decl, reprOptions))
     }
   }
 
-  if (parser.errorCount != 90) { // XXX DEBUG 90 => 0
+  if (parser.errorCount != 0) {
     return Promise.resolve({ pkg, success: false })
   }
 
@@ -85,17 +97,19 @@ function parsePkg(
     return Promise.reject(new Error(`not found`))
   }
 
-  return bindpkg(pkg, sfileSet, importer, errh)
+  return bindpkg(pkg, sfileSet, importer, typeres, errh)
     .then(hasErrors => ( { pkg, success: !hasErrors } ))
 }
 
 
 function main() {
-  const parser = new Parser()
   const strSet = new ByteStrSet()
-  const universe = new Universe(strSet)
+  const typeSet = new TypeSet()
+  const universe = new Universe(strSet, typeSet)
+  const typeres = new TypeResolver()
+  const parser = new Parser()
 
-  parsePkg("example", ['example/scope4.xl'], universe, parser).then(r => {
+  parsePkg("example", ['example/scope4.xl'], universe, parser, typeres).then(r => {
     if (!r.success) {
       return
     }
@@ -107,7 +121,7 @@ function main() {
         `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
       console.log('--------------------------------------------------------')
       for (let decl of file.decls) {
-        console.log(astRepr(decl))
+        console.log(astRepr(decl, reprOptions))
       }
     }
 

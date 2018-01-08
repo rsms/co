@@ -10,7 +10,7 @@ import {
   u_t_auto,
   u_t_uint,
 } from './universe'
-import { debuglog } from './util'
+// import { debuglog } from './util'
 import {
   File,
   Scope,
@@ -44,7 +44,9 @@ import {
   BadExpr,
   SelectorExpr,
   Type,
+  FunType,
   ConstStringType,
+  UnresolvedType,
 } from './ast'
 
 // type of diagnostic
@@ -85,8 +87,8 @@ export class Parser extends scanner.Scanner {
   diagh      :DiagHandler|null = null
   initfnest  :int = 0  // tracks if we're inside an init function
   unresolved :Set<Ident>|null   // unresolved identifiers
-
-  types      :TypeResolver = new TypeResolver()
+  funstack   :FunDecl[]  // function stack for type checking
+  types      :TypeResolver
 
   _id__      :ByteStr
   _id_dot    :ByteStr
@@ -97,6 +99,7 @@ export class Parser extends scanner.Scanner {
     sdata    :Uint8Array,
     universe :Universe,
     pkgscope :Scope|null,
+    typeres  :TypeResolver,
     errh     :ErrorHandler|null = null,
     diagh    :DiagHandler|null = null,
     smode    :scanner.Mode = scanner.Mode.None
@@ -114,8 +117,8 @@ export class Parser extends scanner.Scanner {
     p.diagh = diagh
     p.initfnest = 0
     p.unresolved = null
-
-    p.types.init(sfile, errh)
+    p.funstack = []
+    p.types = typeres
 
     p._id__ = p.strSet.emplace(kBytes__)
     p._id_dot = p.strSet.emplace(kBytes_dot)
@@ -156,6 +159,20 @@ export class Parser extends scanner.Scanner {
       p.syntaxError(`expecting ${tokstr(tok)}`)
       p.next()
     }
+  }
+
+  currFun() :FunDecl {
+    assert(this.funstack.length > 0, 'access current function at file level')
+    return this.funstack[0]
+  }
+
+  pushFun(f :FunDecl) {
+    this.funstack.push(f)
+  }
+
+  popFun() :FunDecl {
+    assert(this.funstack.length > 0, 'popFun with empty funstack')
+    return (this.funstack as any).pop() as FunDecl
   }
 
   pushScope(scope :Scope | null = null) {
@@ -248,19 +265,7 @@ export class Parser extends scanner.Scanner {
       const ent = s.lookupImm(x.value)
       if (ent) {
         // debuglog(`${x} found in scope#${s.level()}`)
-        x.ent = ent
-        ent.reads.add(x) // register read reference
-
-        //
-        // TODO:
-        //
-        // - make sure we track (and untrack) reads everywhere where we
-        //   connect expr.ent = some-ent
-        //
-        // - in the binder, when a type is resolved, traverse all reads to
-        //   update their types.
-        //
-
+        x.refEnt(ent) // reference ent
         return x
       }
       s = s.outer
@@ -377,10 +382,6 @@ export class Parser extends scanner.Scanner {
     // { TopLevelDecl ";" }
     while (p.tok != token.EOF) {
       switch (p.tok) {
-        // case token.VAR:
-        //   p.next() // consume "var"
-        //   p.appendGroup(decls, p.varDeclExplicit)
-        //   break
 
         case token.TYPE:
           p.next() // consume "type"
@@ -413,14 +414,14 @@ export class Parser extends scanner.Scanner {
 
           p.error(`TODO file-level token \`${tokstr(p.tok)}\``); p.next()
 
-          p.advanceUntil(/*token.CONST, */token.TYPE, /*token.VAR,*/ token.FUN)
+          p.advanceUntil(/*token.CONST, */token.TYPE, token.FUN)
           continue
         }
       }
 
       if ((p.tok as token) != token.EOF && !p.got(token.SEMICOLON)) {
         p.syntaxError("after top level declaration")
-        p.advanceUntil(/*token.CONST, */token.TYPE, /*token.VAR,*/ token.FUN)
+        p.advanceUntil(/*token.CONST, */token.TYPE, token.FUN)
       }
     }
 
@@ -554,7 +555,9 @@ export class Parser extends scanner.Scanner {
     // parse body
     if (isInitFun || p.tok != token.SEMICOLON) {
       if (isInitFun) { p.initfnest++ }
+      p.pushFun(d)
       d.body = p.funBody(name)
+      p.popFun()
       if (isInitFun) { p.initfnest-- }
     }
 
@@ -614,7 +617,9 @@ export class Parser extends scanner.Scanner {
       p.declare(name.scope, name, d, d)
     }
 
+    p.pushFun(d)
     d.body = p.funBody(name)
+    p.popFun()
 
     p.popScope()
 
@@ -734,7 +739,7 @@ export class Parser extends scanner.Scanner {
   declStmt<D extends Decl>(f :(g:Group|null, i:int)=>D) :DeclStmt {
     const p = this
     const pos = p.pos
-    p.next() // TYPE, or VAR
+    p.next() // e.g. TYPE
     const decls :Decl[] = []
     p.appendGroup(decls, f)
     return new DeclStmt(pos, p.scope, decls)
@@ -821,10 +826,19 @@ export class Parser extends scanner.Scanner {
             // check & resolve type, converting RHS if needed
             id.type = id.ent.value.type
 
-            const origVal = s.rhs[i]
-            const convertedVal = p.types.convert(id.ent.value.type, origVal)
+            const val = s.rhs[i]
+            const typ = id.ent.value.type
+            const convertedVal = p.types.convert(typ, val)
 
-            if (convertedVal && convertedVal !== origVal) {
+            if (!convertedVal) {
+              p.error(
+                (val.type instanceof UnresolvedType ?
+                  `cannot convert "${val}" to type ${typ}` :
+                  `cannot convert "${val}" (type ${val.type}) to type ${typ}`
+                ),
+                val.pos
+              )
+            } else if (convertedVal !== val) {
               // no error and conversion is needed.
               // replace original expression with conversion expression
               s.rhs[i] = convertedVal
@@ -832,12 +846,14 @@ export class Parser extends scanner.Scanner {
 
           }
         } else {
-          // debuglog(`declare ${id}`)
           // since we are about to redeclare, clear any "unresolved" mark for
           // this identifier expression.
           if (p.unresolved) { p.unresolved.delete(id) } // may be noop
           p.declare(id.scope, id, s, s.rhs[i])
           id.type = p.types.resolve(s.rhs[i])
+          if (id.type instanceof UnresolvedType) {
+            id.type.addRef(id)
+          }
         }
       }
     }
@@ -861,48 +877,51 @@ export class Parser extends scanner.Scanner {
 
     const pos = lhs[0].pos
 
-    if (lhs.length == 1) {
-      // expr
-      if (token.assignop_beg < p.tok && p.tok < token.assignop_end) {
-        // lhs op= rhs;  e.g. "x += 2"
-        const op = p.tok
-        p.next() // consume operator
-        const s = new AssignStmt(pos, p.scope, op, lhs, [])
-        s.rhs = p.exprList(/*ctx=*/s)
-        return s
-      }
-
-      if (p.tok == token.INC || p.tok == token.DEC) {
-        // lhs++ or lhs--
-        const op = p.tok
-        p.next() // consume operator
-        // check operand type
-        const operand = lhs[0]
-        if (operand instanceof Ident &&
-            operand.ent &&
-            !(operand.ent.decl instanceof VarDecl)
-        ) {
-          p.syntaxError(`cannot mutate ${operand}`, operand.pos)
-        }
-        return new AssignStmt(pos, p.scope, op, lhs, emptyExprList)
-      }
-
-      if (p.tok == token.ARROWL) {
-        // lhs <- rhs
-        p.syntaxError("TODO simpleStmt ARROWL")
-      }
-
-      if (p.tok == token.ARROWR) {
-        // params -> result
-        p.syntaxError("TODO simpleStmt ARROWR")
-      }
-
-      // else: expr
+    if (lhs.length != 1) {
+      p.syntaxError("expecting := or = or comma")
+      p.advanceUntil(token.SEMICOLON, token.RBRACE)
       return new ExprStmt(lhs[0].pos, p.scope, lhs[0])
     }
 
-    p.syntaxError("expecting := or = or comma")
-    p.advanceUntil(token.SEMICOLON, token.RBRACE)
+    // single expression
+
+    p.types.resolve(lhs[0])
+
+    if (token.assignop_beg < p.tok && p.tok < token.assignop_end) {
+      // lhs op= rhs;  e.g. "x += 2"
+      const op = p.tok
+      p.next() // consume operator
+      const s = new AssignStmt(pos, p.scope, op, lhs, [])
+      s.rhs = p.exprList(/*ctx=*/s)
+      return s
+    }
+
+    if (p.tok == token.INC || p.tok == token.DEC) {
+      // lhs++ or lhs--
+      const op = p.tok
+      p.next() // consume operator
+      // check operand type
+      const operand = lhs[0]
+      if (operand instanceof Ident &&
+          operand.ent &&
+          !(operand.ent.decl instanceof VarDecl)
+      ) {
+        p.syntaxError(`cannot mutate ${operand}`, operand.pos)
+      }
+      return new AssignStmt(pos, p.scope, op, lhs, emptyExprList)
+    }
+
+    if (p.tok == token.ARROWL) {
+      // lhs <- rhs
+      p.syntaxError("TODO simpleStmt ARROWL")
+    }
+
+    if (p.tok == token.ARROWR) {
+      // params -> result
+      p.syntaxError("TODO simpleStmt ARROWR")
+    }
+
+    // else: expr
     return new ExprStmt(lhs[0].pos, p.scope, lhs[0])
   }
 
@@ -927,9 +946,6 @@ export class Parser extends scanner.Scanner {
         const s = p.block()
         p.popScope()
         return s
-
-      // case token.VAR:
-      //   return p.declStmt(p.varDeclExplicit)
 
       case token.TYPE:
         return p.declStmt(p.typeDecl)
@@ -990,23 +1006,7 @@ export class Parser extends scanner.Scanner {
       //   return s
 
       case token.RETURN:
-        const pos = p.pos
-        let result :Expr|null = null
-        p.next()
-        if (p.tok as token != token.SEMICOLON &&
-            p.tok as token != token.RBRACE)
-        {
-          const xs = p.exprList(/*ctx=*/null) // ?: maybe pass TupleExpr?
-          if (xs.length == 1) {
-            // e.g. "return 1", "return (1, 2)"
-            result = xs[0]
-          } else {
-            // Support paren-less tuple return
-            // e.g. "return 1, 2" == "return (1, 2)"
-            result = new TupleExpr(xs[0].pos, xs[0].scope, xs)
-          }
-        }
-        return new ReturnStmt(pos, p.scope, result)
+        return p.returnStmt()
 
       // case _Semi:
       //   s := new(EmptyStmt)
@@ -1020,6 +1020,68 @@ export class Parser extends scanner.Scanner {
     }
 
     return null
+  }
+
+  returnStmt() :ReturnStmt {
+    const p = this
+    const pos = p.pos
+
+    p.want(token.RETURN)
+
+    const n = new ReturnStmt(pos, p.scope, null)
+
+    // resolve current function's result type
+    const ftype = p.types.resolve(p.currFun()) as FunType
+    assert(ftype instanceof FunType) // ftype always resolves
+    const frtype = ftype.output
+    
+    if (p.tok == token.SEMICOLON || p.tok == token.RBRACE) {
+      // no result
+      if (frtype !== u_t_void) {
+        p.syntaxError("missing return value", pos)
+        return n
+      }
+      return n
+    }
+
+    // expecting one or more results to follow
+    
+    const xs = p.exprList(/*ctx=*/null) // ?: maybe pass TupleExpr?
+    
+    let rval = (
+      xs.length == 1 ? xs[0] :
+        // e.g. "return 1", "return (1, 2)"
+
+      new TupleExpr(xs[0].pos, xs[0].scope, xs)
+        // Support paren-less tuple return
+        // e.g. "return 1, 2" == "return (1, 2)"
+    )
+
+    if (frtype === u_t_void) {
+      p.syntaxError("function does not return a value", rval.pos)
+      return n
+    }
+
+    const rtype = p.types.resolve(rval)
+
+    if (!frtype.equals(rtype)) {
+      const convres = p.types.convert(frtype, rval)
+      if (convres) {
+        rval = convres
+      } else {
+        p.syntaxError(
+          (rval.type instanceof UnresolvedType ?
+            `cannot use "${rval}" as return type ${frtype}` :
+            `cannot use "${rval}" (type ${rval.type}) as return type ${frtype}`
+          ),
+          rval.pos
+        )
+      }
+    }
+
+    n.result = rval
+
+    return n
   }
 
   exprList(ctx :exprCtx) :Expr[] {
@@ -1134,14 +1196,14 @@ export class Parser extends scanner.Scanner {
     // call or conversion
     // convtype '(' expr ocomma ')'
     const pos = p.pos
-    const argList = [] as Expr[]
+    const args = [] as Expr[]
     let hasDots = false
 
     p.want(token.LPAREN)
     // p.xnest++
 
     while (p.tok != token.EOF && p.tok != token.RPAREN) {
-      argList.push(p.expr(ctx))
+      args.push(p.expr(ctx))
       hasDots = p.got(token.ELLIPSIS)
       if (!p.ocomma(token.RPAREN) || hasDots) {
         break
@@ -1151,7 +1213,7 @@ export class Parser extends scanner.Scanner {
     // p.xnest--
     p.want(token.RPAREN)
 
-    return new CallExpr(pos, p.scope, fun, argList, hasDots)
+    return new CallExpr(pos, p.scope, fun, args, hasDots)
   }
 
 
@@ -1461,7 +1523,6 @@ export class Parser extends scanner.Scanner {
           case token.SELECT:
           case token.SWITCH:
           case token.TYPE:
-          // case token.VAR:
             break loop1
         }
         p.next()

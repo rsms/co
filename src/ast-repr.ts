@@ -2,6 +2,8 @@
 // Produces a human-readable format of an AST, meant for debugging.
 //
 import * as utf8 from './utf8'
+import { tokstr, token } from './token'
+import { termColorSupport, style, noStyle } from './termstyle'
 import {
   Node,
   Group,
@@ -38,7 +40,6 @@ import {
   TupleType,
   FunType,
 } from './ast'
-import { tokstr, token } from './token'
 
 
 class ReprCtx {
@@ -47,6 +48,7 @@ class ReprCtx {
   nextGroupId = 0
   ind :string = '  '
   typedepth = 0
+  style = termColorSupport ? style : noStyle
 
   groupId(g :Group) :string {
     let gid = (g as any).id || this.groupIds.get(g)
@@ -59,12 +61,24 @@ class ReprCtx {
 }
 
 
-const globalCtx = new ReprCtx()
-
-
-export function astRepr(n :Node, ctx: ReprCtx|null = null) :string {
-  return repr1(n, '\n', ctx || globalCtx).trim()
+export interface ReprOptions {
+  colors?: bool
 }
+
+
+export function astRepr(n :Node, options? :ReprOptions) :string {
+  let ctx = defaultCtx
+  if (options) {
+    ctx = new ReprCtx()
+    if (options.colors !== undefined) {
+      ctx.style = options.colors ? style : noStyle
+    }
+  }
+  return repr1(n, '\n', ctx).trim()
+}
+
+
+const defaultCtx = new ReprCtx()
 
 
 function _reprt(t :Type, nl :string, c :ReprCtx) :string {
@@ -72,7 +86,7 @@ function _reprt(t :Type, nl :string, c :ReprCtx) :string {
     return `${t.name}[${t.length}]`
   }
   if (t instanceof IntrinsicType) {
-    return `${t.name}`
+    return c.style.bold(t.name)
   }
   if (t instanceof TupleType) {
     return '(' + t.types.map(t => _reprt(t, nl, c)).join(', ') + ')'
@@ -87,7 +101,7 @@ function _reprt(t :Type, nl :string, c :ReprCtx) :string {
     )
   }
   if (t instanceof UnresolvedType) {
-    return '~' + repr1(t.expr, nl, c)
+    return '~'
   }
   return `???${t.constructor.name}`
 }
@@ -116,7 +130,7 @@ function reprt0(tx :Expr|null, nl :string, c :ReprCtx) :string {
 }
 
 function reprt(tx :Expr|null, newline :string, c :ReprCtx) :string {
-  return `<${reprt0(tx, newline, c)}>`
+  return c.style.blue(`<${reprt0(tx, newline, c)}>`)
 }
 
 
@@ -129,14 +143,21 @@ function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :st
 }
 
 
-function reprid(id :Ident) :string {
+function reprid(id :Ident, c :ReprCtx) :string {
+  // return c.style.yellow(utf8.decodeToString(id.value.bytes))
   return utf8.decodeToString(id.value.bytes)
+}
+
+
+function reprcons(n :Node, c :ReprCtx) :string {
+  return c.style.grey(n.constructor.name)
+  // return n.constructor.name
 }
 
 
 function repr1(n :Node, newline :string, c :ReprCtx) :string {
   if (n instanceof IntrinsicType) {
-    return n.name
+    return c.style.purple(c.style.bold(n.name))
   }
 
   if (n instanceof BasicLit || n instanceof StringLit) {
@@ -145,11 +166,11 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
       // trim "
       s = s.substr(1, s.length-2)
     }
-    return reprt(n.type, newline, c) + s
+    return reprt(n.type, newline, c) + c.style.green(s)
   }
 
   if (n instanceof Ident) {
-    return (c.typedepth ? '' : reprt(n.type, newline, c)) + reprid(n)
+    return (c.typedepth ? '' : reprt(n.type, newline, c)) + reprid(n, c)
   }
 
   if (n instanceof RestExpr) {
@@ -180,13 +201,13 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
 
   if (n instanceof ReturnStmt) {
     if (n.result) {
-      return newline + '(return ' + repr1(n.result, nl2, c) + ')'
+      return newline + `(${reprcons(n, c)} ${repr1(n.result, nl2, c)})`
     }
-    return newline + 'return'
+    return newline + reprcons(n, c)
   }
 
   if (n instanceof ExprStmt) {
-    return newline + `(ExprStmt ${repr1(n.expr, nl2, c)})`
+    return newline + `(${reprcons(n, c)} ${repr1(n.expr, nl2, c)})`
   }
 
   if (n instanceof FunSig) {
@@ -194,7 +215,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   }
 
   if (n instanceof AssignStmt) {
-    let s = newline + '(AssignStmt '
+    let s = newline + `(${reprcons(n, c)} `
     s += reprv(n.lhs, nl2, c)
     if (n.op == token.ILLEGAL) {
       s += ' = '
@@ -206,12 +227,12 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   }
 
   if (n instanceof DeclStmt) {
-    return newline + '(DeclStmt' + ' ' + reprv(n.decls, nl2, c, '') + ')'
+    return newline + `(${reprcons(n, c)}` + ' ' + reprv(n.decls, nl2, c, '') + ')'
   }
 
-  if (n instanceof UnresolvedType) {
-    return repr1(n.expr, newline, c)
-  }
+  // if (n instanceof UnresolvedType) {
+  //   return '<~>'
+  // }
 
   if (n instanceof SelectorExpr) {
     return (
@@ -229,7 +250,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   if (n instanceof Expr && !c.typedepth) {
     s += reprt(n.type, newline, c)
   }
-  s += n.constructor.name
+  s += reprcons(n, c)
 
   if (n instanceof ImportDecl) {
     s += ' path: ' + repr1(n.path, nl2, c)
@@ -248,7 +269,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
       s += reprt(n.type, newline, c) + ' ' + reprv(n.idents, nl2, c)
     } else {
       s += ' (' + n.idents.map(id =>
-        reprt(id, newline, c) + reprid(id)
+        reprt(id, newline, c) + reprid(id, c)
       ).join(' ') + ')'
     }
     if (n.values) {
@@ -278,7 +299,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
 
   if (n instanceof CallExpr) {
     s += ' ' + repr1(n.fun, newline, c) + ' ('
-    s += reprv(n.argList, nl2, c, '')
+    s += reprv(n.args, nl2, c, '')
     if (n.hasDots) {
       s += '...'
     }
@@ -315,5 +336,5 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return 'noop'
   }
 
-  return '(???'+ n.constructor.name + ' ' + repr(n) + ')'
+  return '(???'+ reprcons(n, c) + ' ' + repr(n) + ')'
 }

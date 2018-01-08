@@ -222,9 +222,11 @@ export const debuglog = DEBUG ? function(...v :any[]) {
       const origin = m[2]
       if (origin) {
         const filename = origin.split('.ts:', 1)[0]
-        if (String(v[0]).trim().indexOf('TODO') == 0) {
+        const trmsg = String(v[0])
+        if (trmsg.indexOf('TODO:') == 0 || trmsg.indexOf('TODO ') == 0) {
           // message start with "TODO"
           prefix = 'TODO src/' + origin + ' ' + fun + '>'
+          v[0] = trmsg.substr(5).replace(/^\s*/, '')
         } else {
           prefix = filename + '/' + fun + '>'
         }
@@ -236,11 +238,7 @@ export const debuglog = DEBUG ? function(...v :any[]) {
     }
   }
 
-  let args = Array.prototype.slice.call(arguments)
-  args.splice(0, 0, prefix)
-  // if (srcloc) {
-  //   args.splice(args.length, 0, `(${srcloc})`)
-  // }
-  console.log.apply(console, args)
+  v.splice(0, 0, prefix)
+  console.log.apply(console, v)
 } : function(...v :any[]){}
 
