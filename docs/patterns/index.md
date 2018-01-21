@@ -713,9 +713,10 @@ print(fn())  # 100
 
 #### Some ideas for getting rid of "this"
 
-Go's approach is even simpler: There are no "methods" on types, there are only
-functions, and some functions takes a certain type as a prefix parameter.
-We give whatever name we want to that parameter (in this example it's `f`):
+Go's approach is even simpler: When defining a "method" for a type,
+the receiving type is declared like a regular parameter, preceeding the name of
+the function. We give whatever name we want to that receiver parameter;
+in this example it's `f`:
 
 ```go
 type Foo struct {
