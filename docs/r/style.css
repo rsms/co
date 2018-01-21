@@ -214,7 +214,7 @@ section.content { padding-top:40px; }
 
   section.content ul,
   section.content ol { margin-bottom: 1.2em; }
-  section.content li { margin-left: 0; margin-bottom: 0.8em; }
+  section.content li { margin-left: 0; margin-bottom: 0.2em; }
   /*section.content ul > li,
   section.content ol > li { margin-left: 1em; }*/
   section.content ul ul > li,
