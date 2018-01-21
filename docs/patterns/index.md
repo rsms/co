@@ -955,7 +955,8 @@ var foo Foo?
 if f := foo {
   // we know f is not null; f has type Foo (sans null)
 } else {
-  // we know f is null; f has type null
+  // we know f is null and any attempt to access data of f
+  // inside this branch would cause a compiler error.
 }
 ```
 
