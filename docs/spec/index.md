@@ -1,5 +1,6 @@
 ---
 layout: page
+title: Language specification
 ---
 
 # Language specification
