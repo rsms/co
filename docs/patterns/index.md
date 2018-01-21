@@ -922,15 +922,15 @@ runtime bugs where the programmer didn't realize that the value of something
 might be null.
 
 Most languages does nothing to help you avoid accidentally reading null values,
-some languages simply do don't have `null`, and a few languages have syntax
+some languages simply don't have `null`, and a few languages have syntax
 and/or compile-time- and/or runtime-checks to help you with null values.
 
 For instance, programming in Swift is a constant consideration of
 "Should I use `?` here, or maybe `!`, or perhaps none of those?"
 
-C++ has two different kinds of ways to refer to a value: `*Type` for things that
-might be null, and `&Type` for things that can't be null. The compiler then
-ensures that a `&Type` value is never null, but does nothing to assist with
+C++ has two different ways to refer to a value: `Type*` for things that
+might be null, and `Type&` for things that can't be null. The compiler then
+ensures that a `Type&` value is never null, but does nothing to assist with
 values that might be null. Also, having two different ways to declare a pointer
 is error-prone because it requires deeper knowledge of the differences.
 C++ also has "Plain Old Data" values which are not references nor pointers.
