@@ -1,3 +1,7 @@
+---
+layout: page
+---
+
 # Patterns
 
 Following are different patterns prevalent in day-to-day programming with

@@ -100,8 +100,8 @@ const tsconfig = {
       strictNullChecks: true,
     })
   },
-  cacheRoot: debug ? pjoin(outdir, '.tscache') : undefined,
-  clean: clean,
+  cacheRoot: pjoin(outdir, '.tscache-' + (debug ? 'g' : 'o')),
+  clean:     clean || !debug,
 }
 
 // input config

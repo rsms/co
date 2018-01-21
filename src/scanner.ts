@@ -1,10 +1,10 @@
-import { AppendBuffer, bufcmp, str8buf } from './util'
+import { AppendBuffer, bufcmp, asciibuf } from './util'
 import { Pos, Position, SrcFile } from './pos'
 import * as utf8 from './utf8'
 import * as unicode from './unicode'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { token, lookupKeyword, prec } from './token'
-import * as Path from 'path'
+import * as path from './path'
 
 
 export enum Mode {
@@ -20,7 +20,7 @@ export enum Mode {
     // scanning (common case) you should leave this disabled.
 }
 
-const linePrefix = str8buf('//!line ')
+const linePrefix = asciibuf('//!line ')
 
 enum istrOne { OFF, WAIT, CONT }
 
@@ -97,7 +97,7 @@ export class Scanner extends ErrorReporter {
       )
     }
     s.sfile = sfile
-    s.dir = Path.dirname(sfile.name)
+    s.dir = path.dir(sfile.name)
     s.sdata = sdata
     s.errh = errh || null
     s.mode = mode
@@ -1136,10 +1136,10 @@ export class Scanner extends ErrorReporter {
           // valid //!line filename:line comment
           let filename = text.substr(0, i).trim()
           if (filename) {
-            filename = Path.normalize(filename)
-            if (!Path.isAbsolute(filename)) {
+            filename = path.clean(filename)
+            if (!path.isAbs(filename)) {
               // make filename relative to current directory
-              filename = Path.join(s.dir, filename)
+              filename = path.join(s.dir, filename)
             }
           }
           // update scanner position

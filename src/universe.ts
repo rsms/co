@@ -1,5 +1,5 @@
 import { ByteStr, ByteStrSet } from './bytestr'
-import { str8buf, buf8str, bufcmp } from './util'
+import { asciibuf, buf8str, bufcmp } from './util'
 import { token, tokstr } from './token'
 import { Pos } from './pos'
 import { TypeSet } from './typeset'
@@ -501,7 +501,7 @@ TEST("intBinBits", () => {
   ]) {
     let input = v[0] as string
     let expected = v[1]
-    let actual = intBinBits(str8buf(input))
+    let actual = intBinBits(asciibuf(input))
     assert(
       actual == expected,
       `${JSON.stringify(input)} => ${actual}; expected ${expected}`
@@ -573,7 +573,7 @@ TEST("intOctBits", () => {
   ]) {
     let input = v[0] as string
     let expected = v[1]
-    let actual = intOctBits(str8buf(input))
+    let actual = intOctBits(asciibuf(input))
     assert(
       actual === expected,
       `${JSON.stringify(input)} => ${actual}; expected ${expected}`
@@ -637,7 +637,7 @@ TEST("intDecBits", () => {
   ]) {
     let input = v[0] as string
     let expected = v[1]
-    let actual = intDecBits(str8buf(input))
+    let actual = intDecBits(asciibuf(input))
     assert(
       actual == expected,
       `${JSON.stringify(input)} => ${actual}; expected ${expected}`
@@ -697,7 +697,7 @@ TEST("intHexBits", () => {
   ]) {
     let input = v[0] as string
     let expected = v[1]
-    let actual = intHexBits(str8buf(input))
+    let actual = intHexBits(asciibuf(input))
     assert(
       actual == expected,
       `${JSON.stringify(input)} => ${actual}; expected ${expected}`
@@ -812,14 +812,14 @@ export class Universe {
 
     for (let [name, t] of universeTypes) {
       // console.log(`DEF UNIVERSE TYPE "${name}"`)
-      let n = strSet.emplace(str8buf(name))
+      let n = strSet.emplace(asciibuf(name))
       unidecls.set(n, new Ent(n, t, t))
     }
 
     for (let [aliasName, canonName] of universeTypeAliases) {
       // console.log(`DEF UNIVERSE TYPE ALIAS "${aliasName}" for "${canonName}"`)
-      let aliasNameBuf = strSet.emplace(str8buf(aliasName))
-      let canonNameBuf = strSet.emplace(str8buf(canonName))
+      let aliasNameBuf = strSet.emplace(asciibuf(aliasName))
+      let canonNameBuf = strSet.emplace(asciibuf(canonName))
       const obj = unidecls.get(canonNameBuf)
       assert(obj)
       unidecls.set(aliasNameBuf, obj as Ent)
@@ -827,7 +827,7 @@ export class Universe {
 
     for (let [name, x] of universeValues) {
       // console.log(`DEF UNIVERSE VAL "${name}"`)
-      let n = strSet.emplace(str8buf(name))
+      let n = strSet.emplace(asciibuf(name))
       unidecls.set(n, new Ent(n, x, x))
     }
 

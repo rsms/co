@@ -2,6 +2,12 @@ type int = number
 type byte = number
 type bool = boolean
 
+// writable version of ArrayLike
+interface WArrayLike<T> {
+  length: number
+  [n: number]: T
+}
+
 declare var AssertionError :ErrorConstructor
 declare const DEBUG :boolean
 declare const VERSION :string

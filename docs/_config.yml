@@ -1,0 +1,16 @@
+port: 3000
+lsi: false
+permalink: /:title
+markdown: kramdown
+# Since GH pages override this to "true", we test this value to see if we are running locally
+safe: false
+include: [".well-known"]
+# highlighter: none
+# syntax_highlighter: none
+kramdown:
+  input: GFM
+  auto_ids: true
+  hard_wrap: false
+  # transliterated_header_ids: true
+  # syntax_highlighter_opts:
+  #     disable: true

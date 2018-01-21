@@ -10,7 +10,7 @@ import {
   u_t_auto,
   u_t_uint,
 } from './universe'
-// import { debuglog } from './util'
+import { debuglog } from './util'
 import {
   File,
   Scope,
@@ -161,6 +161,10 @@ export class Parser extends scanner.Scanner {
     }
   }
 
+  inFun() :FunDecl|null {
+    return this.funstack[0] || null
+  }
+
   currFun() :FunDecl {
     assert(this.funstack.length > 0, 'access current function at file level')
     return this.funstack[0]
@@ -227,10 +231,29 @@ export class Parser extends scanner.Scanner {
     }
 
     const ent = new Ent(ident.value, decl, x)
-    if (!scope.declareEnt(ent)) {
+    if (scope.declareEnt(ent)) {
+      const f = p.inFun()
+      if (f) {
+        // TODO: change locals counting by using a watermark method or stack or
+        // something, so that:
+        //
+        // fun main {
+        //   a = 0
+        //   { c = 0; }
+        //   { d = 0; }
+        // }
+        //
+        // only needs two i32 locals since c and d can use the same slot.
+        //
+        f.nlocali32++
+        debuglog(
+          `${ident} in scope#${scope.level()}; ` +
+          `nlocali32: ${f.nlocali32}`
+        )
+      }
+    } else {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
-    // else { debuglog(`${ident} in scope#${scope.level()}`) }
   }
 
   declarev(scope :Scope, idents: Ident[], decl :Node, xs: Expr[]|null) {

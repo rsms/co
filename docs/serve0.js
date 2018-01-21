@@ -285,7 +285,7 @@ servedir.version = '0.1.10';
 // The default MIME type, root directory, and port.
 servedir.defaultType = 'application/octet-stream';
 servedir.defaultRoot = '.';
-servedir.defaultPort = 8000;
+servedir.defaultPort = 4000;
 
 // Common MIME types.
 servedir.types = types = {

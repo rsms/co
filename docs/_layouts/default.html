@@ -1,0 +1,83 @@
+{% capture build_version %}{{ site.time | date: "%Y%m%d%H%M%S" }}{% endcapture %}<!DOCTYPE HTML>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>{% if page.title %}{{ page.title }}{% endif %} — The Co programming language</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=0.8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href="https://rsms.me/inter/inter-ui.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Inconsolata&amp;subset=latin-ext" rel="stylesheet">
+    <link rel="stylesheet" media="all" href="/r/style.css?v={{ build_version }}" type="text/css">
+    <link rel="shortcut icon" href="/r/favicon.ico?v={{ build_version }}">
+    <link rel="icon" type="image/svg+xml" sizes="any" href="/r/favicon.svg?v={{ build_version }}">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:creator" content="@rsms">
+    {% if page.title %}
+    <meta property="og:title" content="{{ page.title }}">
+    <meta name="twitter:title" content="{{ page.title }}">
+    {% if page.description %}
+    <meta name="description" content="{{ page.description }}">
+    <meta name="og:description" content="{{ page.description }}">
+    <meta name="twitter:description" content="{{ page.description }}">
+    {% else if content %}
+    <meta name="description" content="{{ content | strip_html | truncatewords: 25 }}">
+    <meta name="og:description" content="{{ content | strip_html | truncatewords: 25 }}">
+    <meta name="twitter:description" content="{{ content | strip_html | truncatewords: 25 }}">
+    {% endif %}
+    {% else %}
+    <meta name="description" content="Programming language">
+    {% endif %}
+    {% if page.og_image_url %}
+    <meta property="og:image" content="{{ page.og_image_url }}">
+    <meta name="twitter:image" content="{{ page.og_image_url }}">
+    {% endif %}
+    <meta property="og:url" content="https://rsms.me/co/{{ page.url | remove_first:'index.html' }}">
+    <meta property="og:site_name" content="rsms.me/co">
+    <meta property="og:type" content="article">
+    <meta property="og:locale" content="en_US" />
+  </head>
+  <body>
+    <section class="header">
+      <div>
+        <h1><a href="/">
+          {% include icons/logo.svg %}
+          <span>The Co programming language</span>
+        </a></h1>
+        <ul>
+          <li><a href="/spec/"{% if page.url contains "/spec/" %}class="active"{% endif %}>Language</a></li>
+          <li><a href="/patterns/"{% if page.url contains "/patterns/" %}class="active"{% endif %}>Patterns</a></li>
+          <li><a href="https://github.com/rsms/co">Source</a></li>
+          <li><a href="/play/"{% if page.url contains "/play/" %}class="active"{% endif %}>Play</a></li>
+        </ul>
+      </div>
+    </section>
+
+    {{ content }}
+
+    <script async src="https://www.googletagmanager.com/gtag/js?id=UA-105091131-3"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function g(){dataLayer.push(arguments);}
+      g('js', new Date());
+      g('config', 'UA-105091131-3');
+
+      var a, e, i, L = 1, m = 5, v;
+      while (L < m) {
+        v = document.querySelectorAll('.content h'+(L++)+'[id]');
+        i = 0;
+        for (; i < v.length; ++i) {
+          e = v[i];
+          if (e.id) {
+            a = document.createElement('a')
+            a.href = '#' + e.id
+            a.innerHTML = e.innerHTML
+            e.innerText = ''
+            e.appendChild(a)
+          }
+        }
+      }
+    </script>
+    {% include autoreload-in-debug.html %}
+  </body>
+</html>

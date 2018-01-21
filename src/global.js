@@ -1,10 +1,24 @@
-try { require("source-map-support").install() } catch(_) {}
+try {
+  typeof require != 'undefined' && require("source-map-support").install()
+} catch(_) {}
 
 function _stackTrace(cons) {
   const x = {stack:''}
-  Error.captureStackTrace(x, cons)
-  const p = x.stack.indexOf('\n')
-  return p == -1 ? x.stack : x.stack.substr(p+1)
+  if (Error.captureStackTrace) {
+    Error.captureStackTrace(x, cons)
+    const p = x.stack.indexOf('\n')
+    if (p != -1) {
+      return x.stack.substr(p+1)
+    }
+  }
+  return x.stack
+}
+
+function exit(status) {
+  if (typeof process != 'undefined') {
+    process.exit(status)
+  }
+  throw 'EXIT#' + status
 }
 
 function panic(msg) {
@@ -12,7 +26,7 @@ function panic(msg) {
     ['panic:', msg].concat(Array.prototype.slice.call(arguments, 1))
   )
   console.error(_stackTrace(panic))
-  process.exit(2)
+  exit(2)
 }
 
 function assert() {
@@ -24,7 +38,7 @@ function assert() {
       var e, stack = _stackTrace(cons)
       console.error('assertion failure:', msg || cond)
       console.error(_stackTrace(cons))
-      process.exit(3)
+      exit(3)
     }
   }
 }

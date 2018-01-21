@@ -2,7 +2,6 @@ import { Parser, DiagKind } from './parser'
 import { bindpkg } from './bind'
 import * as scanner from './scanner'
 import { Position, SrcFileSet } from './pos'
-import * as fs from 'fs'
 import { ByteStrSet } from './bytestr'
 import { TypeSet } from './typeset'
 import { astRepr } from './ast-repr'
@@ -10,6 +9,8 @@ import { Package, Scope, Ent } from './ast'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
+
+import * as fs from 'fs'
 
 
 const reprOptions = {colors:stdoutSupportsStyle}

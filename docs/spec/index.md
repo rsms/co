@@ -1,3 +1,7 @@
+---
+layout: page
+---
+
 # Language specification
 
 ## Source code representation
@@ -6,20 +10,20 @@ Source code is Unicode text encoded in UTF-8. The text is not canonicalized, so 
 
 Each code point is distinct; for instance, upper and lower case letters are different characters.
 
-#### Characters
+### Characters
 
 The following terms are used to denote specific Unicode character classes:
 
-```php
+```txt
 newline        = /* the Unicode code point U+000A */
 unicode_char   = /* an arbitrary Unicode code point except newline */
 unicode_letter = /* a Unicode code point classified as "Letter" */
 unicode_digit  = /* a Unicode code point classified as "Number, decimal digit" */
 ```
 
-#### Letters and digits
+### Letters and digits
 
-```php
+```txt
 letter        = unicode_letter | "_" | "$"
 decimal_digit = "0" ... "9"
 octal_digit   = "0" ... "7"
@@ -33,7 +37,7 @@ hex_digit     = "0" ... "9" | "A" ... "F" | "a" ... "f"
 
 Comments have no semantic effect on a program. There are two forms:
 
-```php
+```txt
 Comment        = LineComment | GeneralComment
 LineComment    = "//" /* anything except newline */ newline
 GeneralComment = "/*" /* anything except the terminator: */ "*/"
@@ -58,7 +62,7 @@ To reflect idiomatic use, code examples elide semicolons using these rules.
 
 ### Identifiers
 
-```php
+```txt
 identifier = letter (letter | unicode_digit | "-")*
 
 ```
@@ -105,7 +109,7 @@ The following character sequences represent operators, delimiters, and other spe
 
 An integer literal represents an integer constant. An optional prefix sets a non-decimal base: `0x` for hexadecimal, `0o` for octal and `0b` for binary.
 
-```php
+```txt
 int_lit  = dec_lit | hex_lit | oct_lit | bin_lit
 dec_lit  = decimal_digit+
 hex_lit  = "0" ( "x" | "X" ) hex_digit+
@@ -124,7 +128,7 @@ bin_lit  = "0" ( "b" | "B" ) ( "0" | "1" )+
 
 ### Floating-point literals
 
-```php
+```txt
 float_lit = decimals "." [ decimals ] [ exponent ] |
             decimals exponent |
             "." decimals [ exponent ]
@@ -151,7 +155,7 @@ Represents a ratio between integers. Division of integers that can’t be reduce
 to an integer yields a ratio, i.e. `22/7 == 22/7`, rather than a floating point
 or truncated value.
 
-```php
+```txt
 ratio_lit = decimals "/" decimals
 ```
 
@@ -194,7 +198,7 @@ After a backslash, certain single-character escapes represent special values:
 All other sequences starting with a backslash are illegal inside character
 literals.
 
-```php
+```txt
 char_lit       = "'" ( unicode_value | byte_value ) "'"
 unicode_value  = unicode_char | little_u_value | big_u_value | escaped_char
 byte_value     = hex_byte_value | "\0"
@@ -230,7 +234,7 @@ code point, what actually ends up in memory are the three bytes `0xE2 0x88 0x9A`
 are equivalent. Additionally, since source text is Unicode characters encoded
 in UTF-8, verbatim string literals are not interpreted at all.
 
-```php
+```txt
 string_lit = `"` { unicode_value | byte_value | newline } `"`
 ```
 
@@ -249,7 +253,7 @@ string_lit = `"` { unicode_value | byte_value | newline } `"`
   " // == "usage: ${program} [options]\noptions:\n-h   Show help"
 ```
 
-These examples all represent the same string:
+The following examples all represent the same string:
 
 ```
 "日本語"                                 // UTF-8 input text
@@ -381,7 +385,7 @@ z := 3.4          // error: trying to assign float64 value to var of type int64
 An expression specifies the computation of a value by applying operators and
 functions to operands.
 
-```php
+```txt
 Expression = UnaryExpr | Expression bin_op Expression
 UnaryExpr  = PrimaryExpr | unary_op UnaryExpr
 ExprList   = Expression ( ("," | ";") Expression)*
@@ -391,7 +395,7 @@ ExprList   = Expression ( ("," | ";") Expression)*
 
 Operands denote the elementary values in an expression.
 
-```php
+```txt
 Operand     = Literal | OperandName | "(" Expression ")"
 Literal     = BasicLit | CompositeLit | FunctionLit
 BasicLit    = int_lit | float_lit | ratio_lit | char_lit | string_lit
@@ -402,13 +406,13 @@ OperandName = identifier | QualifiedIdent
 
 Unary operators
 
-```php
+```txt
 unary_op   = "+" | "-" | "!" | "^" | "*" | "&" | "<-"
 ```
 
 Binary operators
 
-```php
+```txt
 bin_op     = "||" | "&&" | bin_rel_op | bin_add_op | bin_mul_op
 bin_rel_op = "==" | "!=" | "<" | "<=" | ">" | ">="
 bin_add_op = "+" | "-" | "|" | "^"
@@ -419,7 +423,7 @@ bin_mul_op = "*" | "/" | "%" | "<<" | ">>" | "&" | "&^"
 
 A block is a possibly empty sequence of declarations and statements within matching brace brackets.
 
-```php
+```txt
 Block         = "{" StatementList? "}"
 StatementList = ( Statement ";" )+
 ```
@@ -432,7 +436,7 @@ specific to values of that type. Types may be _named_ or _unnamed_. Named types
 are specified by a (possibly qualified) _type name_; unnamed types are specified
 using a _type literal_, which composes a new type from existing types.
 
-```php
+```txt
 Type      = TypeName | TypeLit | "(" Type ")"
 TypeName  = identifier | QualifiedIdent
 TypeLit   = ArrayType | StructureType | FunctionType | SliceType
@@ -588,7 +592,7 @@ z = s.len
 
 Symbols are symbolic names where the value is the symbol itself.
 
-```php
+```txt
 SymbolDecl = "symbol" identifier
 ```
 
@@ -645,7 +649,7 @@ b = grinning-face.encode(UTF-16) // uint16[](0xD83D, 0xDE00)
 An array is a numbered sequence of elements of a single type, called the
 element type. The number of elements is called the length and is never negative.
 
-```php
+```txt
 ArrayType   = "array" "<" ArrayLength (space | space? ",") ElementType ">"
 ArrayLength = Expression
 ElementType = Type
@@ -727,7 +731,7 @@ A list type denotes the set of all lists of arrays of its element type.
 The value of an uninitialized list is equivalent to a list of a
 zero-length array.
 
-```php
+```txt
 SliceType = ElementType "[]"
 
 SliceExpr = SliceType "(" ExprList [("," | ";")] ")"
@@ -752,22 +756,20 @@ list and the length of the array beyond the list; a list of length up to
 that capacity can be created by _slicing_ a new one from the original list.
 The capacity of a list a can be discovered using the built-in function `a.cap`.
 
-```
+```go
 type A byte[]
 type A { x, y int32 }[]
 type A float64[]
 type A int[][]
 
-a = [1, 2, 3, 4]              // type is int[]
-const b uint32[] = [1, 2, 3]  // type is uint32[]
-c = []  // invalid; no value, no type
-const b string[] = []
-
+a = [1, 2, 3, 4]        // type is int[]
+b uint32[] = [1, 2, 3]  // type is uint32[]
+c = [                   // multi-line via semicolon rules
   100
-  200                    // multi-line via semicolon rules
+  200
   300
 )
-d = float64[3][3]()      // 3 arrays, each with 3 zero-value float64's
+d = float64[3][3]()     // 3 arrays, each with 3 zero-value float64's
 ```
 
 
@@ -781,7 +783,7 @@ or to simply group data together.
 
 #### Record types
 
-```php
+```txt
 RecordType     = "{" (FieldDecl ";")* "}"
 FieldDecl      = (NameList Type | EmbeddedField | MethodDecl)
 EmbeddedField  = TypeName
@@ -804,7 +806,7 @@ The syntax for calling a function type is the same as for functions.
 
 #### Anonymous records
 
-```php
+```txt
 RecordExpr      = "rec" "{" (MemberDecl (";" | ","))* "}"
 MemberDecl      = MemberFieldDecl | EmbeddedField | MethodDecl
 MemberFieldDecl = NameList "=" ExprList
@@ -977,7 +979,7 @@ fun main() {
 A function denotes the set of all functions with the same parameter and
 result types.
 
-```php
+```txt
 FunctionType  = (Parameters | Type) "->" Result?
 FunctionDecl  = "fun" FunctionName Signature FunctionBody?
 FunctionExpr  = "fun" FunctionName? Signature FunctionBody
@@ -1123,7 +1125,7 @@ fun withValue<T>(b Box<T>, v T?) {
 
 Function literals allow defining functions "inline".
 
-```php
+```txt
 FuncLit        = FuncLitNParams | FuncLit0Params
 FuncLitNParams = (Parameters | identifier) "->" (Expr | FunctionBody)
 FuncLit0Params = FunctionBody
@@ -1262,7 +1264,7 @@ TODO
 
 ## Declarations
 
-```php
+```txt
 Declaration = ConstDecl | VarDecl | FuncDecl | TypeDecl
 
 ConstDecl   = "const" NameList [Type] "=" ExprList

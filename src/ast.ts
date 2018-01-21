@@ -415,8 +415,12 @@ export class ParenExpr extends Expr {
 export class FunDecl extends Expr {
   // func Ident? Signature { Body }
   // func Ident? Signature
-  
+
   body :Stmt|null = null // nil = forward declaration
+  nlocali32 :int = 0
+  nlocali64 :int = 0
+  nlocalf32 :int = 0
+  nlocalf64 :int = 0
 
   constructor(pos :Pos, scope :Scope,
     public name   :Ident|null, // nil = anonymous func expression

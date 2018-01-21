@@ -1,3 +1,18 @@
+// UTF-8
+//
+// codepoint -> UTF-8 bytes
+//   encode         (dst WArrayLike<byte>, offset int, codepoint) -> nwrite int
+//   encodeString   (src string) -> Uint8Array
+//   encodeAsString (codepoint) -> string
+//
+// UTF-8 bytes -> codepoint
+//   decode         (src ArrayLike<byte>, offset int, DecodeResult) -> ok bool
+//   decodeToString (src ArrayLike<byte>) -> string
+//
+// misc
+//   byteSize(codepoint) -> size int
+//
+
 export const
   UniError = 0xFFFD,   // the "error" Rune or "Unicode replacement character"
   UniSelf  = 0x80,     // characters below UniSelf are represented as
@@ -74,28 +89,14 @@ declare class TextDecoder {
 }
 
 
-// declare class TextEncoder  {
-//   constructor() // since Firefox 48 and Chrome 53, only supports utf-8
-//   encoding :string // always "utf-8"
-//   encode(input? :string, options? :TextEncodeOptions) :Uint8Array
-// }
-
-// interface TextEncodeOptions {
-//   stream?: boolean
-// }
-
-
 export let decodeToString :(src :ArrayLike<byte>) => string
 
 if (typeof TextDecoder != 'undefined') {
   const dec = new TextDecoder('utf-8')
-  decodeToString = (src :ArrayLike<byte>) => {
-    const bytes = (
-      (src as any).buffer != undefined ? src as Uint8Array :
-      new Uint8Array(src)
-    )
-    return dec.decode(bytes)
-  }
+  decodeToString = (src :ArrayLike<byte>) => dec.decode(
+    (src as any).buffer != undefined ? src as Uint8Array :
+    new Uint8Array(src)
+  )
 } else if (typeof Buffer != 'undefined') {
   // nodejs
   decodeToString = (src :ArrayLike<byte>) => {
@@ -126,11 +127,35 @@ if (typeof TextDecoder != 'undefined') {
 }
 
 
+declare class TextEncoder  {
+  constructor(utfLabel?: string)
+    // utfLabel ignored since Firefox >=48 and Chrome >=53 (always utf-8)
+  encoding :string // always "utf-8"
+  encode(input? :string, options? :TextEncodeOptions) :Uint8Array
+}
+
+interface TextEncodeOptions {
+  stream?: boolean
+}
+
+export let encodeString :(src :string) => Uint8Array
+
+if (typeof TextEncoder != 'undefined') {
+  const enc = new TextEncoder('utf-8')
+  encodeString = (s :string) => enc.encode(s)
+} else if (typeof Buffer != 'undefined') {
+  encodeString = (s :string) => Buffer.from(s, 'utf8') as Uint8Array
+} else {
+  // todo: fallback implementation
+  panic('missing TextEncoder')
+}
+
+
 // encode writes into b (which must be large enough) the UTF-8 encoding
 // of the character. Never writes more than UTFMax bytes.
 // Returns the number of bytes written.
 //
-export function encode(b :Uint8Array, offs :int, cp :int) :int {
+export function encode(b :WArrayLike<byte>, offs :int, cp :int) :int {
   if (cp < UniSelf) {
     b[offs] = cp
     return 1
@@ -166,7 +191,7 @@ export function byteSize(cp :int) :int {
   )
 }
 
-export function encodeToString(cp :int) :string {
+export function encodeAsString(cp :int) :string {
   if (cp < 0 || cp > maxCp) {
     panic(`invalid unicode code point ${cp}`)
   }

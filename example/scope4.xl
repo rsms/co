@@ -14,13 +14,21 @@ fun foo() f32 -> 1.23
 fun f0(x int) {  // scope3; define c|v scope1/x
   print(a)
   print(c)
-  a = 2  // define v|c scope3/a
+  a = 2  // define var scope3/a
 
-  b = 3  // define v|c scope3/b
+  b = 3  // define var scope3/b
   b = 4  // store scope3/b -- marks first decl of a as var
 
   {
     b = 5 // store scope3/b
+    c = 6 // define var scope4/c
+    d = 7 // define var scope4/d
+  }
+
+  {
+    c = 9    // define var scope4'/c -- reuse var scope4/c
+    d = true // define var scope4'/d
+      // d needs a separate function var since type != scope4/d
   }
 
   d = c
