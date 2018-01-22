@@ -85,7 +85,7 @@ function parsePkg(
     }
   }
 
-  if (parser.errorCount != 0) {
+  if (parser.errorCount > 0 || typeres.errorCount > 0) {
     return Promise.resolve({ pkg, success: false })
   }
 

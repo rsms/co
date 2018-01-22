@@ -202,7 +202,7 @@ export class Parser extends scanner.Scanner {
 
     // check for unused declarations
     if (s.decls) for (let [name, ent] of s.decls) {
-      if (ent.reads.size == 0) {
+      if (ent.nreads == 0) {
         if (ent.decl instanceof Field) {
           p.diag(DiagKind.WARN, `${name} not used`, ent.decl.pos, (
             ent.decl.scope.isFunScope ? 'E_UNUSED_PARAM' :
@@ -231,29 +231,11 @@ export class Parser extends scanner.Scanner {
     }
 
     const ent = new Ent(ident.value, decl, x)
-    if (scope.declareEnt(ent)) {
-      const f = p.inFun()
-      if (f) {
-        // TODO: change locals counting by using a watermark method or stack or
-        // something, so that:
-        //
-        // fun main {
-        //   a = 0
-        //   { c = 0; }
-        //   { d = 0; }
-        // }
-        //
-        // only needs two i32 locals since c and d can use the same slot.
-        //
-        f.nlocali32++
-        debuglog(
-          `${ident} in scope#${scope.level()}; ` +
-          `nlocali32: ${f.nlocali32}`
-        )
-      }
-    } else {
+    if (!scope.declareEnt(ent)) {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
+    // TODO: in the else branch, we could count locals/registers needed here.
+    // For instance, "currFun().local_i32s_needed++"
   }
 
   declarev(scope :Scope, idents: Ident[], decl :Node, xs: Expr[]|null) {
@@ -287,7 +269,7 @@ export class Parser extends scanner.Scanner {
     while (s) {
       const ent = s.lookupImm(x.value)
       if (ent) {
-        // debuglog(`${x} found in scope#${s.level()}`)
+        debuglog(`${x} found in scope#${s.level()}`)
         x.refEnt(ent) // reference ent
         return x
       }
@@ -843,14 +825,16 @@ export class Parser extends scanner.Scanner {
 
         // Decide declare a new ent, or store to existing one
         if (id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
-          id.ent.writes++  // increment Nth write counter
+          id.incrWrite()
+
+          const typexpr = id.ent.getTypeExpr()
+          const typ = typexpr ? p.types.resolve(typexpr) : null
           
-          if (id.ent.value && id.ent.value.type) {
+          if (typ) {
             // check & resolve type, converting RHS if needed
-            id.type = id.ent.value.type
+            id.type = typ
 
             const val = s.rhs[i]
-            const typ = id.ent.value.type
             const convertedVal = p.types.convert(typ, val)
 
             if (!convertedVal) {
@@ -866,8 +850,10 @@ export class Parser extends scanner.Scanner {
               // replace original expression with conversion expression
               s.rhs[i] = convertedVal
             }
-
+          } else {
+            debuglog(`ent without type at id ${id}`)
           }
+
         } else {
           // since we are about to redeclare, clear any "unresolved" mark for
           // this identifier expression.
@@ -898,6 +884,26 @@ export class Parser extends scanner.Scanner {
       return p.assignment(lhs)
     }
 
+    if (p.tok == token.NAME && lhs.every(x => x instanceof Ident)) {
+      // e.g. "a T", "a, b, c T" -- declare var with type T
+
+      // first, revert either bindings or unresolved mark of LHS idents
+      for (let i = 0; i < lhs.length; i++) {
+        let x = lhs[i] as Ident
+        if (x.ent) {
+          x.unrefEnt()
+        } else {
+          assert(p.unresolved != null)
+          ;(p.unresolved as Set<Ident>).delete(x)
+        }
+      }
+
+      // now, form a var declaration (next up may be assignment and values)
+      const pos = lhs[0].pos
+      const vardecl = p.varDecl(pos, lhs as Ident[])
+      return new DeclStmt(pos, p.scope, [vardecl])
+    }
+
     const pos = lhs[0].pos
 
     if (lhs.length != 1) {
@@ -905,6 +911,8 @@ export class Parser extends scanner.Scanner {
       p.advanceUntil(token.SEMICOLON, token.RBRACE)
       return new ExprStmt(lhs[0].pos, p.scope, lhs[0])
     }
+
+    debuglog(`XXXX ${tokstr(p.tok)}`)
 
     // single expression
 
@@ -1087,7 +1095,7 @@ export class Parser extends scanner.Scanner {
 
     const rtype = p.types.resolve(rval)
 
-    if (!frtype.equals(rtype)) {
+    if (!(rtype instanceof UnresolvedType) && !frtype.equals(rtype)) {
       const convres = p.types.convert(frtype, rval)
       if (convres) {
         rval = convres

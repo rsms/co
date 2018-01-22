@@ -12,6 +12,7 @@ import {
   SelectorExpr,
   TypeConvExpr,
   CallExpr,
+  Operation,
   Type,
   IntrinsicType,
   UnresolvedType,
@@ -101,12 +102,8 @@ export class TypeResolver extends ErrorReporter {
 
     if (n instanceof Ident) {
       if (n.ent) {
-        if (n.ent.value) {
-          return r.maybeResolve(n.ent.value)
-        }
-        if (n.ent.decl instanceof Expr) {
-          return r.maybeResolve(n.ent.decl)
-        }
+        const tx = n.ent.getTypeExpr()
+        return tx && r.maybeResolve(tx) || null
       }
       // else: unresolved -- unknown type
       return null
@@ -148,6 +145,35 @@ export class TypeResolver extends ErrorReporter {
         return funtype.output
       }
       return null  // unknown
+    }
+
+    if (n instanceof Operation) {
+      // type Operation {
+      //   Expr
+      //   op    :token
+      //   x     :Expr
+      //   y     :Expr? // nil means unary expression
+      // }
+      const xt = r.resolve(n.x)
+      if (!n.y) {
+        // unary, e.g. x++
+        return xt
+      } else {
+        const yt = r.resolve(n.y)
+
+        if (xt instanceof UnresolvedType || yt instanceof UnresolvedType) {
+          // operation's effective type not yet know
+          return null
+        }
+
+        if (xt.equals(yt)) {
+          // unary, e.g. x++  OR  both operands types are equivalent
+          return xt
+        }
+
+        r.error(`invalid operation (mismatched types ${xt} and ${yt})`, n.pos)
+      }
+      return null
     }
 
     debuglog(`TODO handle ${n.constructor.name}`)

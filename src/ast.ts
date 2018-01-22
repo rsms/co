@@ -63,8 +63,8 @@ export class Field extends Node {
 //
 //
 export class Ent {
-  writes :int = 0          // Tracks stores. None == constant
-  reads = new Set<Ident>() // Tracks references to this ent. None == unused
+  writes :int = 0  // Tracks stores (SSA version). None == constant.
+  nreads :int = 0  // Tracks references to this ent. None == unused
     // writes and reads does NOT include the definition/declaration itself.
 
   constructor(
@@ -73,6 +73,19 @@ export class Ent {
     public value :Expr|null,
     public data  :any = null,
   ) {}
+
+  getTypeExpr() :Expr | null {
+    return (
+      ( this.value && this.value.type) ||
+      
+      ( this.decl && (
+        this.decl instanceof Field ||
+        this.decl instanceof VarDecl
+      ) && this.decl.type) ||
+
+      this.value
+    )
+  }
 
   get isConstant() :bool {
     return this.writes == 0
@@ -319,20 +332,30 @@ export class SelectorExpr extends Expr {
 
 export class Ident extends Expr {
   ent :Ent|null = null // what this name references
+
   constructor(pos :Pos, scope :Scope,
-    public value  :ByteStr, // interned in ByteStrSet
+    public value :ByteStr, // interned in ByteStrSet
+    public ver :int = 0,   // SSA version
   ) {
     super(pos, scope)
   }
 
   toString() { return String(this.value) }
 
+  incrWrite() {
+    assert(this.ent != null)
+    let ent = this.ent as Ent
+    ent.writes++
+    this.ver = ent.writes
+  }
+
   // ref registers a reference to this ent from an identifier
   //
   refEnt(ent :Ent) {
     assert(this !== ent.decl, "ref declaration")
-    ent.reads.add(this)
+    ent.nreads++
     this.ent = ent
+    this.ver = ent.writes
   }
 
   // ref unregisters a reference to this ent from an identifier
@@ -340,9 +363,9 @@ export class Ident extends Expr {
   unrefEnt() {
     assert(this.ent, "null ent")
     const ent = this.ent as Ent
-    const _ok = ent.reads.delete(this)
-    assert(_ok, "ent not referenced")
+    ent.nreads--
     this.ent = null
+    this.ver = 0
   }
 }
 
@@ -384,7 +407,7 @@ export class StringLit extends LiteralExpr {
 
 export class Operation extends Expr {
   constructor(pos :Pos, scope :Scope,
-  public op :token,
+  public op :token, // [token.operator_beg .. token.operator_end]
   public x  :Expr,
   public y  :Expr|null = null, // nil means unary expression
   ) {
@@ -496,7 +519,7 @@ export class UnresolvedType extends Type {
   }
 
   toString() {
-    return this.expr.toString()
+    return '~' + this.expr.toString()
   }
 }
 
