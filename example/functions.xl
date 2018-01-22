@@ -1,57 +1,54 @@
-import "foo"
+// import "foo"
 
-A string = "123"
-B = "123"
-
+// simple, empty functions
 fun empty0
 fun empty1()
-fun empty2() {}
-fun empty3() int {}
+fun empty2(
+  // no implicit semicolons inserted here
+)
+fun empty3() {}
 
-// fun fp1(,) {} // error: unexpected ,, expecting name
-fun fp2(a) {}
-fun fp3(a,) {}
-fun fp4(a, b) {}
-fun fp5(a, b,) {}
-// fun fp6(x.t0) {} // error: unexpected type x.t0, expecting name
-// fun fp7(x.t0, a) {} // error: unexpected type x.t0, expecting name
-fun fp8(a x.t0) {}
+// parameters
+fun fp2(int, int) int // types only
+fun fp1(a, b, c int) int // shorthand type
+fun fp3(a, b, c int) int { 0 } // with body
+fun fp4(a, b int, d, e f32) int { 0 } // shorthand types
+// fun fp5(a int, int)int //error: mixed named and unnamed function parameters
+// fun fp6(pkg.T int) {} // error: illegal parameter name
 
-fun fvp0(a ...) {}
-fun fvp1(a ...int) {}
-// fun fvp2(a ...int, b ...) {}
-//   // error: can only use ... with final parameter in list
-fun fvp3(a, b ...) {}
-fun fvp4(a, b ...int) {}
+// trailing commas in params
+// fun fp7(,) // error: unexpected ,, expecting name or type
+// fun fp9(;) // error: unexpected ;, expecting name or type
+fun fp10(int,)
+fun fp11(a, b int,)
 
+// rest
+fun rest1(a ...int) {}
+fun rest2(a, b ...int) {} // == (a int, b ...int)
+// fun rest3(a ...int, b ...int) {} // error: can only use ... with final param
+// fun rest4(a ...) {} // error: unexpected ), expecting type after ...
+
+// result
 fun fr0() int {}
-fun fr1() t0 {}
-fun fr2() x.t0 {}
-fun fr3() (t0) {}
-fun fr4() (t0,) {}
-fun fr5() () {}
-fun fr6() (t0, x.t0) {}
-fun fr7() (i32, i64) {}
-// fun fr8() (a t0) {} // error: unexpected name, expecting comma, or )
+fun fr1() (int) {}
+fun fr2() (int,) {}
+fun fr3() () {}
+fun fr4() (i32, i64) {}
+// fun fr5() (a t0) {} // error: unexpected name, expecting comma, or )
 
-// fun fsd0(b) int -> ; // error: missing function body
-// fun fsd1(b) -> ; // error: missing function body
-// fun fsd2 -> ; // error: missing function body
+// single-expression body
+fun fx0(a int) int -> 4
+fun fx1(a int) -> (4, 4)
+fun fx2() -> 4
+fun fx3 -> 4
+// fun fx4(b) int -> ; // error: missing function body
+// fun fx5(b) -> ; // error: missing function body
+// fun fx6 -> ; // error: missing function body
 
-fun fs0(b) int -> 4
-fun fs1(b) -> (4, 4)
-fun fs2 -> 4
-
-fe0 = fun foo0(a) { 4 }
-fe1 = fun foo1(b) -> 4
-fe2 = fun (c) { 4 }
-fe3 = fun (d) -> 4
+// used as an expression
+fe0 = fun foo0(int) { 4 }
+fe1 = fun foo1(int) -> 4
+fe2 = fun (int) { 4 } // name is optional when used as an expression
+fe3 = fun (int) -> 4
 fe4 = fun -> 4
-// fe5 = fun (d) int 4 // error: missing function body
-
-// fun bad0(d) 4 // error: missing funtion body
-// fun bad1(d) int 4 // error: missing funtion body
-
-// fun main {
-//   map(x -> x)
-// }
+// fe5 = fun (d) int // error: missing function body

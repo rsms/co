@@ -201,8 +201,8 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
 
   if (n instanceof Field) {
     let s = repr1(n.type, nl2, c)
-    if (n.ident) {
-      s = '(' + repr1(n.ident, nl2, c) + ' ' + s + ')'
+    if (n.name) {
+      s = '(' + repr1(n.name, nl2, c) + ' ' + s + ')'
     }
     return s
   }

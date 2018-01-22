@@ -29,8 +29,8 @@ export class Node {
 //       Type
 export class Field extends Node {
   constructor(pos :Pos, scope :Scope,
-  public type  :Expr,
-  public ident :Ident|null,
+  public type :Expr,
+  public name :Ident|null,
     // nil means anonymous field/parameter (structs/parameters),
     // or embedded interface (interfaces)
   ) {

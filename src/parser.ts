@@ -400,7 +400,7 @@ export class Parser extends scanner.Scanner {
           break
 
         case token.FUN:
-          decls.push(p.funDecl())
+          decls.push(p.funDecl(null))
           break
 
         // TODO: token.TYPE
@@ -522,20 +522,35 @@ export class Parser extends scanner.Scanner {
     return d
   }
 
-  funDecl() :FunDecl {
-    // FunDecl  = "fun" FunName Signature? FunBody?
+  funDecl(ctx :exprCtx) :FunDecl {
+    //
+    // FunDecl  = "fun" FunName? Signature? FunBody?
     // FunName  = identifier
     // FunBody  = ( Block | "->" Stmt )
+    //
+    // Note: FunName is required at file level in "fun" declarations
+    //
     const p = this
     const pos = p.pos
     p.want(token.FUN)
-    const name = p.ident()
 
-    // functions called "init" at the file level are special
-    const isInitFun = p.scope === p.filescope && name.value.equals(p._id_init)
+    const isTopLevel = p.scope === p.filescope
 
-    // vars at the file level are declared in the package scope
-    const scope = p.scope === p.filescope ? p.pkgscope : p.scope
+    let name :Ident|null
+    let isInitFun = false
+
+    if (isTopLevel && !ctx) {
+      // case: statement(!ctx) at top-level
+      name = p.ident()
+      // functions called "init" at the file level are special
+      isInitFun = p.scope === p.filescope && name.value.equals(p._id_init)
+    } else {
+      name = p.maybeIdent()
+    }
+
+    // scope in which we will declare the function's name.
+    // declarations at the top-level are declared in the package scope.
+    const scope = isTopLevel ? p.pkgscope : p.scope
 
     // new scope for parameters, signature and body
     p.pushScope(new Scope(p.scope, null, /*isFunScope*/true))
@@ -550,15 +565,30 @@ export class Parser extends scanner.Scanner {
       if (d.sig.result !== u_t_void) {
         p.syntaxError(`init function with result`, d.sig.pos)
       }
-    } else {
+    } else if (name && !ctx) {
       // The function itself is declared in its outer scope, so that its body
       // can refer to the function, but also so that "funname = x" declares a
       // new variable rather than replacing the function.
+      //
+      // The check for !ctx is to make sure that decorative names in
+      // expressions are not declared in the scope.
+      // E.g. the statement "x = fun y(){}" should only declare x in the scope,
+      // but not y.
       p.declare(scope, name, d, d)
     }
 
     // parse body
-    if (isInitFun || p.tok != token.SEMICOLON) {
+    if (!isTopLevel || isInitFun || ctx || p.tok != token.SEMICOLON) {
+
+      // Note: the following code can be enabled to disallow type-only param
+      // signatures for functions with bodies.
+      // if (d.sig.params.length > 0 && !d.sig.params[0].name) {
+      //   p.syntaxError(
+      //     `type-only parameters for function with body`,
+      //     d.sig.pos
+      //   )
+      // }
+
       if (isInitFun) { p.initfnest++ }
       p.pushFun(d)
       d.body = p.funBody(name)
@@ -577,7 +607,7 @@ export class Parser extends scanner.Scanner {
 
     const funtype = p.types.resolve(d)
     
-    if (!isInitFun) {
+    if (name && !isInitFun) {
       // since we declared the name of the function, the name now represents
       // the function and thus its type.
       name.type = funtype
@@ -587,64 +617,9 @@ export class Parser extends scanner.Scanner {
   }
 
   // TODO: maybeFunExpr() :Expr -- FunDecl or some other expr
-
-  funStmt(ctx :exprCtx) :FunDecl {
-    // FunStmt = "fun" FunName? Signature FunBody
-    // FunBody  = ( Block | "->" Stmt )
-
-    // FunExpr = "fun" FunName? Signature FunBody
-    // FunName = identifier
-    // FunBody  = ( Block | "->" Stmt )
-    const p = this
-    const pos = p.pos
-
-    p.want(token.FUN)
-
-    // "fun foo(...) { ... }"
-    // "fun foo(...) -> ..."
-    // "fun (...) { ... }"
-    // "fun (...) -> ..."
-    // "fun -> ..."
-    const name = p.maybeIdent()
-
-    const scope = p.scope
-
-    // new scope for parameters, signature and body
-    p.pushScope(new Scope(scope, null, /*isFunScope*/true))
-
-    // declare in outer scope, before we parse the body, so that the body can
-    // refer to the function's name
-    const d = new FunDecl(pos, scope, name, p.funSig(u_t_void))
-    if (name && !ctx) {
-      // declare the function's name when it's not on the right-hand side of an
-      // assignment.
-      // e.g. "fun foo ..."
-      p.declare(name.scope, name, d, d)
-    }
-
-    p.pushFun(d)
-    d.body = p.funBody(name)
-    p.popFun()
-
-    p.popScope()
-
-    if (d.sig.result === u_t_void) {
-      // no result type specified
-      // - if the body is a single expression, result is that expression
-      // - otherwise void (no result)
-      d.sig.result = d.body instanceof ExprStmt ? d.body.expr : u_t_void
-    }
-
-    const funtype = p.types.resolve(d)
-    
-    if (name) {
-      // since we declared the name of the function, the name now represents
-      // the function and thus its type.
-      name.type = funtype
-    }
-
-    return d
-  }
+  // FunExpr = "fun" FunName? Signature FunBody
+  // FunName = identifier
+  // FunBody  = ( Block | "->" Stmt )
 
   funSig(defaultType :Type): FunSig {
     // Signature = ( Parameters Result? | Type )?
@@ -658,51 +633,182 @@ export class Parser extends scanner.Scanner {
   parameters() :Field[] {
     // Parameters    = "(" [ ParameterList [ "," ] ] ")"
     // ParameterList = ParameterDecl ("," ParameterDecl)*
-    // ParameterDecl = Ident [ [ "..." ] Type ]
+    // ParameterDecl = [ NameList ] [ "..." ] Type
+    //
+    // T
+    // x T
+    // x, y, z T
+    // ... T
+    // x  ... T
+    // x, y, z  ... T
+    // T1, T2, T3
+    // T1, T2, ... T3
     //
     const p = this
     p.want(token.LPAREN)
 
-    const fields = [] as Field[]
+    let named = 0   // parameters that have an explicit name and type
     let seenRestExpr = false
+    const paramsPos = p.pos
+    const fields = [] as Field[]
+    const scope = p.scope
 
     while (p.tok != token.RPAREN) {
-      let f = new Field(p.pos, p.scope, u_t_auto, null)
+      let pos = p.pos
+      // let f = new Field(p.pos, scope, u_t_auto, p.ident())
+      
+      let typ :Expr = u_t_auto
+      let name :Ident|null = null
 
-      f.ident = p.ident()
-      p.declare(f.ident.scope, f.ident, f, null) // in function scope
-
-      if (p.tok == token.ELLIPSIS) {
-        // e.g. "fun foo(ident ... type)"
-        f.type = p.restExpr(u_t_auto)
-        if (seenRestExpr) {
-          p.syntaxError("can only use ... with final parameter in list")
-          continue  // skip this field
+      // parse type or name
+      if (p.tok == token.NAME) {
+        typ = p.dotident(p.ident())
+      } else {
+        // Note: No need to check for ";" or ")" since the "while" condition
+        // checks for ")" and an empty parameter set with linebreaks never
+        // produces a semicolon implicitly. I.e. "foo(<LF><LF>)" == "foo()"
+        // However, it's a syntax error to write "foo(;)"
+        const x = p.maybeType()
+        if (x) {
+          typ = x
         } else {
-          seenRestExpr = true
+          typ = p.bad()
+          p.syntaxError("expecting name or type")
+          // p.next()
         }
-      } else if (
-        p.tok != token.COMMA &&
-        p.tok != token.SEMICOLON &&
-        p.tok as token != token.RPAREN)
-      {
-        // e.g. "fun foo(ident type)"
-        f.type = p.type()
       }
 
-      f.ident.type = p.types.resolve(f.type)
+      if (p.tok != token.COMMA &&
+          p.tok != token.SEMICOLON &&
+          p.tok as token != token.RPAREN)
+      {
+        // e.g. func(T), func(... T)
 
+        // move typ -> name as we are about to parse the actual type
+        if (typ) {
+          // e.g. func(name T)
+          if (typ instanceof Ident) {
+            name = typ
+            named++
+          } else {
+            // e.g. func(a.b.c T)
+            p.syntaxError("illegal parameter name", pos)
+          }
+        }
+
+        // parse type
+        if (p.got(token.ELLIPSIS)) {
+          const x = p.maybeType()
+          if (x) {
+            typ = new RestExpr(pos, scope, x)
+          } else {
+            typ = p.bad()
+            p.syntaxError("expecting type after ...")
+          }
+          if (seenRestExpr) {
+            p.syntaxError("can only use ... with final parameter")
+            continue  // skip this field
+          } else {
+            seenRestExpr = true
+          }
+        } else {
+          typ = p.type()
+        }
+      }
+
+      // restType() :RestExpr {
+      //   // RestType = "..." Expr?
+      //   const p = this
+      //   const pos = p.pos
+      //   p.want(token.ELLIPSIS)
+      //   const rt = new RestExpr(pos, p.scope, p.type())
+      //   p.types.resolve(rt)
+      //   return rt
+      // }
+
+      // parse optional comma, or break on error
       if (!p.ocomma(token.RPAREN)) {
-        // error: unexpected ;, expecting comma, or )
+        // error: unexpected SOMETHING, expecting comma, or )
         // e.g. "fun foo(a, b<LF>)" fix -> "fun foo(a, b,<LF>)"
         //                                              ^
         break
       }
 
-      fields.push(f)
+      fields.push(new Field(pos, scope, typ, name))
     }
 
     p.want(token.RPAREN)
+
+    // distribute parameter types
+    if (named == 0) {
+      // none named -- types only
+      for (let f of fields) {
+        p.resolve(f.type)
+      }
+    } else {
+
+      if (named < fields.length) {
+        // All named, some has types, e.g. func(a, b B, c ...C)
+        // some named => all must be named
+        let ok = true
+        let typ :Expr|null = null
+        let t :Type = u_t_auto
+
+        for (let i = fields.length - 1; i >= 0; --i) {
+          const f = fields[i]
+
+          if (!f.name) {
+            // is a single-name param (name is actually on .type)
+            if (f.type instanceof Ident) {
+              f.name = f.type
+              if (typ) {
+                f.type = typ
+                f.name.type = t
+              } else {
+                // f.type == nil && typ == null => we only have a f.name
+                ok = false
+                f.type = p.bad(f.type.pos)
+              }
+            } else {
+              p.syntaxError("illegal parameter name", f.type.pos)
+            }
+          } else if (f.type) {
+            p.resolve(f.type)
+            t = p.types.resolve(f.type)
+            typ = f.type
+            if (typ instanceof RestExpr) {
+              typ = typ.expr
+            }
+            if (f.name) {
+              f.name.type = t
+            } else {
+              ok = false
+              f.name = p.fallbackIdent(typ.pos)
+            }
+          }
+
+          if (!ok) {
+            p.syntaxError(
+              "mixed named and unnamed function parameters",
+              paramsPos
+            )
+            break
+          }
+
+          // declare name in function scope
+          assert(f.name != null)
+          p.declare(scope, f.name as Ident, f, null)
+        }
+      } else {
+        // All named, all have types
+        // declare names in function scope
+        for (let f of fields) {
+          assert(f.name != null)
+          p.resolve(f.type)
+          p.declare(scope, f.name as Ident, f, null)
+        }
+      }
+    }
 
     return fields
   }
@@ -911,8 +1017,6 @@ export class Parser extends scanner.Scanner {
       p.advanceUntil(token.SEMICOLON, token.RBRACE)
       return new ExprStmt(lhs[0].pos, p.scope, lhs[0])
     }
-
-    debuglog(`XXXX ${tokstr(p.tok)}`)
 
     // single expression
 
@@ -1264,7 +1368,7 @@ export class Parser extends scanner.Scanner {
         return p.parenOrTupleExpr(keepParens, ctx)
 
       case token.FUN:
-        return p.funStmt(ctx)
+        return p.funDecl(ctx)
 
       // case _Lbrack, _Chan, _Map, _Struct, _Interface:
       //   return p.type_() // othertype
@@ -1383,16 +1487,6 @@ export class Parser extends scanner.Scanner {
       p.next()
     }
     return t
-  }
-
-  restExpr(defaultType :Type) :RestExpr {
-    // RestExpr = "..." Expr?
-    const p = this
-    const pos = p.pos
-    p.want(token.ELLIPSIS)
-    const rt = new RestExpr(pos, p.scope, p.maybeType() || defaultType)
-    p.types.resolve(rt)
-    return rt
   }
 
   tupleType() :TupleExpr {

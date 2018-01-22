@@ -110,7 +110,7 @@ function main() {
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  parsePkg("example", ['example/scope4.xl'], universe, parser, typeres).then(r => {
+  parsePkg("example", ['example/functions.xl'], universe, parser, typeres).then(r => {
     if (!r.success) {
       return
     }
