@@ -381,6 +381,13 @@ z := 3.4          // error: trying to assign float64 value to var of type int64
 ```
 
 
+## Statements
+
+A statement is a component of a block, which is in turn a component of an outer expression or function.
+
+There are two kinds of statement: declaration statements and expression statements.
+
+
 ## Expressions
 
 An expression specifies the computation of a value by applying operators and

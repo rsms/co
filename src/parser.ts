@@ -4,49 +4,53 @@ import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
 import { TypeResolver } from './resolve'
 import { ByteStr, ByteStrSet } from './bytestr'
-import {
-  Universe,
-  u_t_void,
-  u_t_auto,
-  u_t_uint,
-} from './universe'
+import { Universe } from './universe'
 import { debuglog } from './util'
 import {
   File,
   Scope,
   Ent,
-  Node,
   Group,
   Comment,
-  Ident,
-  RestExpr,
+
+  Node,
+
   Field,
+  Stmt,
+  
   Decl,
   ImportDecl,
   VarDecl,
   TypeDecl,
-  FunDecl,
-  FunSig,
+  MultiDecl,
+
   Expr,
+  Ident,
+  RestExpr,
+  FunExpr,
+  FunSig,
   BasicLit,
   StringLit,
-  Stmt,
-  BlockStmt,
-  ExprStmt,
-  SimpleStmt,
-  ReturnStmt,
-  AssignStmt,
-  DeclStmt,
+  Block,
+  ReturnExpr,
+  IfExpr,
+  Assignment,
   Operation,
   CallExpr,
   ParenExpr,
   TupleExpr,
   BadExpr,
   SelectorExpr,
+
   Type,
   FunType,
-  ConstStringType,
+  StrType,
   UnresolvedType,
+  UnionType,
+
+  u_t_void,
+  u_t_auto,
+  u_t_uint,
 } from './ast'
 
 // type of diagnostic
@@ -70,7 +74,26 @@ const kBytes_init = new Uint8Array([0x69, 0x6e, 0x69, 0x74]) // 'init'
 
 const emptyExprList :Expr[] = []
 
-type exprCtx = AssignStmt|VarDecl|null
+type exprCtx = Assignment|VarDecl|null
+
+
+// funInfo contains information about the current function, used for data
+// that is really only needed during parsing.
+class funInfo {
+  autort :UnionType|null = null // inferred result types
+
+  constructor(
+  public f :FunExpr, // the respective function node
+  ){}
+
+  addInferredReturnType(t :Type) {
+    if (this.autort == null) {
+      this.autort = new UnionType(new Set<Type>([t]))
+    } else {
+      this.autort.add(t)
+    }
+  }
+}
 
 
 // Parser scans source code and produces AST.
@@ -87,7 +110,7 @@ export class Parser extends scanner.Scanner {
   diagh      :DiagHandler|null = null
   initfnest  :int = 0  // tracks if we're inside an init function
   unresolved :Set<Ident>|null   // unresolved identifiers
-  funstack   :FunDecl[]  // function stack for type checking
+  funstack   :funInfo[]  // function stack
   types      :TypeResolver
 
   _id__      :ByteStr
@@ -161,23 +184,24 @@ export class Parser extends scanner.Scanner {
     }
   }
 
-  inFun() :FunDecl|null {
-    return this.funstack[0] || null
-  }
+  // inFun() :FunExpr|null {
+  //   return this.funstack[0] || null
+  // }
 
-  currFun() :FunDecl {
+  currFun() :funInfo {
     assert(this.funstack.length > 0, 'access current function at file level')
     return this.funstack[0]
   }
 
-  pushFun(f :FunDecl) {
-    this.funstack.push(f)
+  pushFun(f :FunExpr) {
+    this.funstack.push(new funInfo(f))
   }
 
-  popFun() :FunDecl {
+  popFun() {
     assert(this.funstack.length > 0, 'popFun with empty funstack')
-    return (this.funstack as any).pop() as FunDecl
+    this.funstack.pop()
   }
+
 
   pushScope(scope :Scope | null = null) {
     const p = this
@@ -301,7 +325,7 @@ export class Parser extends scanner.Scanner {
       if (ctx instanceof VarDecl) {
         return ctx.type && p.types.maybeResolve(ctx.type) || null
       }
-      if (ctx instanceof AssignStmt) {
+      if (ctx instanceof Assignment) {
         // common case: single assignment
         // we handle multi assignments later, in p.assignment()
         return (
@@ -400,7 +424,7 @@ export class Parser extends scanner.Scanner {
           break
 
         case token.FUN:
-          decls.push(p.funDecl(null))
+          decls.push(p.funExpr(null))
           break
 
         // TODO: token.TYPE
@@ -409,7 +433,7 @@ export class Parser extends scanner.Scanner {
           if (
             p.tok == token.LBRACE &&
             decls.length > 0 &&
-            isEmptyFunDecl(decls[decls.length-1])
+            isEmptyFunExpr(decls[decls.length-1])
           ) {
             // opening { of function declaration on next line
             p.syntaxError("unexpected semicolon or newline before {")
@@ -522,9 +546,9 @@ export class Parser extends scanner.Scanner {
     return d
   }
 
-  funDecl(ctx :exprCtx) :FunDecl {
+  funExpr(ctx :exprCtx) :FunExpr {
     //
-    // FunDecl  = "fun" FunName? Signature? FunBody?
+    // FunExpr  = "fun" FunName? Signature? FunBody?
     // FunName  = identifier
     // FunBody  = ( Block | "->" Stmt )
     //
@@ -555,26 +579,45 @@ export class Parser extends scanner.Scanner {
     // new scope for parameters, signature and body
     p.pushScope(new Scope(p.scope, null, /*isFunScope*/true))
 
-    const d = new FunDecl(pos, p.scope, name, p.funSig(u_t_void), isInitFun)
+    // parse signature.
+    //
+    // Note: we use the default and special type constant "auto" for all
+    // functions but initi functions. This allows us to track multiple return
+    // sites and do type checking as we go.
+    //
+    // Additionally, p.funSig may find an explicit return type in which case
+    // it will use that instead. Whenever we encounter a return statement, we
+    // will check the expected return type with the actual return type.
+    //
+    const sig = p.funSig(isInitFun ? u_t_void : u_t_auto)
+
+    const f = new FunExpr(pos, p.scope, name, sig, isInitFun)
 
     if (isInitFun) {
       // check initfun signature (should be empty)
-      if (d.sig.params.length > 0) {
-        p.syntaxError(`init function with parameters`, d.sig.pos)
+      if (sig.params.length > 0) {
+        p.syntaxError(`init function with parameters`, sig.pos)
       }
-      if (d.sig.result !== u_t_void) {
-        p.syntaxError(`init function with result`, d.sig.pos)
+      if (sig.result !== u_t_void) {
+        p.syntaxError(`init function with result`, sig.pos)
       }
-    } else if (name && !ctx) {
-      // The function itself is declared in its outer scope, so that its body
-      // can refer to the function, but also so that "funname = x" declares a
-      // new variable rather than replacing the function.
-      //
-      // The check for !ctx is to make sure that decorative names in
-      // expressions are not declared in the scope.
-      // E.g. the statement "x = fun y(){}" should only declare x in the scope,
-      // but not y.
-      p.declare(scope, name, d, d)
+    } else {
+      if (sig.result !== u_t_auto) {
+        // an explicit type was provided -- resolve type
+        p.types.resolve(sig.result)
+      }
+
+      if (name && !ctx) {
+        // The function itself is declared in its outer scope, so that its body
+        // can refer to the function, but also so that "funname = x" declares a
+        // new variable rather than replacing the function.
+        //
+        // The check for !ctx is to make sure that decorative names in
+        // expressions are not declared in the scope.
+        // E.g. the statement "x = fun y(){}" should only declare x in the scope,
+        // but not y.
+        p.declare(scope, name, f, f)
+      }
     }
 
     // parse body
@@ -582,30 +625,53 @@ export class Parser extends scanner.Scanner {
 
       // Note: the following code can be enabled to disallow type-only param
       // signatures for functions with bodies.
-      // if (d.sig.params.length > 0 && !d.sig.params[0].name) {
+      // e.g. "fun foo(int, f32) {}"
+      // if (sig.params.length > 0 && !sig.params[0].name) {
       //   p.syntaxError(
       //     `type-only parameters for function with body`,
-      //     d.sig.pos
+      //     sig.pos
       //   )
       // }
 
       if (isInitFun) { p.initfnest++ }
-      p.pushFun(d)
-      d.body = p.funBody(name)
+      p.pushFun(f)
+
+      f.body = p.funBody(name)
+      const fi = p.currFun()
+
       p.popFun()
       if (isInitFun) { p.initfnest-- }
+
+      // pop function body scope before resolving types.
+      // otherwise we would run the risk of resolving a type to something
+      // that's defined in the function body itself which may shadow outer
+      // definitions.
+      p.popScope()
+
+      if (sig.result === u_t_auto) {
+        // inferred result type
+        if (fi.autort == null) {
+          // no return statements encountered.
+          // set result type to same as the body
+          sig.result = p.types.resolve(f.body)
+        } else if (fi.autort.types.size == 1) {
+          // single return type (note: may be void if found `return;`)
+          sig.result = fi.autort.types.values().next().value
+        } else {
+          // union type
+          sig.result = fi.autort
+        }
+      }
+    } else {
+      if (sig.result == u_t_auto) {
+        // for functions without a body and that is missing an explicit
+        // result type, void is assumed.
+        sig.result = u_t_void
+      }
+      p.popScope()
     }
 
-    p.popScope()
-
-    if (d.sig.result === u_t_void) {
-      // no result type specified
-      // - if the body is a single expression, result is that expression
-      // - otherwise void (no result)
-      d.sig.result = d.body instanceof ExprStmt ? d.body.expr : u_t_void
-    }
-
-    const funtype = p.types.resolve(d)
+    const funtype = p.types.resolve(f)
     
     if (name && !isInitFun) {
       // since we declared the name of the function, the name now represents
@@ -613,10 +679,10 @@ export class Parser extends scanner.Scanner {
       name.type = funtype
     }
 
-    return d
+    return f
   }
 
-  // TODO: maybeFunExpr() :Expr -- FunDecl or some other expr
+  // TODO: maybeFunExpr() :Expr -- FunExpr or some other expr
   // FunExpr = "fun" FunName? Signature FunBody
   // FunName = identifier
   // FunBody  = ( Block | "->" Stmt )
@@ -805,6 +871,7 @@ export class Parser extends scanner.Scanner {
         for (let f of fields) {
           assert(f.name != null)
           p.resolve(f.type)
+          ;(f.name as Ident).type = p.types.resolve(f.type)
           p.declare(scope, f.name as Ident, f, null)
         }
       }
@@ -813,47 +880,50 @@ export class Parser extends scanner.Scanner {
     return fields
   }
 
-  funBody(funcname :Ident|null) :Stmt {
-    // FunBody  = ( "->" Stmt | Block )
+  funBody(funcname :Ident|null) :Expr {
+    // FunBody = ( Block | "->" Expr )
     const p = this
+
     if (p.tok == token.LBRACE) {
       // Block
       return p.block()
     }
-    const pos = p.pos
+
     if (p.got(token.ARROWR)) {
-      // "->" Stmt
-      const s = p.maybeStmt()
-      if (s) {
-        return s
-      }
+      // "->" Expr
+      return p.expr(/*ctx=*/null)
     }
+
     // error
+    const pos = p.pos
     if (funcname) {
       p.syntaxError(`${funcname} is missing function body`, pos)
     } else {
       p.syntaxError("missing function body", pos)
     }
-    return new SimpleStmt(pos, p.scope)
+    return p.bad(pos)
   }
 
-  block() :BlockStmt {
-    // Block = "{" StatementList "}"
+  // block parses a block expression.
+  // The caller manages scope (push/pop if required)
+  //
+  block() :Block {
+    // Block = "{" StatementList "}" | Stmt
     const p = this
     const pos = p.pos
     p.want(token.LBRACE)
     const list = p.stmtList()
     p.want(token.RBRACE)
-    return new BlockStmt(pos, p.scope, list)
+    return new Block(pos, p.scope, list)
   }
 
-  declStmt<D extends Decl>(f :(g:Group|null, i:int)=>D) :DeclStmt {
+  multiDecl<D extends Decl>(f :(g:Group|null, i:int)=>D) :MultiDecl {
     const p = this
     const pos = p.pos
     p.next() // e.g. TYPE
     const decls :Decl[] = []
     p.appendGroup(decls, f)
-    return new DeclStmt(pos, p.scope, decls)
+    return new MultiDecl(pos, p.scope, decls)
   }
 
   stmtList() :Stmt[] {
@@ -903,12 +973,12 @@ export class Parser extends scanner.Scanner {
     )
   }
 
-  assignment(lhs :Expr[]) :AssignStmt {
+  assignment(lhs :Expr[]) :Assignment {
     // Assignment = ExprList "=" ExprList
     const p = this
     p.want(token.ASSIGN) // "="
 
-    const s = new AssignStmt(lhs[0].pos, p.scope, token.ASSIGN, lhs, [])
+    const s = new Assignment(lhs[0].pos, p.scope, token.ASSIGN, lhs, [])
 
     // parse right-hand side in context of the function
     s.rhs = p.exprList(/*ctx=*/s)
@@ -976,9 +1046,9 @@ export class Parser extends scanner.Scanner {
     return s
   }
 
-  // SimpleStmt = EmptyStmt | ExpressionStmt | SendStmt | IncDecStmt
-  //            | Assignment | ShortVarDecl .
-  simpleStmt(lhs :Expr[]) :SimpleStmt {
+  // simpleStmt = EmptyStmt | ExpressionStmt | SendStmt | IncDecStmt
+  //            | Assignment | VarDecl
+  simpleStmt(lhs :Expr[]) :Stmt {
     const p = this
 
     // Note: token.SET_ASSIGN ":=" is currently unused
@@ -991,6 +1061,7 @@ export class Parser extends scanner.Scanner {
     }
 
     if (p.tok == token.NAME && lhs.every(x => x instanceof Ident)) {
+      // var definition
       // e.g. "a T", "a, b, c T" -- declare var with type T
 
       // first, revert either bindings or unresolved mark of LHS idents
@@ -1005,17 +1076,15 @@ export class Parser extends scanner.Scanner {
       }
 
       // now, form a var declaration (next up may be assignment and values)
-      const pos = lhs[0].pos
-      const vardecl = p.varDecl(pos, lhs as Ident[])
-      return new DeclStmt(pos, p.scope, [vardecl])
+      return p.varDecl(lhs[0].pos, lhs as Ident[])
     }
 
     const pos = lhs[0].pos
 
     if (lhs.length != 1) {
-      p.syntaxError("expecting := or = or comma")
+      p.syntaxError('expecting "=" or ","')
       p.advanceUntil(token.SEMICOLON, token.RBRACE)
-      return new ExprStmt(lhs[0].pos, p.scope, lhs[0])
+      return lhs[0]
     }
 
     // single expression
@@ -1026,7 +1095,7 @@ export class Parser extends scanner.Scanner {
       // lhs op= rhs;  e.g. "x += 2"
       const op = p.tok
       p.next() // consume operator
-      const s = new AssignStmt(pos, p.scope, op, lhs, [])
+      const s = new Assignment(pos, p.scope, op, lhs, [])
       s.rhs = p.exprList(/*ctx=*/s)
       return s
     }
@@ -1043,7 +1112,7 @@ export class Parser extends scanner.Scanner {
       ) {
         p.syntaxError(`cannot mutate ${operand}`, operand.pos)
       }
-      return new AssignStmt(pos, p.scope, op, lhs, emptyExprList)
+      return new Assignment(pos, p.scope, op, lhs, emptyExprList)
     }
 
     if (p.tok == token.ARROWL) {
@@ -1057,15 +1126,15 @@ export class Parser extends scanner.Scanner {
     }
 
     // else: expr
-    return new ExprStmt(lhs[0].pos, p.scope, lhs[0])
+    return lhs[0]
   }
 
 
   maybeStmt() :Stmt|null {
     // Statement =
-    //   Declaration | LabeledStmt | SimpleStmt |
-    //   GoStmt | ReturnStmt | BreakStmt | ContinueStmt | GotoStmt |
-    //   FallthroughStmt | Block | IfStmt | SwitchStmt | SelectStmt | ForStmt |
+    //   Declaration | LabeledStmt | simpleStmt |
+    //   GoStmt | ReturnExpr | BreakStmt | ContinueStmt | GotoStmt |
+    //   FallthroughStmt | Block | IfExpr | SwitchStmt | SelectStmt | ForStmt |
     //   DeferStmt .
     const p = this
 
@@ -1083,7 +1152,7 @@ export class Parser extends scanner.Scanner {
         return s
 
       case token.TYPE:
-        return p.declStmt(p.typeDecl)
+        return p.multiDecl(p.typeDecl)
 
       case token.ADD:
       case token.SUB:
@@ -1100,26 +1169,26 @@ export class Parser extends scanner.Scanner {
       // case token.ARROW: // receive operator
         return p.simpleStmt(p.exprList(/*ctx=*/null))
 
-      // case _For:
+      // case token.FOR:
       //   return p.forStmt()
 
-      // case _Switch:
+      // case token.SWITCH:
       //   return p.switchStmt()
 
-      // case _Select:
+      // case token.SELECT:
       //   return p.selectStmt()
 
-      // case _If:
-      //   return p.ifStmt()
+      case token.IF:
+        return p.ifExpr(/*ctx=*/null)
 
-      // case _Fallthrough:
+      // case token.FALLTHROUGH:
       //   s := new(BranchStmt)
       //   s.pos = p.pos()
       //   p.next()
       //   s.Tok = _Fallthrough
       //   return s
 
-      // case _Break, _Continue:
+      // case token.BREAK, token.CONTINUE:
       //   s := new(BranchStmt)
       //   s.pos = p.pos()
       //   s.Tok = p.tok
@@ -1129,10 +1198,10 @@ export class Parser extends scanner.Scanner {
       //   }
       //   return s
 
-      // case _Go, _Defer:
+      // case token.GO, token.DEFER:
       //   return p.callStmt()
 
-      // case _Goto:
+      // case token.GOTO:
       //   s := new(BranchStmt)
       //   s.pos = p.pos()
       //   s.Tok = _Goto
@@ -1141,9 +1210,9 @@ export class Parser extends scanner.Scanner {
       //   return s
 
       case token.RETURN:
-        return p.returnStmt()
+        return p.returnExpr(/*ctx=*/null)
 
-      // case _Semi:
+      // case token.SEMI:
       //   s := new(EmptyStmt)
       //   s.pos = p.pos()
       //   return s
@@ -1157,31 +1226,86 @@ export class Parser extends scanner.Scanner {
     return null
   }
 
-  returnStmt() :ReturnStmt {
+  ifExpr(ctx :exprCtx, hasIfScope :bool = false) :IfExpr {
+    // IfExpr = "if" Expression Block
+    //          [ "else" ( IfExpr | Block ) ]
+    //
+    // e.g. `if x > 1 "large" else "small"`
+    // e.g. `if x = size() > 1 print("large number: $x")`
+    //
+    const p = this
+    const pos = p.pos
+    const scope = p.scope
+
+    p.want(token.IF)
+
+    // make sure we have a scope for conditions to support e.g.
+    //   if x = a() > 0 print("$x > 0") else print("$x < 0")
+    if (!hasIfScope) {
+      p.pushScope()
+    }
+
+    const cond = p.expr(ctx)
+    p.types.resolve(cond)
+
+    p.pushScope()
+    const then = p.expr(ctx)
+    p.popScope()
+
+    // optional semicolon after "then" expr
+    if (!(then instanceof Block) && p.tok == token.SEMICOLON) {
+      p.next()
+    }
+
+    const s = new IfExpr(pos, scope, cond, then, null)
+
+    if (p.got(token.ELSE)) {
+      if (p.tok == token.IF) {
+        s.els_ = p.ifExpr(ctx, /*hasIfScope=*/true)
+      } else {
+        p.pushScope()
+        s.els_ = p.expr(ctx)
+        p.popScope()
+      }
+    }
+
+    if (!hasIfScope) {
+      p.popScope()
+    }
+
+    return s
+  }
+
+  returnExpr(ctx :exprCtx) :ReturnExpr {
     const p = this
     const pos = p.pos
 
     p.want(token.RETURN)
 
-    const n = new ReturnStmt(pos, p.scope, null)
+    const n = new ReturnExpr(pos, p.scope, null)
 
-    // resolve current function's result type
-    const ftype = p.types.resolve(p.currFun()) as FunType
-    assert(ftype instanceof FunType) // ftype always resolves
-    const frtype = ftype.output
-    
+    // expected return type (may be u_t_auto; u_t_void for init)
+    const fi = p.currFun()
+    const frtype = fi.f.sig.result as Type  // ok; already resolved
+    assert(frtype instanceof Type, "currFun sig.result type not resolved")
+
     if (p.tok == token.SEMICOLON || p.tok == token.RBRACE) {
-      // no result
+      // no result; just "return"
       if (frtype !== u_t_void) {
-        p.syntaxError("missing return value", pos)
-        return n
+        if (frtype === u_t_auto && fi.autort == null) {
+          // if `fi.autort != null` that means the block returns both
+          // some type and nothing, which is invalid.
+          fi.f.sig.result = u_t_void
+        } else {
+          p.syntaxError(`missing return value; expecting ${fi.autort || frtype}`)
+        }
       }
       return n
     }
 
     // expecting one or more results to follow
     
-    const xs = p.exprList(/*ctx=*/null) // ?: maybe pass TupleExpr?
+    const xs = p.exprList(ctx) // ?: maybe pass TupleExpr?
     
     let rval = (
       xs.length == 1 ? xs[0] :
@@ -1199,11 +1323,16 @@ export class Parser extends scanner.Scanner {
 
     const rtype = p.types.resolve(rval)
 
-    if (!(rtype instanceof UnresolvedType) && !frtype.equals(rtype)) {
+    if (frtype === u_t_auto) {
+      // register inferred result type
+      fi.addInferredReturnType(rtype)
+    } else if (!(rtype instanceof UnresolvedType) && !frtype.equals(rtype)) {
+      // attempt type conversion
       const convres = p.types.convert(frtype, rval)
       if (convres) {
         rval = convres
       } else {
+        // error: type mismatch
         p.syntaxError(
           (rval.type instanceof UnresolvedType ?
             `cannot use "${rval}" as return type ${frtype}` :
@@ -1258,11 +1387,11 @@ export class Parser extends scanner.Scanner {
     const pos = p.pos
 
     switch (t) {
-      case token.MUL:
       case token.ADD:
       case token.SUB:
       case token.NOT:
       case token.XOR: {
+        // e.g. "-x", "!y"
         p.next()
         return new Operation(pos, p.scope, t, p.unaryExpr(ctx))
       }
@@ -1303,18 +1432,18 @@ export class Parser extends scanner.Scanner {
     const p = this
     let x = p.operand(keepParens, ctx)
 
-    // TODO: what follows an operand, if any
-
     loop:
-    while (true) {
-      // const pos = p.pos
-      switch (p.tok) {
-        case token.LPAREN:
-          x = p.call(x, ctx)
-          break
-        default:
-          break loop
-      }
+    while (true) switch (p.tok) {
+
+      case token.LPAREN:
+        x = p.call(x, ctx)
+        break  // may be more calls, e.g. foo()()()
+
+      case token.ASSIGN:
+        return p.assignment([x])
+
+      default:
+        break loop
     }
 
     return x
@@ -1368,7 +1497,20 @@ export class Parser extends scanner.Scanner {
         return p.parenOrTupleExpr(keepParens, ctx)
 
       case token.FUN:
-        return p.funDecl(ctx)
+        return p.funExpr(ctx)
+
+      case token.LBRACE:
+        p.pushScope()
+        const b = p.block()
+        p.popScope()
+        return b
+
+      case token.RETURN:
+        return p.returnExpr(ctx)
+
+
+      case token.IF:
+        return p.ifExpr(ctx)
 
       // case _Lbrack, _Chan, _Map, _Struct, _Interface:
       //   return p.type_() // othertype
@@ -1402,7 +1544,7 @@ export class Parser extends scanner.Scanner {
     const p = this
     assert(p.tok == token.STRING)
     const n = new StringLit(p.pos, p.scope, p.takeByteValue())
-    n.type = new ConstStringType(u_t_uint.bitsize, n.value.length)
+    n.type = new StrType(n.value.length)
     p.next()
     return n
   }
@@ -1713,6 +1855,6 @@ function unparen(x :Expr) :Expr {
   return x
 }
 
-function isEmptyFunDecl(d :Decl) :bool {
-  return d instanceof FunDecl && !d.body
+function isEmptyFunExpr(d :Decl) :bool {
+  return d instanceof FunExpr && !d.body
 }

@@ -1,0 +1,318 @@
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<style type="text/css">
+
+* {
+  font: 11px Hack, 'SF Mono', Inconsolata, monospace;
+}
+
+p.p1 {margin: 0.0px 0.0px 0.0px 0.0px; color: #5fafff; background-color: #0a0a0a}
+p.p2 {margin: 0.0px 0.0px 0.0px 0.0px; color: #dadada; background-color: #0a0a0a}
+p.p3 {margin: 0.0px 0.0px 0.0px 0.0px; color: #808080; background-color: #0a0a0a}
+span.s1 {color: #dadada}
+span.s2 {color: #808080}
+span.s3 {color: #ff87af}
+span.s4 {color: #5ffa87}
+span.s5 {color: #af87ff}
+span.s6 {color: #ffaf5f}
+span.s7 {color: #5fafff}
+
+body {
+  margin:0;
+  display: flex;
+}
+.input, .output {
+  /*width: 40%;*/
+  /*display: inline-block;*/
+  margin: 0 auto;
+}
+
+.input {
+}
+</style>
+</head>
+<body>
+<div class="input">
+<pre>
+// void when missing body
+fun f00
+
+// void for empty body
+fun f10 {}     // ()->void
+fun f11 -> {}  // ()->void
+
+// result type is type of expression
+fun f20 -> 3  // ()->int
+fun f21 { 3 } // ()->int
+fun f22 -> fun -> fun -> 123  // ()->()->()->int
+
+// inferred type from branches
+fun f23(x int) { if x > 1 1 else 2 } // (int)->int
+fun f24(x int) { if x > 1 1 } // (int)->int
+
+// // error: basic types can't be optional
+// fun f25(x int) {
+//   if x > 1 1 else nil
+// } // error: if expression mixing int and nil
+//
+// the following is ok since the if expression's
+// value is not used.
+fun f26(x int) {
+  if x > 1 1 else nil
+  true
+}
+
+// strings in branches
+//
+// Note: strings are special since the compiler may
+// know the length of a string if it's a constant.
+// The length need to either be propagated when all
+// branches yield a string with the same,
+// compile-time-known length, or (more commonly) the
+// types need to be downcast to just "str" without
+// any length information.
+//
+fun f30(x int) { if x > 1 "bob" } // (int)->str
+fun f31(x int) { if x > 1 "" } // (int)->str<0>
+fun f32(x int) { if x > 1 "bob" else "a" } // (int)->str
+fun f33(x int) { if x > 1 "bob" else "abc" } // (int)->str<3>
+fun f34(x int) { if x > 1 "bob" else nil } // (int)->str<3>?
+fun f35(x int) { if x > 1 nil else "bob" } // (int)->str<3>?
+
+// result type union inferred from return statements
+// Note that the type of "if" doesn't matter here.
+fun f40(x int) {
+  if x > 0 1
+  else if x < 0 true
+  else 1.2
+} // (int)->int|bool|f64
+
+// should make all optional if any branch is nil
+fun f41(x int) {
+  if x > 10     "bob"
+  else if x > 9 "anne"
+  else if x > 8 "robin"
+  else          nil
+} // (int)->str?
+fun f42(x int) {
+  if x > 10     "bob"
+  else if x > 9 "anne"
+  else if x > 8 nil
+  else          "robin"
+} // (int)->str?
+fun f43(x int) {
+  if x > 10     "bob"
+  else if x > 9 nil
+  else if x > 8 "anne"
+  else          "robin"
+} // (int)->str?
+fun f44(x int) {
+  if x > 10     nil
+  else if x > 9 "bob"
+  else if x > 8 "anne"
+  else          "robin"
+} // (int)->str?
+
+fun f45(x int) {
+  a = if x > 10 "bobs" else nil
+  b = if x > 10 "ann" else nil
+  if x > 10 a else b
+} // (int)->str?
+
+fun f46(x int) {
+  a = if x > 10 "bob" else nil
+  b = if x > 10 "anne" else ""
+  c = if x > 10 "robin" else ""
+  if x > 10 a else if x > 9 b else c
+} // (int)->str?
+
+fun f47(x int) {
+  a = if x > 10 "bob" else ""
+  b = if x > 10 "anne" else nil
+  c = if x > 10 "robin" else ""
+  if x > 10 a else if x > 9 b else c
+} // (int)->str?
+
+// result type is type of last expression
+fun f50 { 3 ; true } // ()->bool
+fun f51(x ...int) { x }
+
+// result type inferred from return statement
+fun f60 { return }    // ()->void
+fun f61 { return 3 }  // ()->int
+fun f62 -> return 3  // ()->int
+
+// result type union inferred from return statements
+// Note that the type of "if" doesn't matter here.
+fun f70(x int) {
+  if x > 0 {
+    return 1
+  } else if x < 0 {
+    return true
+  }
+  return 1.2
+} // (int)->int|bool|f64
+
+</pre>
+</div>
+<div class="output">
+
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;void&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;void&gt;<span class="s1">f00</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;void&gt;<span class="s1">)</span></p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;void&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;void&gt;<span class="s1">f10</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;void&gt;<span class="s1"> {})</span></p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;void&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;void&gt;<span class="s1">f11</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;void&gt;<span class="s1"> {})</span></p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;int&gt;<span class="s1">f20</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;int&gt;<span class="s1"> </span>&lt;int&gt;<span class="s4">3</span><span class="s1">)</span></p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;int&gt;<span class="s1">f21</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;int&gt;</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>{</span>&lt;int&gt;<span class="s4">3</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;()-&gt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;()-&gt;()-&gt;int&gt;<span class="s1">f22</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;()-&gt;()-&gt;int&gt;<span class="s1"> (</span>&lt;()-&gt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> () -&gt; </span>&lt;()-&gt;int&gt;<span class="s1"> (</span>&lt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> () -&gt; </span>&lt;int&gt;<span class="s1"> </span>&lt;int&gt;<span class="s4">123</span><span class="s1">)))</span></p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;int&gt;<span class="s1">f23</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;int&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;int&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;int&gt;<span class="s4">1</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;int&gt;</span><span class="s4">2</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;int&gt;<span class="s1">f24</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;int&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;int&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;bool&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;bool&gt;<span class="s1">f26</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;bool&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;int&gt;<span class="s4">1</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;?&gt;</span>nil<span class="s3">₀</span>) <span class="s7">&lt;bool&gt;</span>true<span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str&gt;<span class="s1">f30</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str&lt;0&gt;&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str&lt;0&gt;&gt;<span class="s1">f31</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str&lt;0&gt;&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str&lt;0&gt;&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;str&lt;0&gt;&gt;<span class="s4">""</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str&gt;<span class="s1">f32</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&lt;1&gt;&gt;</span><span class="s4">"a"</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str&lt;3&gt;&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str&lt;3&gt;&gt;<span class="s1">f33</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str&lt;3&gt;&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str&lt;3&gt;&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&lt;3&gt;&gt;</span><span class="s4">"abc"</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f34</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f35</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">1</span><span class="s1">)</span>&lt;nil&gt;<span class="s1">nil</span><span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&lt;3&gt;&gt;</span><span class="s4">"bob"</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;(U bool|f64|int)&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;(U bool|f64|int)&gt;<span class="s1">f40</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;(U bool|f64|int)&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;(U bool|f64|int)&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">0</span><span class="s1">)</span>&lt;int&gt;<span class="s4">1</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else if (<span class="s7">&lt;int&gt;</span><span class="s2">Operation</span> <span class="s6">&lt;</span> <span class="s7">&lt;int&gt;</span>x<span class="s3">₀</span> <span class="s7">&lt;int&gt;</span><span class="s4">0</span>)<span class="s7">&lt;bool&gt;</span>true<span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;f64&gt;</span><span class="s4">1.2</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f41</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">9</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"anne"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">8</span><span class="s1">)</span>&lt;str&lt;5&gt;&gt;<span class="s4">"robin"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f42</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">9</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"anne"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else if (<span class="s7">&lt;int&gt;</span><span class="s2">Operation</span> <span class="s6">&gt;</span> <span class="s7">&lt;int&gt;</span>x<span class="s3">₀</span> <span class="s7">&lt;int&gt;</span><span class="s4">8</span>)<span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&lt;5&gt;&gt;</span><span class="s4">"robin"</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f43</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else if (<span class="s7">&lt;int&gt;</span><span class="s2">Operation</span> <span class="s6">&gt;</span> <span class="s7">&lt;int&gt;</span>x<span class="s3">₀</span> <span class="s7">&lt;int&gt;</span><span class="s4">9</span>)<span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">8</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"anne"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&lt;5&gt;&gt;</span><span class="s4">"robin"</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f44</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;nil&gt;<span class="s1">nil</span><span class="s3">₀</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">9</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">8</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"anne"</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&lt;5&gt;&gt;</span><span class="s4">"robin"</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f45</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str?&gt;</span>a<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"bobs"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span>)))</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str?&gt;</span>b<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"ann"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span>)))</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str?&gt;<span class="s1">a</span><span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str?&gt;</span>b<span class="s3">₀</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f46</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str?&gt;</span>a<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span>)))</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str&gt;</span>b<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"anne"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;str&lt;0&gt;&gt;</span><span class="s4">""</span>)))</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str&gt;</span>c<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;5&gt;&gt;<span class="s4">"robin"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;str&lt;0&gt;&gt;</span><span class="s4">""</span>)))</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str?&gt;<span class="s1">a</span><span class="s3">₀</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">9</span><span class="s1">)</span>&lt;str&gt;<span class="s1">b</span><span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&gt;</span>c<span class="s3">₀</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;str?&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;str?&gt;<span class="s1">f47</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;str?&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str&gt;</span>a<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;3&gt;&gt;<span class="s4">"bob"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;str&lt;0&gt;&gt;</span><span class="s4">""</span>)))</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str?&gt;</span>b<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;4&gt;&gt;<span class="s4">"anne"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;nil&gt;</span>nil<span class="s3">₀</span>)))</p>
+<p class="p2"><span class="Apple-converted-space">    </span>(<span class="s2">Assignment</span> (<span class="s7">&lt;str&gt;</span>c<span class="s3">₀</span>) = (</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">      </span>(</span>&lt;str&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&lt;5&gt;&gt;<span class="s4">"robin"</span></p>
+<p class="p2"><span class="Apple-converted-space">      </span>else <span class="s7">&lt;str&lt;0&gt;&gt;</span><span class="s4">""</span>)))</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;str?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">10</span><span class="s1">)</span>&lt;str&gt;<span class="s1">a</span><span class="s3">₀</span></p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>else if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">9</span><span class="s1">)</span>&lt;str?&gt;<span class="s1">b</span><span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>else <span class="s7">&lt;str&gt;</span>c<span class="s3">₀</span>)</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;bool&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;bool&gt;<span class="s1">f50</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;bool&gt;</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>{</span>&lt;int&gt;<span class="s4">3</span><span class="s1"> </span>&lt;bool&gt;<span class="s1">true</span><span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;(...int)-&gt;...int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(...int)-&gt;...int&gt;<span class="s1">f51</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;...int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> ...</span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;...int&gt;</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">  </span>{</span>&lt;...int&gt;<span class="s1">x</span><span class="s3">₀</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;void&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;void&gt;<span class="s1">f60</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;void&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">    </span></span>ReturnExpr</p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;int&gt;<span class="s1">f61</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;int&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">    </span>(</span>ReturnExpr<span class="s1"> </span><span class="s7">&lt;int&gt;</span><span class="s4">3</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+<p class="p1"><span class="s1">(</span>&lt;()-&gt;int&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;()-&gt;int&gt;<span class="s1">f62</span><span class="s3">₀</span><span class="s1"> () -&gt; </span>&lt;int&gt;</p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">  </span>(</span>ReturnExpr<span class="s1"> </span><span class="s7">&lt;int&gt;</span><span class="s4">3</span><span class="s1">))</span></p>
+<p class="p1"><span class="s1">(</span>&lt;(int)-&gt;(U bool|f64|int)&gt;<span class="s2">FunExpr</span><span class="s1"> </span>&lt;(int)-&gt;(U bool|f64|int)&gt;<span class="s1">f70</span><span class="s3">₀</span><span class="s1"> ((</span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span><span class="s5">int</span><span class="s1">)) -&gt; </span>&lt;(U int|bool|f64)&gt;</p>
+<p class="p2"><span class="Apple-converted-space">  </span>{</p>
+<p class="p1"><span class="s1"><span class="Apple-converted-space">    </span>(</span>&lt;?&gt;<span class="s1">if (</span>&lt;int&gt;<span class="s2">Operation</span><span class="s1"> </span><span class="s6">&gt;</span><span class="s1"> </span>&lt;int&gt;<span class="s1">x</span><span class="s3">₀</span><span class="s1"> </span>&lt;int&gt;<span class="s4">0</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>{</p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">      </span>(</span>ReturnExpr<span class="s1"> </span><span class="s7">&lt;int&gt;</span><span class="s4">1</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">    </span>}</p>
+<p class="p2"><span class="Apple-converted-space">    </span>else if (<span class="s7">&lt;int&gt;</span><span class="s2">Operation</span> <span class="s6">&lt;</span> <span class="s7">&lt;int&gt;</span>x<span class="s3">₀</span> <span class="s7">&lt;int&gt;</span><span class="s4">0</span>)</p>
+<p class="p2"><span class="Apple-converted-space">    </span>{</p>
+<p class="p2"><span class="Apple-converted-space">      </span>(<span class="s2">ReturnExpr</span> <span class="s7">&lt;bool&gt;</span>true<span class="s3">₀</span>)</p>
+<p class="p2"><span class="Apple-converted-space">    </span>})</p>
+<p class="p3"><span class="s1"><span class="Apple-converted-space">    </span>(</span>ReturnExpr<span class="s1"> </span><span class="s7">&lt;f64&gt;</span><span class="s4">1.2</span><span class="s1">)</span></p>
+<p class="p2"><span class="Apple-converted-space">  </span>})</p>
+
+
+</div><!-- .output -->
+</body>
+</html>

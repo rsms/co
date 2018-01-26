@@ -1,0 +1,134 @@
+// void when missing body
+fun f00
+
+// void for empty body
+fun f10 {}     // ()->void
+fun f11 -> {}  // ()->void
+
+// result type is type of expression
+fun f20 -> 3  // ()->int
+fun f21 { 3 } // ()->int
+fun f22 -> fun -> fun -> 123  // ()->()->()->int
+
+
+// inferred type from branches
+fun f23(x int) { if x > 1 1 else 2 } // (int)->int
+fun f24(x int) { if x > 1 1 } // (int)->int
+
+// // error: basic types can't be optional
+// fun f25(x int) {
+//   if x > 1 1 else nil
+// } // error: if expression mixing int and nil
+//
+// the following is ok since the if expression's
+// value is not used.
+fun f26(x int) {
+  if x > 1 1 else nil
+  true
+}
+
+// strings in branches
+//
+// Note: strings are special since the compiler may
+// know the length of a string if it's a constant.
+// The length need to either be propagated when all
+// branches yield a string with the same,
+// compile-time-known length, or (more commonly) the
+// types need to be downcast to just "str" without
+// any length information.
+//
+fun f30(x int) { if x > 1 "bob" } // (int)->str
+fun f31(x int) { if x > 1 "" } // (int)->str<0>
+fun f32(x int) { if x > 1 "bob" else "a" } // (int)->str
+fun f33(x int) { if x > 1 "bob" else "abc" } // (int)->str<3>
+fun f34(x int) { if x > 1 "bob" else nil } // (int)->str<3>?
+fun f35(x int) { if x > 1 nil else "bob" } // (int)->str<3>?
+
+// result type union inferred from return statements
+// Note that the type of "if" doesn't matter here.
+fun f40(x int) {
+  if x > 0 1
+  else if x < 0 true
+  else 1.2
+} // (int)->int|bool|f64
+
+// should make all optional if any branch is nil
+fun f41(x int) {
+  if x > 10     "bob"
+  else if x > 9 "anne"
+  else if x > 8 "robin"
+  else          nil
+} // (int)->str?
+fun f42(x int) {
+  if x > 10     "bob"
+  else if x > 9 "anne"
+  else if x > 8 nil
+  else          "robin"
+} // (int)->str?
+fun f43(x int) {
+  if x > 10     "bob"
+  else if x > 9 nil
+  else if x > 8 "anne"
+  else          "robin"
+} // (int)->str?
+fun f44(x int) {
+  if x > 10     nil
+  else if x > 9 "bob"
+  else if x > 8 "anne"
+  else          "robin"
+} // (int)->str?
+
+fun f45(x int) {
+  a = if x > 10 "bobs" else nil
+  b = if x > 10 "ann" else nil
+  if x > 10 a else b
+} // (int)->str?
+
+fun f46(x int) {
+  a = if x > 10 "bob" else nil
+  b = if x > 10 "anne" else ""
+  c = if x > 10 "robin" else ""
+  if x > 10 a else if x > 9 b else c
+} // (int)->str?
+
+fun f47(x int) {
+  a = if x > 10 "bob" else ""
+  b = if x > 10 "anne" else nil
+  c = if x > 10 "robin" else ""
+  if x > 10 a else if x > 9 b else c
+} // (int)->str?
+
+// fun f48(x int) {
+//   a = if x > 10 "bob" else 0
+//   b = if x > 10 "anne" else nil
+//   c = if x > 10 "robin" else ""
+//   if x > 10 a else if x > 9 b else c
+// } // error: mixing optional and int type
+
+// result type is type of last expression
+fun f50 { 3 ; true } // ()->bool
+fun f51(x ...int) { x }
+
+// result type inferred from return statement
+fun f60 { return }    // ()->void
+fun f61 { return 3 }  // ()->int
+fun f62 -> return 3  // ()->int
+
+// result type union inferred from return statements
+// Note that the type of "if" doesn't matter here.
+fun f70(x int) {
+  if x > 0 {
+    return 1
+  } else if x < 0 {
+    return true
+  }
+  return 1.2
+} // (int)->int|bool|f64
+
+// // errors: mismatched result type
+// fun e0 int { return 1.2 } // error: constant 1.2 truncated to int
+// fun e1 int { return } // error: missing return value; expecting int
+// fun e2 { // mixing void and non-void returns
+//   return 1
+//   return // error: missing return value; expecting int
+// }

@@ -52,3 +52,9 @@ fe2 = fun (int) { 4 } // name is optional when used as an expression
 fe3 = fun (int) -> 4
 fe4 = fun -> 4
 // fe5 = fun (d) int // error: missing function body
+
+// funfunfun
+fun a() ->
+  fun b() ->
+    fun c() -> 123
+

@@ -3,8 +3,35 @@ import { ByteStr } from './bytestr'
 import { token } from './token'
 import * as utf8 from './utf8'
 
-let nextgid = 0; export class Group { id = nextgid++ } // DEBUG
-// export class Group {}
+// ——————————————————————————————————————————————————————————————————
+// AST type hierarchy
+//
+//  Group
+//  Comment
+//  Node
+//    Field
+//    Stmt
+//      NoOpStmt
+//      Decl
+//        ImportDecl
+//        VarDecl
+//        TypeDecl
+//        MultiDecl
+//      Expr
+//        Block
+//        Ident
+//        IfExpr
+//        ReturnExpr
+//        LiteralExpr
+//        FunExpr
+//        Assignment
+//        ...
+//        Type
+//          ...
+//
+
+let nextgid = 0
+export class Group { id = nextgid++ } // nextgid only for DEBUG
 
 export class Comment {
   constructor(
@@ -97,7 +124,7 @@ export class Ent {
 }
 
 export class Scope {
-  fun :FunDecl | null = null // when set, scope if function scope
+  fun :FunExpr | null = null // when set, scope if function scope
 
   constructor(
   public outer :Scope | null,
@@ -190,11 +217,33 @@ export class Scope {
 // used by intrinsics
 const nilScope = new Scope(null)
 
+// ——————————————————————————————————————————————————————————————————
+// Statements
+//
+// There are two kinds of statements:
+// - declaration statements and
+// - expression statements.
+//
+export class Stmt extends Node {}
+
+// no operation / blank / filler
+export class NoOpStmt extends Stmt {}
+
 
 // ——————————————————————————————————————————————————————————————————
 // Declarations
 
-export class Decl extends Node {}
+export class Decl extends Stmt {}
+
+export class MultiDecl extends Decl {
+  // MultiDecl represents a collection of declarations that were parsed from
+  // a multi-declaration site. E.g. "type (a int; b f32)"
+  constructor(pos :Pos, scope :Scope,
+  public decls :Decl[],
+  ) {
+    super(pos, scope)
+  }
+}
 
 export class ImportDecl extends Decl {
   constructor(pos :Pos, scope :Scope,
@@ -204,17 +253,6 @@ export class ImportDecl extends Decl {
     super(pos, scope)
   }
 }
-
-// export class ConstDecl extends Decl {
-//   constructor(pos :Pos, scope :Scope,
-//   public idents  :Ident[],
-//   public type    :Expr|null,
-//     // null means auto type (values might have mixed types)
-//   public values  :Expr[],
-//   ) {
-//     super(pos, scope)
-//   }
-// }
 
 export class VarDecl extends Decl {
   constructor(pos :Pos, scope :Scope,
@@ -240,39 +278,36 @@ export class TypeDecl extends Decl {
 }
 
 
-// ----------------------------------------------------------------------------
-// Statements
+// ——————————————————————————————————————————————————————————————————
+// Expressions
 
-export class Stmt extends Node {}
+export class Expr extends Stmt {
+  type :Type|null = null  // effective type of expression. null until resolved.
+}
 
-export class BlockStmt extends Stmt {
+// Placeholder for an expression that failed to parse correctly and
+// where we can't provide a better node.
+export class BadExpr extends Expr {}
+
+export class Block extends Expr {
   constructor(pos :Pos, scope :Scope,
-  public list  :Stmt[],
+  public list :Stmt[],
   ) {
     super(pos, scope)
   }
 }
 
-// An instance of SimpleStmt represents noop (no operation)
-export class SimpleStmt extends Stmt {}
-
-export class ExprStmt extends SimpleStmt {
+export class IfExpr extends Expr {
   constructor(pos :Pos, scope :Scope,
-  public expr :Expr,
+  public cond :Expr,
+  public then :Expr,
+  public els_ :Expr|null,
   ) {
     super(pos, scope)
   }
 }
 
-export class ReturnStmt extends Stmt {
-  constructor(pos :Pos, scope :Scope,
-  public result :Expr|null, // null means no explicit return values
-  ) {
-    super(pos, scope)
-  }
-}
-
-export class AssignStmt extends SimpleStmt {
+export class Assignment extends Expr {
   constructor(pos :Pos, scope :Scope,
   public op  :token, // ILLEGAL means no operation
   public lhs :Expr[],
@@ -283,25 +318,14 @@ export class AssignStmt extends SimpleStmt {
   }
 }
 
-export class DeclStmt extends SimpleStmt {
+export class ReturnExpr extends Expr {
   constructor(pos :Pos, scope :Scope,
-  public decls :Decl[],
+  public result :Expr|null, // null means no explicit return values
   ) {
     super(pos, scope)
   }
 }
 
-
-// ——————————————————————————————————————————————————————————————————
-// Expressions
-
-export class Expr extends Node {
-  type :Type|null = null
-}
-
-// Placeholder for an expression that failed to parse
-// correctly and where we can't provide a better node.
-export class BadExpr extends Expr {}
 
 export class TupleExpr extends Expr {
   // TupleExpr = "(" Expr ("," Expr)+ ")"
@@ -435,15 +459,12 @@ export class ParenExpr extends Expr {
   }
 }
 
-export class FunDecl extends Expr {
-  // func Ident? Signature { Body }
-  // func Ident? Signature
-
-  body :Stmt|null = null // nil = forward declaration
-  nlocali32 :int = 0
-  nlocali64 :int = 0
-  nlocalf32 :int = 0
-  nlocalf64 :int = 0
+export class FunExpr extends Expr {
+  body    :Expr|null = null // nil = forward declaration
+  // nlocali32 :int = 0
+  // nlocali64 :int = 0
+  // nlocalf32 :int = 0
+  // nlocalf64 :int = 0
 
   constructor(pos :Pos, scope :Scope,
     public name   :Ident|null, // nil = anonymous func expression
@@ -496,6 +517,17 @@ export class Type extends Expr {
     this.type = this
   }
 
+  // accepts returns true if the other type is compatible with this type.
+  // essentially: "this >= other"
+  // For instance, if the receiver is the same as `other`
+  // or a superset of `other`, true is returned.
+  //
+  accepts(other :Type) :bool {
+    return this.equals(other)
+  }
+
+  // equals returns true if the receiver is equivalent to `other`
+  //
   equals(other :Type) :bool {
     return this === other
   }
@@ -523,7 +555,7 @@ export class UnresolvedType extends Type {
   }
 }
 
-export class IntrinsicType extends Type {
+export class BasicType extends Type {
   constructor(
     public bitsize :int,
     public name    :string, // only used for debugging and printing
@@ -536,38 +568,65 @@ export class IntrinsicType extends Type {
   }
 
   equals(other :Type) :bool {
-    return (
-      this === other ||
-      (other instanceof ConstStringType && this.name == 'string')
-    )
+    return this === other
   }
+
+  // TODO: accepts(other :Type) :bool
 }
 
-export class ConstStringType extends IntrinsicType {
+// basic type constants
+const uintz :number = 32 // TODO: target-dependant
+
+export const
+  u_t_void = new BasicType(0, 'void')
+, u_t_auto = new BasicType(0, 'auto')
+, u_t_nil  = new BasicType(0, 'nil')
+, u_t_bool = new BasicType(1, 'bool')
+
+, u_t_uint = new BasicType(uintz,   'uint')
+, u_t_int  = new BasicType(uintz-1, 'int')
+
+, u_t_i8  = new BasicType(7,  'i8')
+, u_t_i16 = new BasicType(15, 'i16')
+, u_t_i32 = new BasicType(31, 'i32')
+, u_t_i64 = new BasicType(63, 'i64')
+
+, u_t_u8  = new BasicType(8,  'u8')
+, u_t_u16 = new BasicType(16, 'u16')
+, u_t_u32 = new BasicType(32, 'u32')
+, u_t_u64 = new BasicType(64, 'u64')
+
+, u_t_f32 = new BasicType(32, 'f32')
+, u_t_f64 = new BasicType(64, 'f64')
+
+
+export class StrType extends Type {
   constructor(
-    public bitsize :int,
-    public length :int,
+    public length :int, // -1 == length only known at runtime
   ) {
-    super(bitsize, 'str')
+    super(0, nilScope)
   }
 
   toString() :string {
-    return `str[${this.length}]`
+    return this.length > -1 ? `str<${this.length}>` : 'str'
   }
 
   equals(other :Type) :bool {
+    // TODO: break this up, partly into accepts(), so its truly "equals",
+    // e.g. "cstr<4> != str"
     return (
       this === other ||
-      ( other instanceof ConstStringType &&
-        this.bitsize == other.bitsize &&
+      ( other instanceof StrType &&
         this.length == other.length
-      ) ||
-      ( other instanceof IntrinsicType &&
-        other.name == 'string'
       )
     )
   }
 }
+
+
+export const u_t_str = new StrType(-1)  // heap-allocated string
+
+
 
 export class RestType extends Type {
   // ...type
@@ -585,7 +644,9 @@ export class RestType extends Type {
   equals(other :Type) :bool {
     return (
       this === other ||
-      other instanceof RestType && this.type.equals(other.type)
+      ( other instanceof RestType &&
+        this.type.equals(other.type)
+      )
     )
   }
 }
@@ -617,7 +678,7 @@ export class FunType extends Type {
   // FunType = ( Type | TupleType ) "->" Type
   constructor(pos :Pos, scope :Scope,
   public inputs :Type[],
-  public output :Type,
+  public result :Type,
   ) {
     super(pos, scope)
   }
@@ -626,13 +687,112 @@ export class FunType extends Type {
     return (
       this === other ||
       ( other instanceof FunType &&
-        this.output.equals(other.output) &&
         this.inputs.length == other.inputs.length &&
+        this.result.equals(other.result) &&
         this.inputs.every((t, i) => t.equals(other.inputs[i]))
       )
     )
   }
 }
+
+export class UnionType extends Type {
+  constructor(
+    public types :Set<Type>,
+  ) {
+    super(0, nilScope)
+  }
+
+  add(t :Type) {
+    assert(!(t instanceof UnionType))
+    this.types.add(t)
+  }
+
+  toString() :string {
+    let s = '(U ', first = true
+    for (let t of this.types) {
+      if (first) {
+        first = false
+      } else {
+        s += '|'
+      }
+      s += t.toString()
+    }
+    return s + ')'
+  }
+
+  equals(other :Type) :bool {
+    if (this === other) {
+      return true
+    }
+    if (!(other instanceof UnionType) || other.types.size != this.types.size) {
+      return false
+    }
+    // Note: This relies on type instances being singletons (being interned)
+    for (let t of this.types) {
+      if (!other.types.has(t)) {
+        return false
+      }
+    }
+    return true
+  }
+
+  accepts(other :Type) :bool {
+    if (this === other) {
+      return true
+    }
+    if (!(other instanceof UnionType)) {
+      return false
+    }
+    // Note: This relies on type instances being singletons (being interned)
+    // make sure that we have at least the types of `other`.
+    // e.g.
+    //   (int|f32|bool) accepts (int|f32) => true
+    //   (int|f32) accepts (int|f32|bool) => false
+    for (let t of other.types) {
+      if (!this.types.has(t)) {
+        return false
+      }
+    }
+    return true
+  }
+}
+
+
+export class OptionalType extends Type {
+  constructor(
+    public type :Type,
+  ) {
+    super(0, nilScope)
+    assert(!(type instanceof OptionalType))
+    assert(!(type instanceof UnionType))
+    assert(!(type instanceof BasicType))
+  }
+
+  toString() :string {
+    return this.type.toString() + '?'
+  }
+
+  equals(other :Type) :bool {
+    return (
+      this === other ||
+      ( other instanceof OptionalType &&
+        this.type.equals(other.type)
+      )
+    )
+  }
+
+  accepts(other :Type) :bool {
+    return (
+      this.equals(other) ||       // e.g. "x str?; y str?; x = y"
+      this.type.equals(other) ||  // e.g. "x str?; y str; x = y"
+      other === u_t_nil           // e.g. "x str?; x = nil"
+    )
+  }
+}
+
+
+export const u_t_optstr = new OptionalType(u_t_str)
+
 
 
 // ——————————————————————————————————————————————————————————————————

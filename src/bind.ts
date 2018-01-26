@@ -159,7 +159,7 @@ class pkgBinder extends ErrorReporter {
       // attempt to resolve the type now that we can see the entire package
       const restyp = b.types.resolve(ut.expr)
       if (restyp instanceof UnresolvedType) {
-        b.error(`undefined type ${ut.expr}`, ut.expr.pos)
+        b.error(`cannot resolve type of ${ut.expr}`, ut.expr.pos)
       } else {
         // succeeded in resolving the type.
         // delegate type to any expressions that reference this type.

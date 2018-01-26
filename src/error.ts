@@ -1,4 +1,5 @@
 import { Position } from './pos'
+import { termColorSupport, style, noStyle } from './termstyle'
 
 // error codes
 class _errors {
@@ -36,5 +37,31 @@ export class ErrorReporter {
       this.errh(position, msg, code || this.defaultErrCode)
     }
     this.errorCount++
+
+    // when compiling in debug mode, also show stack trace when reporting error
+    if (DEBUG) {
+      let e = new Error()
+      let maxlen = 0, SP = '                              '
+      const S = termColorSupport ? style : noStyle
+      let v = (e.stack||'').split('\n').slice(2).map(s => {
+        let m = /\s+at\s+([^\s]+)\s+\((.+)\)/.exec(s)
+        if (!m) { return [s, null] }
+        let p = m[2].lastIndexOf('/src/')
+        if (p != -1) {
+          m[2] = m[2].substr(p+1)
+        }
+        maxlen = Math.max(m[1].length, maxlen)
+        return [m[1], m[2]]
+      })
+      console.error(
+        v.map(s => {
+          if (!s[1]) { return S.italic(String(s[0])) }
+          let f = s[0] as string
+          return S.grey(
+            '  ' + f + SP.substr(0,maxlen - f.length) + '  ' + s[1]
+          )
+        }).join('\n')
+      )
+    }
   }
 }

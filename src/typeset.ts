@@ -6,12 +6,13 @@ import { Type } from './ast'
 export class TypeSet {
   types = new Map<Object,Set<Type>>() // type constructor => type instance
 
-  intern(t :Type) :Type {
+  intern<T extends Type>(t :T) :T {
     let s = this.types.get(t.constructor)
     if (s) {
       for (let i of s) {
         if (i.equals(t)) {
-          return i
+          assert(i instanceof t.constructor)
+          return i as T
         }
       }
       s.add(t)

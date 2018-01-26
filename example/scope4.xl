@@ -40,20 +40,44 @@
 //   return 3, 4.5
 // }
 
-// fun print(_) {} // define fun scope1/print
+fun print(_ int) {} // define fun scope1/print
 
 // // maybe defined in a different file
 // c i64 = 0xDEADBEEF // define const scope1/c
 
-fun isqrt(_ int)int
 
-fun dist(x int, y int) int {
-  // a, b, c int // <---
-  // return z
-  x = x * x
-  y = y * y
-  return isqrt(x + y)
+fun a (y int) {
+  // x, err = 1, 2
+  x = y + 1
+  if x > 1 {
+    print(x)
+  }
+  // block0:
+  //   x = y
+  //   goto x > 0 ? block1 : block2
+  // block1:
+  //   call print x
+  //   goto block2
+  // block2:
+  //   ret
 }
+
+
+// fun isqrt(_ int)int
+
+// fun dist(x int, y int) int {
+//   x = x * x
+//   y = y * y
+//   if (x = 6) > 0 {
+//   // if x > 0 {
+//     x = x * 2
+//   } else if x < 0 {
+//     x = x / 2
+//   } else {
+//     x = 1
+//   }
+//   return isqrt(x + y)
+// }
 
 
 // semantics:

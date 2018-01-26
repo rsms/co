@@ -4,41 +4,46 @@
 import * as utf8 from './utf8'
 import { tokstr, token } from './token'
 import { termColorSupport, style, noStyle } from './termstyle'
-import {
-  Node,
+import {  
   Group,
-  Ident,
-  RestExpr,
+  Node,
+
   Field,
-  BasicLit,
-  StringLit,
+
+  // Decl,
   ImportDecl,
-  // ConstDecl,
   VarDecl,
   TypeDecl,
-  FunDecl,
-  FunSig,
-  SimpleStmt,
-  BlockStmt,
-  ReturnStmt,
-  ExprStmt,
-  AssignStmt,
-  DeclStmt,
-  Operation,
+  MultiDecl,
+
   Expr,
+  Ident,
+  RestExpr,
+  BasicLit,
+  StringLit,
+  FunExpr,
+  FunSig,
+  NoOpStmt,
+  Block,
+  ReturnExpr,
+  IfExpr,
+  Assignment,
+  Operation,
   CallExpr,
   ParenExpr,
   TupleExpr,
   BadExpr,
   SelectorExpr,
   TypeConvExpr,
+
   Type,
   UnresolvedType,
+  BasicType,
+  StrType,
   RestType,
-  IntrinsicType,
-  ConstStringType,
   TupleType,
   FunType,
+  UnionType,
 } from './ast'
 
 
@@ -82,10 +87,7 @@ const defaultCtx = new ReprCtx()
 
 
 function _reprt(t :Type, nl :string, c :ReprCtx) :string {
-  if (t instanceof ConstStringType) {
-    return `${t.name}[${t.length}]`
-  }
-  if (t instanceof IntrinsicType) {
+  if (t instanceof BasicType) {
     return c.style.bold(t.name)
   }
   if (t instanceof TupleType) {
@@ -97,13 +99,13 @@ function _reprt(t :Type, nl :string, c :ReprCtx) :string {
   if (t instanceof FunType) {
     return (
       '(' + t.inputs.map(it => _reprt(it, nl, c)).join(', ') + ')' +
-      '->' + _reprt(t.output, nl, c)
+      '->' + _reprt(t.result, nl, c)
     )
   }
   if (t instanceof UnresolvedType) {
     return '~'
   }
-  return `???${t.constructor.name}`
+  return t.toString()
 }
 
 
@@ -171,8 +173,8 @@ function reprcons(n :Node, c :ReprCtx) :string {
 }
 
 
-function repr1(n :Node, newline :string, c :ReprCtx) :string {
-  if (n instanceof IntrinsicType) {
+function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
+  if (n instanceof BasicType) {
     return c.style.purple(c.style.bold(n.name))
   }
 
@@ -207,7 +209,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s
   }
 
-  if (n instanceof BlockStmt) {
+  if (n instanceof Block) {
     return (
       n.list.length ?
         newline + '{' + reprv(n.list, nl2, c, '') + newline + '}' :
@@ -215,22 +217,37 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     )
   }
 
-  if (n instanceof ReturnStmt) {
+  if (n instanceof ReturnExpr) {
     if (n.result) {
       return newline + `(${reprcons(n, c)} ${repr1(n.result, nl2, c)})`
     }
     return newline + reprcons(n, c)
   }
 
-  if (n instanceof ExprStmt) {
-    return newline + `(${reprcons(n, c)} ${repr1(n.expr, nl2, c)})`
+  if (n instanceof IfExpr) {
+    // flag=1 means "else if" branch
+    let s = (
+      ( flag ? '' :
+        newline + '(' + reprt(n.type, newline, c)
+      ) +
+      'if ' + repr1(n.cond, nl2, c) +
+      repr1(n.then, newline, c)
+    )
+    if (n.els_) {
+      s += newline + 'else ' + repr1(n.els_, newline, c, /*flag*/1)
+    }
+    return flag ? s : s + ')'
   }
+
+  // if (n instanceof ExprStmt) {
+  //   return newline + `(${reprcons(n, c)} ${repr1(n.expr, nl2, c)})`
+  // }
 
   if (n instanceof FunSig) {
     return reprv(n.params, nl2, c) + ' -> ' + reprt(n.result, nl2, c)
   }
 
-  if (n instanceof AssignStmt) {
+  if (n instanceof Assignment) {
     let s = newline + `(${reprcons(n, c)} `
     s += reprv(n.lhs, nl2, c)
     if (n.op == token.ILLEGAL) {
@@ -242,7 +259,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s + ')'
   }
 
-  if (n instanceof DeclStmt) {
+  if (n instanceof MultiDecl) {
     return newline + `(${reprcons(n, c)}` + ' ' + reprv(n.decls, nl2, c, '') + ')'
   }
 
@@ -306,7 +323,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
   }
 
   if (n instanceof Operation) {
-    s += ' ' + tokstr(n.op) + ' ' + repr1(n.x, nl2, c)
+    s += ' ' + c.style.orange(tokstr(n.op)) + ' ' + repr1(n.x, nl2, c)
     if (n.y) {
       s += ' ' + repr1(n.y, nl2, c)
     }
@@ -330,7 +347,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s + ' ' + repr1(n.expr, newline, c) + ')'
   }
 
-  if (n instanceof FunDecl) {
+  if (n instanceof FunExpr) {
     s += ' '
     if (n.isInit) {
       s += 'init '
@@ -348,7 +365,7 @@ function repr1(n :Node, newline :string, c :ReprCtx) :string {
     return s + ' ' + reprv(n.exprs, nl2, c, '') + ')'
   }
 
-  if (n.constructor === SimpleStmt) {
+  if (n.constructor === NoOpStmt) {
     return 'noop'
   }
 

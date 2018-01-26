@@ -9,20 +9,37 @@ import {
   BasicLit,
   Type,
   IntrinsicVal,
-  IntrinsicType,
+  BasicType,
+  u_t_void,
+  u_t_auto,
+  u_t_nil,
+  u_t_bool,
+  u_t_uint,
+  u_t_int,
+  u_t_i8,
+  u_t_i16,
+  u_t_i32,
+  u_t_i64,
+  u_t_u8,
+  u_t_u16,
+  u_t_u32,
+  u_t_u64,
+  u_t_f32,
+  u_t_f64,
+  u_t_str,
+  u_t_optstr,
 } from './ast'
 
-export const universeTypes = new Map<string,IntrinsicType>()
+export const universeTypes = new Map<string,Type>()
 export const universeValues = new Map<string,IntrinsicVal>()
 
-function ityp(bitsize :int, name :string) :IntrinsicType {
-  const x = new IntrinsicType(bitsize, name)
+function namedtype(x :Type, name :string) {
   assert(!universeTypes.has(name))
   universeTypes.set(name, x)
   return x
 }
 
-function ival(name :string, typ :IntrinsicType) :IntrinsicVal {
+function ival(name :string, typ :BasicType) :IntrinsicVal {
   const x = new IntrinsicVal(name, typ)
   assert(!universeValues.has(name))
   universeValues.set(name, x)
@@ -32,30 +49,20 @@ function ival(name :string, typ :IntrinsicType) :IntrinsicVal {
 const uintz :number = 32 // TODO: target-dependant
 
 // basic types
-export const
-  u_t_void  = new IntrinsicType(0, 'void') // note: unnamed
-, u_t_auto  = new IntrinsicType(0, 'auto') // note: unnamed
-, u_t_nil   = new IntrinsicType(0, '?') // note: unnamed, special type for nil
-
-, u_t_bool  = ityp(1,  'bool')
-
-, u_t_uint = ityp(uintz, 'uint')
-, u_t_int  = ityp(uintz-1, 'int')
-
-, u_t_i8  = ityp(7,  'i8')
-, u_t_i16 = ityp(15, 'i16')
-, u_t_i32 = ityp(31, 'i32')
-, u_t_i64 = ityp(63, 'i64')
-
-, u_t_u8  = ityp(8,  'u8')
-, u_t_u16 = ityp(16, 'u16')
-, u_t_u32 = ityp(32, 'u32')
-, u_t_u64 = ityp(64, 'u64')
-
-, u_t_f32 = ityp(32, 'f32')
-, u_t_f64 = ityp(64, 'f64')
-
-, u_t_string = ityp(uintz, 'string')
+namedtype(u_t_bool, 'bool')
+namedtype(u_t_uint, 'uint')
+namedtype(u_t_int,  'int')
+namedtype(u_t_i8,   'i8')
+namedtype(u_t_i16,  'i16')
+namedtype(u_t_i32,  'i32')
+namedtype(u_t_i64,  'i64')
+namedtype(u_t_u8,   'u8')
+namedtype(u_t_u16,  'u16')
+namedtype(u_t_u32,  'u32')
+namedtype(u_t_u64,  'u64')
+namedtype(u_t_f32,  'f32')
+namedtype(u_t_f64,  'f64')
+namedtype(u_t_str,  'str')
 
 export const universeTypeAliases = new Map<string,string>([
   ['byte', 'u8'],
@@ -71,9 +78,9 @@ export enum TypeCompat {
 }
 
 // maps destination type to receiver types and their compatbility type
-const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
+const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
 
-  [u_t_u64, new Map<IntrinsicType,TypeCompat>([
+  [u_t_u64, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSLESS],
     [u_t_int,  TypeCompat.LOSSLESS],
 
@@ -90,7 +97,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_i64, new Map<IntrinsicType,TypeCompat>([
+  [u_t_i64, new Map<BasicType,TypeCompat>([
     [u_t_uint, uintz <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [u_t_int,  TypeCompat.LOSSLESS],
 
@@ -107,7 +114,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_u32, new Map<IntrinsicType,TypeCompat>([
+  [u_t_u32, new Map<BasicType,TypeCompat>([
     [u_t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [u_t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
@@ -124,7 +131,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_i32, new Map<IntrinsicType,TypeCompat>([
+  [u_t_i32, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
     [u_t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
@@ -141,7 +148,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_uint, new Map<IntrinsicType,TypeCompat>([
+  [u_t_uint, new Map<BasicType,TypeCompat>([
     [u_t_int, TypeCompat.LOSSLESS],
 
     [u_t_i8,  TypeCompat.LOSSLESS],
@@ -158,7 +165,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_int, new Map<IntrinsicType,TypeCompat>([
+  [u_t_int, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
 
     [u_t_i8,  TypeCompat.LOSSLESS],
@@ -175,7 +182,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_u16, new Map<IntrinsicType,TypeCompat>([
+  [u_t_u16, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
     [u_t_int,  TypeCompat.LOSSY],
 
@@ -192,7 +199,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_i16, new Map<IntrinsicType,TypeCompat>([
+  [u_t_i16, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
     [u_t_int,  TypeCompat.LOSSY],
 
@@ -209,7 +216,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_u8, new Map<IntrinsicType,TypeCompat>([
+  [u_t_u8, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
     [u_t_int,  TypeCompat.LOSSY],
 
@@ -226,7 +233,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_i8, new Map<IntrinsicType,TypeCompat>([
+  [u_t_i8, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
     [u_t_int,  TypeCompat.LOSSY],
 
@@ -243,7 +250,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_f32, new Map<IntrinsicType,TypeCompat>([
+  [u_t_f32, new Map<BasicType,TypeCompat>([
     [u_t_uint, TypeCompat.LOSSY],
     [u_t_int,  TypeCompat.LOSSY],
 
@@ -260,7 +267,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
     [u_t_f64, TypeCompat.LOSSY],
   ])],
 
-  [u_t_f64, new Map<IntrinsicType,TypeCompat>([
+  [u_t_f64, new Map<BasicType,TypeCompat>([
     [u_t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [u_t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
@@ -278,10 +285,7 @@ const typeCompatMap = new Map<IntrinsicType,Map<IntrinsicType,TypeCompat>>([
   ])],
 ])
 
-export function basicTypeCompat(
-  dst :IntrinsicType,
-  src :IntrinsicType,
-) :TypeCompat {
+export function basicTypeCompat(dst :BasicType, src :BasicType) :TypeCompat {
   assert(dst !== src, "same type is always compatible")
   let s = typeCompatMap.get(dst)
   return s && s.get(src) || TypeCompat.NO
@@ -289,8 +293,8 @@ export function basicTypeCompat(
 
 TEST("basicTypeCompat", () => {
   function assertTypeCompat(
-    dst :IntrinsicType,
-    src :IntrinsicType,
+    dst :BasicType,
+    src :BasicType,
     expect :TypeCompat,
     cons :Function,
   ) {
@@ -302,11 +306,11 @@ TEST("basicTypeCompat", () => {
     )
   }
 
-  function assert_LOSSLESS(dst :IntrinsicType, src :IntrinsicType) {
+  function assert_LOSSLESS(dst :BasicType, src :BasicType) {
     assertTypeCompat(dst, src, TypeCompat.LOSSLESS, assert_LOSSLESS)
   }
 
-  function assert_LOSSY(dst :IntrinsicType, src :IntrinsicType) {
+  function assert_LOSSY(dst :BasicType, src :BasicType) {
     assertTypeCompat(dst, src, TypeCompat.LOSSY, assert_LOSSY)
   }
 
@@ -711,7 +715,7 @@ export type ErrorHandler = (msg :string, pos :Pos) => any
 // basicLitTypeStorageMap maps storage types to all possible values types that
 // can be stored (in the storage type) losslessly.
 //
-// const basicLitTypeStorageMap = new Map<IntrinsicType,Set<IntrinsicType>>([
+// const basicLitTypeStorageMap = new Map<BasicType,Set<BasicType>>([
 //   // storageType => valueTypes[]
 //   [u_t_i64, new Set([
 //     u_t_char,
@@ -725,10 +729,10 @@ export type ErrorHandler = (msg :string, pos :Pos) => any
 // reqt should be reutned if the literal can safely be represented as reqt.
 //
 type basicLitTypeFitter =
-  (x :BasicLit, reqt :Type|null, errh? :ErrorHandler) => IntrinsicType
+  (x :BasicLit, reqt :Type|null, errh? :ErrorHandler) => BasicType
 
 function intLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
-) :IntrinsicType {
+) :BasicType {
   // debuglog(`${tokstr(x.tok)} ${JSON.stringify(buf8str(x.value))}`)
 
   let bits = 0
@@ -744,11 +748,11 @@ function intLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
   if (bits == 0) {  // literal is too large
     // TODO: support bigint transparently
     if (errh) {
-      let t = reqt instanceof IntrinsicType ? reqt : u_t_u64
+      let t = reqt instanceof BasicType ? reqt : u_t_u64
       errh(`constant ${buf8str(x.value)} overflows ${t.name}`, x.pos)
       bits = 64
     }
-  } else if (reqt instanceof IntrinsicType) {
+  } else if (reqt instanceof BasicType) {
     if (reqt.bitsize >= bits) {
       // yay! requested type is large enough for the literal
       return reqt
@@ -768,13 +772,13 @@ function intLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
 }
 
 function floatLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
-) :IntrinsicType {
+) :BasicType {
   // TODO
   return u_t_f64
 }
 
 function charLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
-) :IntrinsicType {
+) :BasicType {
   // TODO reqt
   return u_t_u32
 }
@@ -806,6 +810,8 @@ export class Universe {
   constructor(strSet :ByteStrSet, typeSet :TypeSet) {
     this.strSet = strSet
     this.typeSet = typeSet
+
+    // r.universe.internType(u_t_optstr)
 
     // build scope
     const unidecls = new Map<ByteStr,Ent>()
@@ -862,7 +868,7 @@ export class Universe {
   //
   //  [+] uses less memory (fewer resident Type instances).
   //
-  internType(t :Type) :Type {
+  internType<T extends Type>(t :T) :T {
     return this.typeSet.intern(t)
   }
 
