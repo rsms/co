@@ -1252,8 +1252,12 @@ export class Parser extends scanner.Scanner {
     const then = p.expr(ctx)
     p.popScope()
 
-    // optional semicolon after "then" expr
+    // optional semicolon after "then" expr.
+    // allows us to peek ahead and see if an "else" follows,
+    // allowing "else" to follow on the next line.
+    let consumedSemiAt = -1
     if (!(then instanceof Block) && p.tok == token.SEMICOLON) {
+      consumedSemiAt = p.offset
       p.next()
     }
 
@@ -1267,6 +1271,10 @@ export class Parser extends scanner.Scanner {
         s.els_ = p.expr(ctx)
         p.popScope()
       }
+    } else if (consumedSemiAt != -1) {
+      // revert semicolon (we just wanted to peek ahead for "else")
+      p.setOffset(consumedSemiAt - 1)
+      p.next()
     }
 
     if (!hasIfScope) {
@@ -1828,6 +1836,7 @@ export class Parser extends scanner.Scanner {
     }
 
     p.errorAt("unexpected " + tokstr(p.tok) + msg, position)
+    console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
   }
 
   // diag reports a diagnostic message, or an error if k is ERROR

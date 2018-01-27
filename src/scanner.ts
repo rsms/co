@@ -39,7 +39,7 @@ export class Scanner extends ErrorReporter {
 
   // scanning state
   private ch         :int = -1 // current character (unicode; -1=EOF)
-  private offset     :int = 0  // character offset
+  protected offset   :int = 0  // character offset
   private rdOffset   :int = 0  // reading offset (position after current char)
   private lineOffset :int = 0  // current line offset
   private insertSemi :bool = false // insert a semicolon before next newline
@@ -109,8 +109,19 @@ export class Scanner extends ErrorReporter {
     s.lineOffset = 0
     s.insertSemi = false
     s.errorCount = 0
+    s.parenL = 0
+    s.interpStrL = 0
+    s.byteval = null
   
     s.readchar()
+  }
+
+  // setOffset sets the read offset.
+  // it's only safe to call this outside of next() and readchar()
+  //
+  setOffset(offs :int) {
+    const s = this
+    s.offset = s.rdOffset = offs
   }
 
   private _r :utf8.DecodeResult = {c:0,w:0}
