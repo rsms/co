@@ -110,7 +110,7 @@ function main() {
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  const sources = ['example/return-types.xl']
+  const sources = ['example/slice-and-index.xl']
 
   parsePkg("example", sources, universe, parser, typeres).then(r => {
     if (!r.success) {

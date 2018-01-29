@@ -1,5 +1,5 @@
 import { ByteStr, ByteStrSet } from './bytestr'
-import { asciibuf, buf8str, bufcmp } from './util'
+import { asciibuf, bufcmp, debuglog } from './util'
 import { token, tokstr } from './token'
 import { Pos } from './pos'
 import { TypeSet } from './typeset'
@@ -7,10 +7,10 @@ import {
   Scope,
   Ent,
   BasicLit,
-  Type,
   IntrinsicVal,
+  Type,
   BasicType,
-  u_t_void,
+  IntType,
   u_t_auto,
   u_t_nil,
   u_t_bool,
@@ -45,6 +45,12 @@ function ival(name :string, typ :BasicType) :IntrinsicVal {
   universeValues.set(name, x)
   return x
 }
+
+// universe values
+export const
+  u_v_true  = ival('true', u_t_bool)
+, u_v_false = ival('false', u_t_bool)
+, u_v_nil   = ival('nil', u_t_nil)
 
 const uintz :number = 32 // TODO: target-dependant
 
@@ -467,15 +473,63 @@ TEST("basicTypeCompat", () => {
 // ————————————————————————————————————————————————————————————————
 // literal types
 
-function intBinBits(v :Uint8Array) :number {
+function intBinBits(v :Uint8Array, neg :bool) :number {
   let start = 2 // skip 0b or 0B
   while (v[start] == 0x30) { start++ } // skip leading zeroes
   let n = v.length - start
-  return n > 64 ? 0 : n || 1
+  if (n > 64) {
+    return 0
+  }
+  if (n == 0) {
+    return 1
+  }
+  if (neg) {
+    if (n == 64) {
+      // check for special-case I64_MIN
+      let i = start
+      // ++i: skip first byte whoch we know to be '1'
+      while (v[++i] == 0x30) {}
+      if (i - start == 64) {
+        // matches "-0b10000000000000000000000000000..."
+        return 63
+      }
+      return 0
+    }
+
+    if (n > 31) {
+      // check for special-case I32_MIN
+      let i = start
+      // ++i: skip first byte whoch we know to be '1'
+      while (v[++i] == 0x30) {}
+      if (i - start == 32) {
+        // matches "-0b10000000000000000000000000000000"
+        return 31
+      }
+      return 63
+    }
+
+    n--
+  }
+  return n
+}
+
+function testIntBits(fn :(v :Uint8Array, neg :bool)=>int, v :(string|int)[]) {
+  let input = v[0] as string
+  let expected = v[1] as int
+  let neg = false
+  if (input[0] == '-') {
+    neg = true
+    input = input.substr(1)
+  }
+  let actual = fn(asciibuf(input), neg)
+  assert(
+    actual == expected,
+    JSON.stringify(v[0] as string) + ` => ${actual}; expected ${expected}`
+  )
 }
 
 TEST("intBinBits", () => {
-  for (let v of [
+  [
     ["0b0",         1], // 0x0
     ["0b1111111",   7], // 0x7F
     ["0b10000000",  8], // 0x80
@@ -487,7 +541,7 @@ TEST("intBinBits", () => {
     ["0b1111111111111111",  16], // 0xFFFF
     
     ["0b10000000000000000", 17],                 // 0x10000
-    ["0b1111111111111111111111111111111",   31], // 0x7FFFFFFF
+    ["0b1111111111111111111111111111111",   31], // 0x7FFFFFFF (I32_MAX)
     ["0b10000000000000000000000000000000",  32], // 0x80000000
     ["0b11111111111111111111111111111111",  32], // 0xFFFFFFFF
 
@@ -502,19 +556,28 @@ TEST("intBinBits", () => {
       // 0xFFFFFFFFFFFFFFFF
     ["0b10000000000000000000000000000000000000000000000000000000000000000", 0],
       // 0x10000000000000000 too large
-  ]) {
-    let input = v[0] as string
-    let expected = v[1]
-    let actual = intBinBits(asciibuf(input))
-    assert(
-      actual == expected,
-      `${JSON.stringify(input)} => ${actual}; expected ${expected}`
-    )
-  }
+
+    // negative
+    ["-0b10000000000000000000000000000000", 31], // -0x80000000 (I32_MIN)
+    ["-0b10000000000000000000000000000001", 63], // I32_MIN+1
+    ["-0b1000000000000000000000000000000000000000000000000000000000000000", 63],
+      // -0x8000000000000000 (I64_MIN)
+    ["-0b1000000000000000000000000000000000000000000000000000000000000001", 0],
+      // I64_MIN+1
+  ].map(v => testIntBits(intBinBits, v))
 })
 
 
-function intOctBits(b :Uint8Array) :number {
+const i32minOctBuf = new Uint8Array([ // "20000000000"
+  50 ,48,48,48,48 ,48,48,48,48 ,48,48
+])
+const i64minOctBuf = new Uint8Array([ // "1000000000000000000000"
+  49 ,48,48,48,48 ,48,48,48,48 ,48,48,48,48 ,48,48,48,48 ,48,48,48,48 ,48
+
+  // 1   0000         0000         0000         0000         0000       0
+])
+
+function intOctBits(b :Uint8Array, neg :bool) :number {
   let start = 2 // skip 0o or 0O
   while (b[start] == 0x30) { start++ } // skip leading zeroes
   let z = b.length - start
@@ -541,18 +604,27 @@ function intOctBits(b :Uint8Array) :number {
     z == 6 && b[start] < 0x32 ? 16 : // <= 177777 0xFFFF
     z < 11 ? 31 : // > 177777 0xFFFF && < 10000000000 0x40000000
     z == 11 ? (
+      // special case for I32_MIN "-0o20000000000":
+      neg ? (bufcmp(b, i32minOctBuf, start) <= 0 ? 31 : 63) :
+
       b[start] < 0x32 ? 31 : // <= 17777777777 0x7FFFFFFF
       b[start] < 0x34 ? 32 : // <= 37777777777 0xFFFFFFFF
       63
     ) :
     z < 22 ? 63 : // <= 777777777777777777777 0x7FFFFFFFFFFFFFFF
-    z == 22 && b[start] < 0x32 ? 64 : // <= 1777777777777777777777
+    z == 22 ? (
+      // special case for I64_MIN "-0o1000000000000000000000"
+      neg ? (bufcmp(b, i64minOctBuf, start) <= 0 ? 63 : 0) :
+
+      b[start] < 0x32 ? 64 : // <= 1777777777777777777777
+      0
+    ) :
     0
   )
 }
 
 TEST("intOctBits", () => {
-  for (let v of [
+  [
     ["0o0",   7], // 0x0
     ["0o177", 7], // 0x7F
     ["0o200", 8], // 0x80
@@ -564,30 +636,31 @@ TEST("intOctBits", () => {
     ["0o177777", 16], // 0xFFFF
     
     ["0o200000", 31],      // 0x10000
-    ["0o17777777777", 31], // 0x7FFFFFFF
+    ["0o17777777777", 31], // 0x7FFFFFFF (I32_MAX)
     ["0o20000000000", 32], // 0x80000000
     ["0o37777777777", 32], // 0xFFFFFFFF
 
     ["0o40000000000", 63],            // 0x100000000
     ["0o377777777777777777", 63],     // 0x1FFFFFFFFFFFFF (js MAX_SAFE_INTEGER)
-    ["0o777777777777777777777", 63],  // 0x7FFFFFFFFFFFFFFF
+    ["0o777777777777777777777", 63],  // 0x7FFFFFFFFFFFFFFF (I64_MAX)
     ["0o1000000000000000000000", 64], // 0x8000000000000000
-    ["0o1777777777777777777777", 64], // 0xFFFFFFFFFFFFFFFF
+    ["0o1777777777777777777777", 64], // 0xFFFFFFFFFFFFFFFF (U64_MAX)
     ["0o2000000000000000000000", 0],  // 0x10000000000000000 too large
-  ]) {
-    let input = v[0] as string
-    let expected = v[1]
-    let actual = intOctBits(asciibuf(input))
-    assert(
-      actual === expected,
-      `${JSON.stringify(input)} => ${actual}; expected ${expected}`
-    )
-  }
+
+    // negative
+    ["-0o20000000000", 31], // -0x80000000 (I32_MIN)
+    ["-0o20000000001", 63], // I32_MIN+1
+    ["-0o1000000000000000000000", 63], // -0x8000000000000000 (I64_MIN)
+    ["-0o1000000000000000000001", 0], // I64_MIN+1
+  ].map(v => testIntBits(intOctBits, v))
 })
 
 
 const i64maxDecBuf = new Uint8Array([ // "9223372036854775807"
   57,50,50,51,51,55,50,48,51,54,56,53,52,55,55,53,56,48,55
+])
+const i64minDecBuf = new Uint8Array([ // "9223372036854775808"
+  57,50,50,51,51,55,50,48,51,54,56,53,52,55,55,53,56,48,56
 ])
 
 const u64maxDecBuf = new Uint8Array([ // "18446744073709551615"
@@ -595,13 +668,21 @@ const u64maxDecBuf = new Uint8Array([ // "18446744073709551615"
 ])
 
 
-function intDecBits(b :Uint8Array) :number {
+function intDecBits(b :Uint8Array, neg :bool) :number {
   let v = 0, z = b.length
   for (let i = 0; i < z; i++) {
     v = v * 10 + (b[i] - 0x30)
   }
+  if (v < 0x80) {
+    return 7
+  }
   if (v < 0x1FFFFFFFFFFFFF) {
-    return v < 0x80 ? 7 : Math.floor(Math.log2(v)) + 1
+    let bits = Math.floor(Math.log2(neg ? v-1 : v)) + 1
+    // v-1: negative extreme is one larger than positive for signed integers
+    if (neg && bits > 31) {
+      bits = 63
+    }
+    return bits
   }
   // Beyond js integer precision. We have to look at the bytes.
   let start = 0
@@ -609,14 +690,15 @@ function intDecBits(b :Uint8Array) :number {
   z = b.length - start
   return  (
     z < 19 ? 63 :
-    z == 19 ? bufcmp(b, i64maxDecBuf, start) <= 0 ? 63 : 64 :
-    z == 20 && bufcmp(b, u64maxDecBuf, start) <= 0 ? 64 :
-    0
+    z == 19 ?
+      bufcmp(b, neg ? i64minDecBuf : i64maxDecBuf, start) <= 0 ? 63 :
+      neg ? 0 : 64 :
+    z == 20 && bufcmp(b, u64maxDecBuf, start) <= 0 ? 64 : 0
   )
 }
 
 TEST("intDecBits", () => {
-  for (let v of [
+  [
     ["0",   7],  // 0x0
     ["127", 7],  // 0x7F
     ["128", 8],  // 0x80
@@ -628,29 +710,30 @@ TEST("intDecBits", () => {
     ["65535", 16],  // 0xFFFF
     
     ["65536", 17],      // 0x10000
-    ["2147483647", 31], // 0x7FFFFFFF
+    ["2147483647", 31], // 0x7FFFFFFF (I32_MAX)
     ["2147483648", 32], // 0x80000000
     ["4294967295", 32], // 0xFFFFFFFF
 
     ["4294967296", 33],           // 0x100000000
     ["9007199254740991", 63],     // 0x1FFFFFFFFFFFFF (js MAX_SAFE_INTEGER)
-    ["9223372036854775807", 63],  // 0x7FFFFFFFFFFFFFFF
+    ["9223372036854775807", 63],  // 0x7FFFFFFFFFFFFFFF (I64_MAX)
     ["9223372036854775808", 64],  // 0x8000000000000000
     ["18446744073709551615", 64], // 0xFFFFFFFFFFFFFFFF
     ["18446744073709551616", 0],  // 0x10000000000000000 too large
-  ]) {
-    let input = v[0] as string
-    let expected = v[1]
-    let actual = intDecBits(asciibuf(input))
-    assert(
-      actual == expected,
-      `${JSON.stringify(input)} => ${actual}; expected ${expected}`
-    )
-  }
+
+    // negative
+    ["-2147483648", 31], // -0x80000000 (I32_MIN)
+    ["-2147483649", 63], // I32_MIN+1
+    ["-9223372036854775808", 63], // -0x8000000000000000 (I64_MIN)
+    ["-9223372036854775809", 0], // I64_MIN+1
+  ].map(v => testIntBits(intDecBits, v))
 })
 
+const i64minHexBuf = new Uint8Array([ // "8000000000000000"
+  56, 48,48,48,48, 48,48,48,48, 48,48,48,48, 48,48,48
+])
 
-function intHexBits(b :Uint8Array) :number {
+function intHexBits(b :Uint8Array, neg :bool) :number {
   let v = 0, z = b.length
   for (let n = 0, i = 2; i < z; i++) {
     n = b[i]
@@ -661,8 +744,16 @@ function intHexBits(b :Uint8Array) :number {
     )
     v = v * 16 + n
   }
+  if (v < 0x80) {
+    return 7
+  }
   if (v < 0x1FFFFFFFFFFFFF) {
-    return v < 0x80 ? 7 : Math.floor(Math.log2(v)) + 1
+    let bits = Math.floor(Math.log2(neg ? v-1 : v)) + 1
+    // v-1: negative extreme is one larger than positive for signed integers
+    if (neg && bits > 31) {
+      bits = 63
+    }
+    return bits
   }
   // Beyond js integer precision. We have to look at the bytes.
   let start = 2 // skip 0x or 0X
@@ -670,13 +761,16 @@ function intHexBits(b :Uint8Array) :number {
   z = b.length - start
   return (
     z < 16 || (z == 16 && b[start] <= 0x37) ? 63 :
-    z == 16 ? 64 :
+    z == 16 ?
+      // special case for I64_MIN "-0x8000000000000000"
+      neg ? (bufcmp(b, i64minHexBuf, start) <= 0 ? 63 : 0) :
+      64 :
     0
   )
 }
 
 TEST("intHexBits", () => {
-  for (let v of [
+  [
     ["0x0",  7],
     ["0x7F", 7],
     ["0x80", 8],
@@ -688,25 +782,23 @@ TEST("intHexBits", () => {
     ["0xFFFF", 16],
     
     ["0x10000", 17],
-    ["0x7FFFFFFF", 31],
+    ["0x7FFFFFFF", 31], // I32_MAX
     ["0x80000000", 32],
-    ["0xFFFFFFFF", 32],
+    ["0xFFFFFFFF", 32], // U32_MAX
 
     ["0x100000000", 33],
     ["0x1FFFFFFFFFFFFF", 63],   // (js MAX_SAFE_INTEGER)
-    ["0x7FFFFFFFFFFFFFFF", 63],
+    ["0x7FFFFFFFFFFFFFFF", 63], // I64_MAX
     ["0x8000000000000000", 64],
-    ["0xFFFFFFFFFFFFFFFF", 64],
+    ["0xFFFFFFFFFFFFFFFF", 64], // U64_MAX
     ["0x10000000000000000", 0], // too large
-  ]) {
-    let input = v[0] as string
-    let expected = v[1]
-    let actual = intHexBits(asciibuf(input))
-    assert(
-      actual == expected,
-      `${JSON.stringify(input)} => ${actual}; expected ${expected}`
-    )
-  }
+
+    // negative
+    ["-0x80000000", 31], // I32_MIN
+    ["-0x80000001", 63], // I32_MIN+1
+    ["-0x8000000000000000", 63], // I64_MIN
+    ["-0x8000000000000001", 0], // I64_MIN+1
+  ].map(v => testIntBits(intHexBits, v))
 })
 
 
@@ -728,60 +820,119 @@ export type ErrorHandler = (msg :string, pos :Pos) => any
 // for a basic literal. It may receive a "requested type", in which case the
 // reqt should be reutned if the literal can safely be represented as reqt.
 //
-type basicLitTypeFitter =
-  (x :BasicLit, reqt :Type|null, errh? :ErrorHandler) => BasicType
+type basicLitTypeFitter = (
+  x :BasicLit,
+  reqt :Type|null,
+  errh? :ErrorHandler,
+  op? :token,
+) => BasicType
 
-function intLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
-) :BasicType {
-  // debuglog(`${tokstr(x.tok)} ${JSON.stringify(buf8str(x.value))}`)
 
-  let bits = 0
-
+function intBits(x :BasicLit, neg :bool) :int {
   // calculate minimum bit length
-  switch (x.tok) {
-    case token.INT_BIN: bits = intBinBits(x.value); break
-    case token.INT_OCT: bits = intOctBits(x.value); break
-    case token.INT:     bits = intDecBits(x.value); break
-    case token.INT_HEX: bits = intHexBits(x.value); break
+  switch (x.kind) {
+    case token.INT_BIN: return intBinBits(x.value, neg)
+    case token.INT_OCT: return intOctBits(x.value, neg)
+    case token.INT:     return intDecBits(x.value, neg)
+    case token.INT_HEX: return intHexBits(x.value, neg)
+    default: return 0
   }
+}
+
+
+function smallestIntType(bits :int, neg :bool) :IntType {
+  return (
+    bits <= 7 ? u_t_i8 :
+    bits <= 8 && !neg ? u_t_u8 :
+    bits <= 15 ? u_t_i16 :
+    bits <= 16 && !neg ? u_t_u16 :
+    bits <= 31 ? u_t_i32 :
+    bits <= 32 && !neg ? u_t_u32 :
+    bits > 63 && !neg ? u_t_u64 :
+    u_t_i64
+  )
+}
+
+
+function intLitTypeFitter(
+  x :BasicLit,
+  reqt :Type|null,
+  errh? :ErrorHandler,
+  op? :token,
+) :BasicType {
+  const neg = op == token.SUB
+  let bits = intBits(x, neg)
+  const maxtype = neg ? u_t_i64 : u_t_u64
 
   if (bits == 0) {  // literal is too large
     // TODO: support bigint transparently
     if (errh) {
-      let t = reqt instanceof BasicType ? reqt : u_t_u64
-      errh(`constant ${buf8str(x.value)} overflows ${t.name}`, x.pos)
+      let t = reqt instanceof BasicType ? reqt : maxtype
+      errh(`constant ${x} overflows ${t.name}`, x.pos)
       bits = 64
     }
-  } else if (reqt instanceof BasicType) {
-    if (reqt.bitsize >= bits) {
-      // yay! requested type is large enough for the literal
-      return reqt
+  } else if (reqt) {
+    if (reqt instanceof IntType) {
+      if (reqt.bitsize >= bits && (!neg || reqt.signed)) {
+        // yay! requested type is large enough for the literal
+        return reqt
+      }
+      if (errh) {
+        errh(`constant ${x} overflows ${reqt.name}`, x.pos)
+        bits = 64
+      }
+    } else if (reqt === u_t_f64 || reqt === u_t_f32) {
+      return reqt as BasicType
+    } else if (errh) {
+      errh(`cannot use ${x} as type ${reqt}`, x.pos)
     }
-    if (errh) {
-      errh(`constant ${buf8str(x.value)} overflows ${reqt.name}`, x.pos)
-      bits = 64
-    }
+  } else if (neg && bits >= 64 && errh) {
+    errh(`constant ${x} overflows i64`, x.pos)
   }
 
   // pick type that matches the bit length
   return (
     bits <= 31 ? u_t_int :
     bits <= 63 ? u_t_i64 :
-    u_t_u64
+    maxtype
   )
 }
 
-function floatLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
+
+function floatLitTypeFitter(
+  x :BasicLit,
+  reqt :Type|null,
+  errh? :ErrorHandler,
+  op? :token,
 ) :BasicType {
-  // TODO
-  return u_t_f64
+  if (reqt && reqt !== u_t_f32 && reqt !== u_t_f64) {
+    if (reqt instanceof IntType) {
+      errh && errh(`constant ${x} truncated to ${reqt.name}`, x.pos)
+      return reqt
+    } else if (errh) {
+      errh(`cannot use ${x} as type ${reqt}`, x.pos)
+    }
+  }
+  return reqt === u_t_f32 ? u_t_f32 : u_t_f64
 }
 
-function charLitTypeFitter(x :BasicLit, reqt :Type|null, errh? :ErrorHandler
+
+function charLitTypeFitter(
+  x :BasicLit,
+  reqt :Type|null,
+  errh? :ErrorHandler,
+  op? :token,
 ) :BasicType {
-  // TODO reqt
-  return u_t_u32
+  if (reqt) {
+    if (reqt instanceof IntType) {
+      // TODO: actually check if it fits
+      return reqt
+    }
+    errh && errh(`cannot use ${x} as type ${reqt}`, x.pos)
+  }
+  return op == token.SUB ? u_t_i32 : u_t_u32
 }
+
 
 const basicLitTypesFitters = new Map<token,basicLitTypeFitter>([
   [token.CHAR, charLitTypeFitter],
@@ -794,12 +945,6 @@ const basicLitTypesFitters = new Map<token,basicLitTypeFitter>([
   [token.FLOAT, floatLitTypeFitter],
 ])
 
-
-// universe values
-export const
-  u_v_true  = ival('true', u_t_bool)
-, u_v_false = ival('false', u_t_bool)
-, u_v_nil   = ival('nil', u_t_nil)
 
 
 export class Universe {
@@ -842,16 +987,21 @@ export class Universe {
 
   // basicLitType returns the most suitable type for a literal.
   //
-  // If reqType is provided, this function will attempt to fit the literal
-  // into the reqType. If that fails, the most suitable type for the literal
+  // If reqt is provided, this function will attempt to fit the literal
+  // into the reqt. If that fails, the most suitable type for the literal
   // alone is returned, and an error message is produces if errh is provided
   // You can thus check if contextual type fitting succeeded by comparing
-  // reqType with the result.
+  // reqt with the result.
   //
-  basicLitType(x :BasicLit, reqType? :Type|null, errh? :ErrorHandler) :Type {
-    let f = basicLitTypesFitters.get(x.tok) as basicLitTypeFitter
-    assert(f, `missing type fitter for ${tokstr(x.tok)}`)
-    return f(x, reqType || null, errh)
+  basicLitType(
+    x :BasicLit,
+    reqt? :Type|null,
+    errh? :ErrorHandler,
+    op? :token, // e.g. token.SUB for "-", token.NOT for "!", etc.
+  ) :BasicType {
+    let f = basicLitTypesFitters.get(x.kind) as basicLitTypeFitter
+    assert(f, `missing type fitter for ${tokstr(x.kind)}`)
+    return f(x, reqt || null, errh, op)
   }
 
   // internType potentially returns an equivalent type (t1.equals(t2) == true)

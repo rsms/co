@@ -1,7 +1,8 @@
 import { Pos, SrcFile } from './pos'
 import { ByteStr } from './bytestr'
-import { token } from './token'
+import { token, tokstr } from './token'
 import * as utf8 from './utf8'
+import { strtou } from './strtou'
 
 // ——————————————————————————————————————————————————————————————————
 // AST type hierarchy
@@ -103,12 +104,12 @@ export class Ent {
 
   getTypeExpr() :Expr | null {
     return (
-      ( this.value && this.value.type) ||
-      
       ( this.decl && (
         this.decl instanceof Field ||
         this.decl instanceof VarDecl
       ) && this.decl.type) ||
+
+      ( this.value && this.value.type) ||
 
       this.value
     )
@@ -289,70 +290,6 @@ export class Expr extends Stmt {
 // where we can't provide a better node.
 export class BadExpr extends Expr {}
 
-export class Block extends Expr {
-  constructor(pos :Pos, scope :Scope,
-  public list :Stmt[],
-  ) {
-    super(pos, scope)
-  }
-}
-
-export class IfExpr extends Expr {
-  constructor(pos :Pos, scope :Scope,
-  public cond :Expr,
-  public then :Expr,
-  public els_ :Expr|null,
-  ) {
-    super(pos, scope)
-  }
-}
-
-export class Assignment extends Expr {
-  constructor(pos :Pos, scope :Scope,
-  public op  :token, // ILLEGAL means no operation
-  public lhs :Expr[],
-    // Rhs == ImplicitOne means Lhs++ (Op == Add) or Lhs-- (Op == Sub)
-  public rhs :Expr[],
-  ) {
-    super(pos, scope)
-  }
-}
-
-export class ReturnExpr extends Expr {
-  constructor(pos :Pos, scope :Scope,
-  public result :Expr|null, // null means no explicit return values
-  ) {
-    super(pos, scope)
-  }
-}
-
-
-export class TupleExpr extends Expr {
-  // TupleExpr = "(" Expr ("," Expr)+ ")"
-  constructor(pos :Pos, scope :Scope,
-  public exprs :Expr[],
-  ) {
-    super(pos, scope)
-  }
-
-  toString() {
-    return `(${this.exprs.map(x => x.toString()).join(', ')})`
-  }
-}
-
-export class SelectorExpr extends Expr {
-  // Selector = Expr "." ( Ident | Selector )
-  constructor(pos :Pos, scope :Scope,
-    public lhs :Expr,
-    public rhs :Expr, // Ident or SelectorExpr
-  ) {
-    super(pos, scope)
-  }
-
-  toString() {
-    return `${this.lhs}.${this.rhs}`
-  }
-}
 
 export class Ident extends Expr {
   ent :Ent|null = null // what this name references
@@ -393,6 +330,111 @@ export class Ident extends Expr {
   }
 }
 
+
+export class Block extends Expr {
+  constructor(pos :Pos, scope :Scope,
+  public list :Stmt[],
+  ) {
+    super(pos, scope)
+  }
+}
+
+export class IfExpr extends Expr {
+  constructor(pos :Pos, scope :Scope,
+  public cond :Expr,
+  public then :Expr,
+  public els_ :Expr|null,
+  ) {
+    super(pos, scope)
+  }
+}
+
+export class Assignment extends Expr {
+  constructor(pos :Pos, scope :Scope,
+  public op  :token, // ILLEGAL means no operation
+  public lhs :Expr[],
+    // Rhs == ImplicitOne means Lhs++ (Op == Add) or Lhs-- (Op == Sub)
+  public rhs :Expr[],
+  ) {
+    super(pos, scope)
+  }
+
+  toString() :string {
+    return `${this.lhs.join(', ')} ${tokstr(this.op)} ${this.rhs.join(', ')}`
+  }
+}
+
+export class ReturnExpr extends Expr {
+  constructor(pos :Pos, scope :Scope,
+  public result :Expr|null, // null means no explicit return values
+  ) {
+    super(pos, scope)
+  }
+}
+
+
+export class TupleExpr extends Expr {
+  // TupleExpr = "(" Expr ("," Expr)+ ")"
+  constructor(pos :Pos, scope :Scope,
+  public exprs :Expr[],
+  ) {
+    super(pos, scope)
+  }
+
+  toString() {
+    return `(${this.exprs.map(x => x.toString()).join(', ')})`
+  }
+}
+
+export class SelectorExpr extends Expr {
+  // Selector = Expr "." ( Ident | Selector )
+  constructor(pos :Pos, scope :Scope,
+    public lhs :Expr,
+    public rhs :Expr, // Ident or SelectorExpr
+  ) {
+    super(pos, scope)
+  }
+
+  toString() {
+    return `${this.lhs}.${this.rhs}`
+  }
+}
+
+
+export class IndexExpr extends Expr {
+  // IndexExpr = Expr "[" Expr "]"
+
+  indexv :int = -1  // >=0 = resolved, -1 = invalid/unresolved
+
+  constructor(pos :Pos, scope :Scope,
+    public operand :Expr,
+    public index   :Expr,
+  ) {
+    super(pos, scope)
+  }
+
+  toString() :string {
+    return `${this.operand}[${this.index}]`
+  }
+}
+
+
+export class SliceExpr extends Expr {
+  // SliceExpr = Expr "[" Expr? ":" Expr? "]"
+  constructor(pos :Pos, scope :Scope,
+    public operand :Expr,
+    public start   :Expr|null,
+    public end     :Expr|null,
+  ) {
+    super(pos, scope)
+  }
+
+  toString() :string {
+    return `${this.operand}[${this.start || ''}:${this.end || ''}]`
+  }
+}
+
+
 export class RestExpr extends Expr {
   // ...expr
   constructor(pos :Pos, scope :Scope,
@@ -406,14 +448,79 @@ export class LiteralExpr extends Expr {}
 
 export class BasicLit extends LiteralExpr {
   constructor(pos :Pos, scope :Scope,
-    public tok   :token,
+    public kind  :token, // kind
     public value :Uint8Array,
+    public op    :token = token.ILLEGAL,
+      // op: potential negation operation, e.g. "-3"
   ) {
     super(pos, scope)
   }
 
   toString() :string {
-    return utf8.decodeToString(this.value)
+    return (
+      (this.op != token.ILLEGAL ? tokstr(this.op) : '') +
+      utf8.decodeToString(this.value)
+    )
+  }
+
+  isInt() :bool {
+    return (
+      token.literal_int_beg < this.kind &&
+      this.kind < token.literal_int_end
+    )
+  }
+
+  // isSignedInt returns true if the literal int is signed.
+  // if its type has not yet been resolved, true is returned only
+  // if op == token.SUB.
+  //
+  isSignedInt() :bool {
+    assert(this.isInt(), "called isSignedInt on non-integer")
+    return (
+      this.type instanceof IntType ? this.type.signed :
+      this.op == token.SUB
+    )
+  }
+
+  // parseInt parses a signed value up to Number.MAX_SAFE_INTEGER
+  // Returns NaN on failure.
+  //
+  parseSInt() :int {
+    let base = 0, b = this.value
+    switch (this.kind) {
+      case token.INT_BIN: base = 2; b = b.subarray(2); break
+      case token.INT_OCT: base = 8; b = b.subarray(2); break
+      case token.INT:     base = 10; break
+      case token.INT_HEX: base = 16; b = b.subarray(2); break
+      default: return -1
+    }
+    var v = parseInt(String.fromCharCode.apply(null, b), base)
+    return (
+      v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER ? NaN :
+      v
+    )
+  }
+
+  // parseUInt parses an unsigned value up to Number.MAX_SAFE_INTEGER
+  // -1 is returned to indicate failure.
+  //
+  parseUInt() :int {
+    assert(this.isInt(), "calling parseUInt on a non-integer")
+    if (this.op == token.SUB) {
+      return -1
+    }
+
+    let base = 0, offs = 0
+
+    switch (this.kind) {
+      case token.INT_BIN: base = 2; offs = 2; break
+      case token.INT_OCT: base = 8; offs = 2; break
+      case token.INT:     base = 10; break
+      case token.INT_HEX: base = 16; offs = 2; break
+      default: return -1
+    }
+
+    return strtou(this.value, base, offs)
   }
 }
 
@@ -534,7 +641,7 @@ export class Type extends Expr {
 }
 
 export class UnresolvedType extends Type {
-  refs :Expr[]|null = null  // things that references this type
+  refs :Set<Expr|FunSig>|null = null  // things that references this type
 
   constructor(pos :Pos, scope :Scope,
     public expr :Expr,
@@ -542,12 +649,15 @@ export class UnresolvedType extends Type {
     super(pos, scope)
   }
 
-  addRef(x :Expr) {
+  addRef(x :Expr|FunSig) {
+    assert(x !== this.expr)
+    // if (x !== this.expr) {
     if (!this.refs) {
-      this.refs = [x]
+      this.refs = new Set<Expr|FunSig>([x])
     } else {
-      this.refs.push(x)
+      this.refs.add(x)
     }
+    // }
   }
 
   toString() {
@@ -574,27 +684,36 @@ export class BasicType extends Type {
   // TODO: accepts(other :Type) :bool
 }
 
+
+export class IntType extends BasicType {
+  constructor(bitsize :int, name :string,
+    public signed :bool, // true if type is signed
+  ) {
+    super(bitsize, name)
+  }
+}
+
 // basic type constants
 const uintz :number = 32 // TODO: target-dependant
 
 export const
-  u_t_void = new BasicType(0, 'void')
-, u_t_auto = new BasicType(0, 'auto')
+  // u_t_void = new BasicType(0, 'void')
+  u_t_auto = new BasicType(0, 'auto')
 , u_t_nil  = new BasicType(0, 'nil')
 , u_t_bool = new BasicType(1, 'bool')
 
-, u_t_uint = new BasicType(uintz,   'uint')
-, u_t_int  = new BasicType(uintz-1, 'int')
+, u_t_uint = new IntType(uintz,   'uint', false)
+, u_t_int  = new IntType(uintz-1, 'int', true)
 
-, u_t_i8  = new BasicType(7,  'i8')
-, u_t_i16 = new BasicType(15, 'i16')
-, u_t_i32 = new BasicType(31, 'i32')
-, u_t_i64 = new BasicType(63, 'i64')
+, u_t_i8  = new IntType(7,  'i8', true)
+, u_t_i16 = new IntType(15, 'i16', true)
+, u_t_i32 = new IntType(31, 'i32', true)
+, u_t_i64 = new IntType(63, 'i64', true)
 
-, u_t_u8  = new BasicType(8,  'u8')
-, u_t_u16 = new BasicType(16, 'u16')
-, u_t_u32 = new BasicType(32, 'u32')
-, u_t_u64 = new BasicType(64, 'u64')
+, u_t_u8  = new IntType(8,  'u8', false)
+, u_t_u16 = new IntType(16, 'u16', false)
+, u_t_u32 = new IntType(32, 'u32', false)
+, u_t_u64 = new IntType(64, 'u64', false)
 
 , u_t_f32 = new BasicType(32, 'f32')
 , u_t_f64 = new BasicType(64, 'f64')

@@ -34,6 +34,8 @@ import {
   TupleExpr,
   BadExpr,
   SelectorExpr,
+  IndexExpr,
+  SliceExpr,
   TypeConvExpr,
 
   Type,
@@ -174,6 +176,8 @@ function reprcons(n :Node, c :ReprCtx) :string {
 
 
 function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
+  assert(n)
+
   if (n instanceof BasicType) {
     return c.style.purple(c.style.bold(n.name))
   }
@@ -212,7 +216,9 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   if (n instanceof Block) {
     return (
       n.list.length ?
-        newline + '{' + reprv(n.list, nl2, c, '') + newline + '}' :
+        newline + '{' +
+        n.list.map(n => nl2 + repr1(n, nl2, c).trim()).join('') +
+        newline + '}' :
         '{}'
     )
   }
@@ -275,6 +281,25 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     )
   }
 
+  if (n instanceof IndexExpr) {
+    return (
+      `(${reprt(n.type, newline, c)}index ` +
+      repr1(n.operand, newline, c) + ' ' +
+      repr1(n.index, newline, c) +
+      ')'
+    )
+  }
+
+  if (n instanceof SliceExpr) {
+    return (
+      `(${reprt(n.type, newline, c)}slice ` +
+      repr1(n.operand, newline, c) + ' ' +
+      (n.start ? repr1(n.start, newline, c) : 'nil') + ' ' +
+      (n.end ? repr1(n.end, newline, c) : 'nil') +
+      ')'
+    )
+  }
+
 
   // --------
 
@@ -308,7 +333,7 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     if (n.values) {
       s += ' ' + reprv(n.values, nl2, c)
     }
-    return s + ' )'
+    return s + ')'
   }
 
   if (n instanceof TypeDecl) {

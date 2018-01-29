@@ -4,7 +4,17 @@ import { ErrorCode, ErrorHandler, ErrorReporter } from './error'
 import * as utf8 from './utf8'
 import { debuglog } from './util'
 import { TypeResolver } from './resolve'
-import { File, Package, Ent, ImportDecl, UnresolvedType } from './ast'
+import {
+  File,
+  Package,
+  Ent,
+
+  FunSig,
+  ImportDecl,
+  Expr,
+  UnresolvedType,
+  FunType,
+} from './ast'
 
 
 // An Importer resolves import paths to package entities.
@@ -50,7 +60,7 @@ class pkgBinder extends ErrorReporter {
 
     // step 1: complete file scopes with imports
     return Promise.all(
-      b.pkg.files.map(f => this._bind1(f))
+      b.pkg.files.map(f => this._resolveImports(f))
     ).then(() => {
       if (b.errorCount > 0) {
         return  // stop when imports failed
@@ -58,15 +68,15 @@ class pkgBinder extends ErrorReporter {
 
       // step 2: resolve identifiers
       for (let f of b.pkg.files) {
-        b._bind2(f)
+        b._resolveIdents(f)
       }
 
       // step 3: resolve types
-      b._bind3()
+      b._resolveTypes()
     })
   }
 
-  _bind1(f :File) :Promise<void> {
+  _resolveImports(f :File) :Promise<void> {
     // step 1: complete file scopes with imports
     const b = this
 
@@ -113,7 +123,7 @@ class pkgBinder extends ErrorReporter {
     }
   }
 
-  _bind2(f :File) {
+  _resolveIdents(f :File) {
     // step 2: resolve identifiers
     const b = this
 
@@ -127,24 +137,32 @@ class pkgBinder extends ErrorReporter {
         continue
       }
 
-      debuglog(`${id}`, ent.value && ent.value.constructor.name)
+      // debuglog(
+      //   `${id} (${ent.value && ent.value.constructor.name})`+
+      //   ` at ${b.fset.position(id.pos)}`
+      // )
 
       id.refEnt(ent) // reference ent
 
       let t = id.type
-      if (t instanceof UnresolvedType && ent.value) {
-        id.type = b.types.resolve(ent.value)
-        assert(!(id.type instanceof UnresolvedType), 'TODO still unresolved')
+      if (t instanceof UnresolvedType) {
+        assert(ent.value != null)
+        id.type = b.types.resolve(ent.value as Expr)
+        assert(!(id.type instanceof UnresolvedType), 'still unresolved')
         
         // delegate type to any expressions that reference this type
         if (t.refs) for (let ref of t.refs) {
-          ref.type = id.type
+          if (ref instanceof FunSig || ref instanceof FunType) {
+            ref.result = id.type
+          } else {
+            ref.type = id.type
+          }
         }
       }
     }
   }
 
-  _bind3() {
+  _resolveTypes() {
     // step 3: resolve types
     const b = this
 
@@ -155,16 +173,25 @@ class pkgBinder extends ErrorReporter {
         // was probably resolved during step 2
         continue
       }
+
+      // debuglog(`${ut.expr} at ${b.fset.position(ut.expr.pos)}`)
   
       // attempt to resolve the type now that we can see the entire package
+      ut.expr.type = null // clear so resolve can progress
       const restyp = b.types.resolve(ut.expr)
+
       if (restyp instanceof UnresolvedType) {
+        ut.expr.type = t // restore original which might have refs
         b.error(`cannot resolve type of ${ut.expr}`, ut.expr.pos)
-      } else {
-        // succeeded in resolving the type.
-        // delegate type to any expressions that reference this type.
-        if (t.refs) for (let ref of t.refs) {
-          console.log(`ref[1] ${ref}`) // TODO: test this scenario
+        continue
+      }
+
+      // succeeded in resolving the type.
+      // delegate type to any expressions that reference this type.
+      if (t.refs) for (let ref of t.refs) {
+        if (ref instanceof FunSig || ref instanceof FunType) {
+          ref.result = restyp
+        } else {
           ref.type = restyp
         }
       }

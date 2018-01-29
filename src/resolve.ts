@@ -1,12 +1,15 @@
 import { SrcFileSet, Pos, NoPos } from './pos'
 import { TypeCompat, basicTypeCompat, Universe } from './universe'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
-import { debuglog } from './util'
+import { debuglog, asciibuf } from './util'
+import { token } from './token'
 import {
   Scope,
-  Ident,
+  Ent,
 
   Expr,
+  Ident,
+  BasicLit,
   RestExpr,
   FunExpr,
   LiteralExpr,
@@ -19,10 +22,13 @@ import {
   Operation,
   ReturnExpr,
   IfExpr,
+  IndexExpr,
+  SliceExpr,
   
   Type,
   UnresolvedType,
   BasicType,
+  IntType,
   StrType,
   RestType,
   TupleType,
@@ -30,11 +36,25 @@ import {
   OptionalType,
   UnionType,
 
-  u_t_void,
-  u_t_nil,
+  u_t_nil, // u_t_void,
   u_t_str,
   u_t_optstr,
 } from './ast'
+
+
+
+type Evaluator = (op :token, x :EvalArg, y? :EvalArg) => EvalArg|null
+
+type EvalArg = LiteralExpr | EvalConst
+
+// EvalConst is a simple struct for holding evaluator results
+//
+class EvalConst {}
+class IntEvalConst extends EvalConst {
+  constructor(
+    public value :int,
+  ) { super() }
+}
 
 
 export class TypeResolver extends ErrorReporter {
@@ -55,9 +75,18 @@ export class TypeResolver extends ErrorReporter {
     r.unresolved = new Set<UnresolvedType>()
   }
 
+  // error resports an error
+  //
   error(msg :string, pos :Pos = NoPos, typ? :ErrorCode) {
     const r = this
     r.errorAt(msg, r.fset.position(pos), typ)
+  }
+
+  // syntaxError reports a syntax error.
+  // Interface is compatible with that of Parser.syntaxError
+  //
+  syntaxError(msg :string, pos :Pos = NoPos) {
+    this.error(msg, pos, 'E_SYNTAX')
   }
 
   // resolve attempts to resolve or infer the type of n.
@@ -69,7 +98,7 @@ export class TypeResolver extends ErrorReporter {
       return n
     }
 
-    if (n.type instanceof Type && n.type.constructor !== UnresolvedType) {
+    if (n.type instanceof Type /*&& (n.type.constructor !== UnresolvedType)*/) {
       return n.type
     }
 
@@ -77,9 +106,12 @@ export class TypeResolver extends ErrorReporter {
     let t = r.maybeResolve(n)
 
     if (!t) {
-      if (n.type) {
-        return n.type
-      }
+      // if (n.type) {
+      //   if (n.type instanceof UnresolvedType) {
+      //     n.type.addRef(n)
+      //   }
+      //   return n.type
+      // }
 
       t = r.markUnresolved(n)
 
@@ -98,19 +130,6 @@ export class TypeResolver extends ErrorReporter {
     n.type = t
 
     return t
-  }
-
-  maybeResolveTupleType(pos :Pos, scope :Scope, exprs :Expr[]) :TupleType|null {
-    const r = this
-    let types :Type[] = []
-    for (const x of exprs) {
-      const t = r.resolve(x)
-      if (!t) {
-        return null
-      }
-      types.push(t)
-    }
-    return r.universe.internType(new TupleType(pos, scope, types)) as TupleType
   }
 
   // maybeResolve attempts to resolve or infer the type of n.
@@ -142,25 +161,29 @@ export class TypeResolver extends ErrorReporter {
       // of return, the type of the returned value.
       if (n.list.length == 0) {
         // empty block
-        return u_t_void
+        return u_t_nil //u_t_void
       }
       let s = n.list[n.list.length-1]
       if (s instanceof Expr) {
         return r.resolve(s)
       }
       // last statement is a declaration
-      debuglog(`TODO handle Block with declaration at end`)
-      return u_t_void
+      // debuglog(`TODO handle Block with declaration at end`)
+      return u_t_nil //u_t_void
     }
 
     if (n instanceof FunExpr) {
       const s = n.sig
-      return r.universe.internType(new FunType(
+      let t = r.universe.internType(new FunType(
         s.pos,
         s.scope,
         s.params.map(field => r.resolve(field.type)),
         r.resolve(s.result),
       ))
+      if (t.result instanceof UnresolvedType) {
+        t.result.addRef(t)
+      }
+      return t
     }
 
     if (n instanceof TupleExpr) {
@@ -187,12 +210,6 @@ export class TypeResolver extends ErrorReporter {
     }
 
     if (n instanceof Operation) {
-      // type Operation {
-      //   Expr
-      //   op    :token
-      //   x     :Expr
-      //   y     :Expr? // nil means unary expression
-      // }
       const xt = r.resolve(n.x)
       if (!n.y) {
         // unary, e.g. x++
@@ -205,9 +222,14 @@ export class TypeResolver extends ErrorReporter {
           return null
         }
 
-        if (xt.equals(yt)) {
+        if (xt === yt || xt.equals(yt)) {
           // both operands types are equivalent
           return xt
+        }
+
+        let x = r.convert(xt, n.y)
+        if (x) {
+          return x === n.y ? yt : r.resolve(x)
         }
 
         r.error(`invalid operation (mismatched types ${xt} and ${yt})`, n.pos)
@@ -232,15 +254,34 @@ export class TypeResolver extends ErrorReporter {
 
     if (n instanceof ReturnExpr) {
       // return expressions always represents type of its results, if any
-      return n.result ? r.resolve(n.result) : u_t_void
+      return n.result ? r.resolve(n.result) : u_t_nil //u_t_void
     }
 
     if (n instanceof IfExpr) {
       return r.maybeResolveIfExpr(n)
     }
 
+    if (n instanceof IndexExpr) {
+      r.resolveIndex(n)
+      return n.type
+    }
+
     debuglog(`TODO handle ${n.constructor.name}`)
     return null  // unknown type
+  }
+
+
+  maybeResolveTupleType(pos :Pos, scope :Scope, exprs :Expr[]) :TupleType|null {
+    const r = this
+    let types :Type[] = []
+    for (const x of exprs) {
+      const t = r.resolve(x)
+      if (!t) {
+        return null
+      }
+      types.push(t)
+    }
+    return r.universe.internType(new TupleType(pos, scope, types)) as TupleType
   }
 
 
@@ -399,7 +440,7 @@ export class TypeResolver extends ErrorReporter {
       // e.g. `if x A else nil => A?`
       if (thentyp instanceof BasicType) {
         // e.g. `if x int else nil`
-        this.error(`mixing ${thentyp} and optional type`, n.pos, 'E_CONV')
+        r.error(`mixing ${thentyp} and optional type`, n.pos, 'E_CONV')
       }
       // makes the type optional
       return (
@@ -413,7 +454,7 @@ export class TypeResolver extends ErrorReporter {
       // e.g. `if x nil else A => A?`
       if (eltyp instanceof BasicType) {
         // e.g. `if x nil else int`
-        this.error(`mixing optional and ${eltyp} type`, n.pos, 'E_CONV')
+        r.error(`mixing optional and ${eltyp} type`, n.pos, 'E_CONV')
       }
       return (
         eltyp instanceof OptionalType ? eltyp :
@@ -484,12 +525,172 @@ export class TypeResolver extends ErrorReporter {
   }
 
 
+  // resolveIndex attempts to resolve the type of an index expression.
+  // returns x as a convenience.
+  //
+  resolveIndex(x :IndexExpr) :IndexExpr {
+    const r = this
+
+    // resolve operand type
+    let opt = r.resolve(x.operand)
+
+    if (opt instanceof UnresolvedType) {
+      // defer to bind stage
+      debuglog(`[index type] deferred to bind stage`)
+    } else if (opt instanceof TupleType) {
+      r.resolveTupleIndex(x, opt)
+    } else {
+      debuglog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
+    }
+
+    return x
+  }
+
+  // resolveTupleIndex attempts to resolve the type of an index expression
+  // on a tuple.
+  //
+  resolveTupleIndex(x :IndexExpr, opt :TupleType) {
+    const r = this
+
+    let it = r.resolve(x.index)
+    if (it instanceof UnresolvedType) {
+      debuglog(`index resolution deferred to post-resolve`)
+      x.type = r.markUnresolved(x)
+      return
+    }
+
+    const ix = x.index
+
+    // index must be constant for tuple access
+    let index = r.resolveLitConstant(ix, intEvaluator)
+    if (index == null) {
+      // TODO: somehow track this and complete the check during bind
+      r.syntaxError('non-constant tuple index', ix.pos)
+      return
+    }
+
+    if (index instanceof EvalConst) {
+      assert(index instanceof IntEvalConst, "there is not other kind")
+      x.indexv = (index as IntEvalConst).value
+    } else {
+      let index2 = index as LiteralExpr
+      assert(index2 instanceof LiteralExpr)
+      // check type to make sure index is an integer
+      if (
+        index2.type && !(index2.type instanceof IntType) ||
+        !(index2 instanceof BasicLit) ||
+        !index2.isInt()
+      ) {
+        r.syntaxError(`invalid index type ${index2.type || index2}`, ix.pos)
+        return
+      }
+
+      // parse the integer; returns -1 on failure
+      x.indexv = index2.parseUInt()
+      if (x.indexv == -1) {
+        r.syntaxError(`invalid index ${index2}`, ix.pos)
+        return
+      }
+    }
+
+    if (x.indexv < 0 || x.indexv >= opt.types.length) {
+      r.syntaxError(
+        `out-of-bounds tuple index ${x.indexv} on type ${opt}`,
+        ix.pos
+      )
+      return
+    }
+
+    // success -- type of IndexExpr found
+    x.type = opt.types[x.indexv]
+
+    // since we folded the constant, replace x.index if it's not already
+    // a constant
+    if (!(x.index instanceof BasicLit)) {
+      // Note: Simply skip this branch to disable on-the-fly optimizations
+      const bl = new BasicLit(
+        x.index.pos,
+        x.index.scope,
+        token.INT,
+        asciibuf(x.indexv.toString(10))
+      )
+      bl.type = r.universe.basicLitType(bl)
+      x.index = bl
+    }
+  }
+
+
+  // resolveLitConstant attempts to resolve the constant value of x, expected
+  // to be a LiteralExpr. If x or anything x might refer to is not constant,
+  // null is returned.
+  //
+  resolveLitConstant(x :Expr, evaluator :Evaluator) :EvalArg|null {
+    const r = this
+
+    if (x instanceof LiteralExpr) {
+      return x
+    }
+
+    if (x instanceof Ident) {
+      if (x.ent && x.ent.writes == 0 && x.ent.value) {
+        // Note: we check `x.ent.writes == 0` to make sure that x is a constant
+        // i.e. that there are no potential conditional branches that might
+        // change the value of x.
+        return r.resolveLitConstant(x.ent.value, evaluator)
+      }
+    } else if (x instanceof IndexExpr) {
+      let opt = r.resolve(x.operand)
+
+      if (opt instanceof TupleType) {
+        let tuple :TupleExpr
+        if (x.operand instanceof Ident) {
+          assert(x.operand.ent != null) // should have been resolved
+          const ent = x.operand.ent as Ent
+          assert(ent.value instanceof TupleExpr)
+          tuple = ent.value as TupleExpr
+        } else {
+          // TODO: handle selectors to fields
+          assert(x.operand instanceof TupleExpr)
+          tuple = x.operand as TupleExpr
+        }
+
+        if (x.indexv >= 0) {
+          assert(x.indexv < tuple.exprs.length) // bounds checked when resolved
+          return r.resolveLitConstant(tuple.exprs[x.indexv], evaluator)
+        } else {
+          debuglog(`x.indexv < 0 for IndexExpr ${x}`)
+        }
+      } else {
+        debuglog(`TODO ${x.constructor.name} operand ${opt}`)
+      }
+    } else if (x instanceof Operation) {
+      const lval = r.resolveLitConstant(x.x, evaluator)
+      if (lval) {
+        if (!x.y) {
+          // unary operation
+          return evaluator(x.op, lval)
+        } else {
+          const rval = r.resolveLitConstant(x.y, evaluator)
+          if (rval) {
+            // attempt evaluation
+            return evaluator(x.op, lval, rval)
+          }
+        }
+      }
+    } else {
+      debuglog(`TODO ${x.constructor.name}`)
+    }
+
+    return null
+  }
+
+
   // registerUnresolved registers expr as having an unresolved type.
   // Does NOT set expr.type but instead returns an UnresolvedType object.
   //
   markUnresolved(expr :Expr) :UnresolvedType {
     const t = new UnresolvedType(expr.pos, expr.scope, expr)
-    debuglog(`expr ${expr}`)
+    debuglog(`expr ${expr} as ${this.fset.position(expr.pos)}`)
     this.unresolved.add(t)
     return t
   }
@@ -511,22 +712,26 @@ export class TypeResolver extends ErrorReporter {
   // If conversion is impossible, null is returned to indicate error.
   //
   convert(t :Type, x :Expr) :Expr|null {
-    const xt = this.resolve(x)
+    const r = this
+    const xt = r.resolve(x)
 
-    if (xt.equals(t)) {
+    if (xt === t || xt.equals(t)) {
       return x
     }
 
     if (
-      this.isConstant(x) &&
+      r.isConstant(x) &&
       t instanceof BasicType &&
       xt instanceof BasicType
     ) {
-      // constant expression with basic types
+      // expression with basic types
       switch (basicTypeCompat(t, xt)) { // TypeCompat
-        case TypeCompat.NO: break
+        case TypeCompat.NO: {
+          // Note: caller should report error
+          return null
+        }
         case TypeCompat.LOSSY: {
-          this.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV')
+          r.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV')
           // TODO: ^ use diag instead with DiagKind.ERROR as the default, so
           // that user code can override this error into a warning instead, as
           // it's still valid to perform a lossy conversion.
@@ -538,10 +743,70 @@ export class TypeResolver extends ErrorReporter {
       }
     }
 
+    debuglog(`TODO conversion of ${x} into type ${t}`)
+
     // TODO: figure out a scalable type conversion system
     // TODO: conversion of other types
 
     return null
   }
-
 }
+
+
+// intEvaluator is an Evaluator that can perform operations on integers
+//
+function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
+  if (!(x instanceof BasicLit) || !x.isInt()) {
+    return null
+  }
+
+  // interpret x
+  const xs = x.isSignedInt()
+  let xv = xs ? x.parseSInt() : x.parseUInt()
+  const xneg = x.op == token.SUB
+  if ((!xs && xv < 0) || isNaN(xv)) {
+    return null
+  }
+
+  if (y) {
+    // binary operation
+    if (!(y instanceof BasicLit) || !y.isInt()) {
+      return null
+    }
+
+    // interpret y
+    const ys = y.isSignedInt()
+    let yv = ys ? y.parseSInt() : y.parseUInt()
+    const yneg = y.op == token.SUB
+    if ((!ys && yv < 0) || isNaN(yv)) {
+      return null
+    }
+
+    switch (op) {
+      case token.ADD: return new IntEvalConst(xv + yv)
+      case token.SUB: return new IntEvalConst(xv - yv)
+      case token.OR:  return new IntEvalConst(xv | yv)
+      case token.XOR: return new IntEvalConst(xv ^ yv)
+      case token.MUL: return new IntEvalConst(Math.round(xv * yv))
+      case token.QUO: return new IntEvalConst(Math.round(xv / yv))
+      case token.REM: return new IntEvalConst(xv % yv)
+      case token.AND: return new IntEvalConst(xv & yv)
+      default:
+        debuglog(`TODO eval binary op (${token[op]} ${x} (${xv}) ${y})`)
+    }
+
+  } else {
+    // unary operation
+    switch (op) {
+      case token.ADD: return new IntEvalConst(+xv)
+      case token.SUB: return new IntEvalConst(-xv)
+      case token.INC: return new IntEvalConst(++xv)
+      case token.DEC: return new IntEvalConst(--xv)
+      default:
+        debuglog(`TODO eval unary op (${token[op]} ${x})`)
+    }
+  }
+
+  return null  // error
+}
+

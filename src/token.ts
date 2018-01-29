@@ -40,10 +40,12 @@ export enum token {
   // (these tokens stand for classes of literals)
   NAME,    // main
   NAMEAT,  // @foo, @
+  literal_int_beg,
   INT,     // 12345
   INT_BIN, // 0b1010
   INT_OCT, // 0o6737
   INT_HEX, // 0xBE3f
+  literal_int_end,
   FLOAT,   // 123.45
   RATIO,   // 22/7
   CHAR,    // 'a'
@@ -55,14 +57,14 @@ export enum token {
   // Delimiters
   delim_beg,
   LPAREN,    // (
-  LBRACK,    // [
+  LBRACKET,  // [
   LBRACE,    // {
   COMMA,     // ,
   DOT,       // .
   PERIODS,   // ..
   ELLIPSIS,  // ...
   RPAREN,    // )
-  RBRACK,    // ]
+  RBRACKET,  // ]
   RBRACE,    // }
   SEMICOLON, // ;
   COLON,     // :
@@ -214,14 +216,14 @@ const tokenStrings = new Map<token, string>([
   [token.ELLIPSIS,   "..."],
   [token.PERIODS,    ".."],
 
-  [token.LPAREN, "("],
-  [token.LBRACK, "["],
-  [token.LBRACE, "{"],
-  [token.COMMA,  ","],
-  [token.DOT,    "."],
+  [token.LPAREN,   "("],
+  [token.LBRACKET, "["],
+  [token.LBRACE,   "{"],
+  [token.COMMA,    ","],
+  [token.DOT,      "."],
 
   [token.RPAREN,    ")"],
-  [token.RBRACK,    "]"],
+  [token.RBRACKET,  "]"],
   [token.RBRACE,    "}"],
   [token.SEMICOLON, ";"],
   [token.COLON,     ":"],

@@ -309,7 +309,17 @@ export class Scanner extends ErrorReporter {
         break
 
       case 0x2e: { // .
-        if (isDigit(s.ch)) {
+        if (
+          isDigit(s.ch) &&
+          s.tok != token.NAME &&
+          s.tok != token.RPAREN &&
+          s.tok != token.RBRACKET
+        ) {
+          // Note: We check for NAME so that:
+          //   x.1 => (selector (name x) (int 1))
+          //   ).1 => (selector (name x) (int 1))
+          //   ].1 => (selector (name x) (int 1))
+          //   .1  => (float 0.1)
           s.scanFloatNumber(/*seenDecimal*/true)
           insertSemi = true
         } else {
@@ -370,10 +380,10 @@ export class Scanner extends ErrorReporter {
         break
 
       case 0x5b: // [
-        s.tok = token.LBRACK
+        s.tok = token.LBRACKET
         break
       case 0x5d: // ]
-        s.tok = token.RBRACK
+        s.tok = token.RBRACKET
         insertSemi = true
         break
 

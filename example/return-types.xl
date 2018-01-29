@@ -125,6 +125,15 @@ fun f70(x int) {
   return 1.2
 } // (int)->int|bool|f64
 
+// post-resolved result type
+fun f80 {
+  a = x
+  b = a
+  c = b
+  c
+}
+x = 3
+
 // // errors: mismatched result type
 // fun e0 int { return 1.2 } // error: constant 1.2 truncated to int
 // fun e1 int { return } // error: missing return value; expecting int

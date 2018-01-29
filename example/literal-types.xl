@@ -37,17 +37,26 @@ id2 = 128 // i32 (<=u8)
 id3 = 256   // i32 (<=i16)
 id4 = 32767 // i32 (<=i16)
 id5 = 32768 // i32 (<=u16)
+id6 = -32768 // i32 (<=u16)
 
-id6 = 1048576   // i32
-id7 = 2147483647 // i32
-id8 = 2147483648 // i64 (<=u32)
+id7 = 1048576   // i32
+id8 = 2147483647 // i32 (I32_MAX)
+id8b = -2147483648 // i32 (I32_MIN)
+id8c = -2147483649 // i64 (I32_MIN+1)
+id9 = 2147483648 // i64 (<=u32 but we prefer i64)
 
-id10 = 4294967296          // i64
-id11 = 9223372036854775807 // i64
-id12 = 9223372036854775808 // u64
-id13 = 18446744073709551615 // u64
-// id13b = 18446744073709551616
- // error: constant 18446744073709551616 overflows u64
+id10 = 4294967296          // i64 ()
+id11 = 9223372036854775807 // i64 (I64_MAX)
+id12 = -9223372036854775808  // i64 (I64_MIN)
+id13 = 9223372036854775808 // u64 (I64_MAX+1)
+id14 = 18446744073709551615 // u64 (U64_MAX)
+// id15 = -9223372036854775809
+  // error: constant -9223372036854775809 overflows i64
+// id16 = -18446744073709551615
+//   // error: constant 18446744073709551615 overflows i64
+// id17 = 18446744073709551616
+//   // error: constant 18446744073709551616 overflows u64
+
 
 // ----------------------------------------------------------------------------
 // integers, decimal, fitted
@@ -55,22 +64,33 @@ fid0 i8 = 0
 fid1 i8 = 127
 fid2 u8 = 128
 // fid2b i8 = 128 // error: constant 128 overflows i8
+// fid2c u8 = -1   // error: constant -1 overflows u8
 
 fid3 i16 = 256
 fid4 i16 = 32767
 fid5 u16 = 32768
-// fid5 i16 = 32768 // error: constant 32768 overflows i16
+// fid5b i16 = 32768 // error: constant 32768 overflows i16
+// fid5c u16 = -1 // error: constant -1 overflows u16
 
 fid6 i32 = 1048576
 fid7 i32 = 2147483647
 fid8 u32 = 2147483648
-// fid8 i32 = 2147483648 // error: constant 2147483648 overflows i32
+// fid8b i32 = 2147483648 // error: constant 2147483648 overflows i32
+// fid8c u32 = -1 // error: constant -1 overflows u32
 
 fid10 i64 = 4294967296
 fid11 i64 = 9223372036854775807
 fid12 u64 = 9223372036854775808
-// fid12 i64 = 9223372036854775808
+// fid12b i64 = 9223372036854775808
 //   // error: constant 9223372036854775808 overflows i64
+// fid12c u64 = -1 // error: constant -1 overflows u64
+
+// Assumes int/uint is 32-bit
+fid13 int = 1048576
+fid14 int = 2147483647
+fid15 uint = 2147483648
+// fid15b int = 2147483648 // error: constant 2147483648 overflows int
+// fid15c uint = -1 // error: constant -1 overflows uint
 
 // ----------------------------------------------------------------------------
 // integers, hex, default for lit
@@ -118,3 +138,17 @@ fih12 u64 = 0x8000000000000000
 //   // error: constant 0x8000000000000000 overflows i64
 // fih12b u64 = 0x10000000000000000
 //   // error: constant 0x10000000000000000 overflows u64
+
+// ----------------------------------------------------------------------------
+// floating-point numbers
+fl0 = 1.2
+fl1 = -1.2
+fl2 f32 = 1.2
+fl3 f32 = -1.2
+fl4 f64 = 1.2
+fl5 f64 = -1.2
+fl6 f64 = fl3
+// fl7 f32 = fl5 // error: constant fl5 truncated to f32
+// fl90 int = 1.2 // error: constant 1.2 truncated to int
+// fl91 str = 1.2 // error: cannot use 1.2 as type str
+// fl92 int = fl0 // error: constant fl0 truncated to int

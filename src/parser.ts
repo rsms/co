@@ -6,6 +6,7 @@ import { TypeResolver } from './resolve'
 import { ByteStr, ByteStrSet } from './bytestr'
 import { Universe } from './universe'
 import { debuglog } from './util'
+import { strtou } from './strtou'
 import {
   File,
   Scope,
@@ -26,6 +27,7 @@ import {
 
   Expr,
   Ident,
+  LiteralExpr,
   RestExpr,
   FunExpr,
   FunSig,
@@ -41,14 +43,18 @@ import {
   TupleExpr,
   BadExpr,
   SelectorExpr,
+  IndexExpr,
+  SliceExpr,
 
   Type,
+  IntType,
   FunType,
   StrType,
   UnresolvedType,
   UnionType,
+  TupleType,
 
-  u_t_void,
+  u_t_nil,
   u_t_auto,
   u_t_uint,
 } from './ast'
@@ -283,7 +289,8 @@ export class Parser extends scanner.Scanner {
       return x
     }
 
-    assert(x.ent == null, "identifier already declared or resolved")
+    assert(x.ent == null, "already resolved")
+
     if (x.value === p._id__) {
       return x
     }
@@ -293,12 +300,32 @@ export class Parser extends scanner.Scanner {
     while (s) {
       const ent = s.lookupImm(x.value)
       if (ent) {
-        debuglog(`${x} found in scope#${s.level()}`)
+        // debuglog(`${x} found in scope#${s.level()}`)
         x.refEnt(ent) // reference ent
+
+        if (!x.type) {
+          const tx = ent.getTypeExpr()
+          x.type = tx ? p.types.resolve(tx) : null
+          // x.type = (
+          //   ent.value ? p.types.resolve(ent.value) :
+          //   ent.decl instanceof Expr ? p.types.resolve(ent.decl) :
+          //   null
+          // )
+
+          if (!x.type) {
+            x.type = p.types.markUnresolved(x)
+          }
+          if (x.type instanceof UnresolvedType) {
+            // references something that itself is undefined
+            x.type.addRef(x)
+          }
+        }
+
         return x
       }
       s = s.outer
     }
+
     // debuglog(`${x} not found`)
     if (collectUnresolved) {
       // all local scopes are known, so any unresolved identifier
@@ -492,7 +519,7 @@ export class Parser extends scanner.Scanner {
     return d
   }
 
-  varDecl(pos :Pos, idents :Ident[]) :VarDecl {
+  varDecl(pos :Pos, idents :Ident[]) :VarDecl|Assignment {
     // VarDecl = IdentifierList
     //           ( Type [ "=" ExpressionList ] | "=" ExpressionList )
     const p = this
@@ -501,6 +528,11 @@ export class Parser extends scanner.Scanner {
 
     // vars at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
+
+    // if (p.scope !== p.filescope && p.tok == token.ASSIGN) {
+    //   // produce Assignment instead
+    //   return p.assignment(idents, typ ? p.types.resolve(typ) : null)
+    // }
 
     const d = new VarDecl(pos, scope, idents, null, typ, null)
 
@@ -520,28 +552,8 @@ export class Parser extends scanner.Scanner {
       return d
     }
 
-    if (d.type) {
-      // e.g. "var x, y int = 1, 0x3"
-      const t = p.types.resolve(d.type)
-      d.type = t
-      d.idents.forEach(ident => { ident.type = t })
-    } else {
-      assert(d.values, "no type and no vals")
-      let vals = d.values as Expr[]
-      // e.g. "var x, y = 1, 0x3"
-      
-      for (let x of vals) {
-        p.types.resolve(x)
-      }
-
-      // copy types of values to names
-      vals.forEach((v, i) => {
-        let ident = d.idents[i] as Ident // we have checked len already
-        ident.type = v.type
-      })
-    }
-
-    p.declarev(d.scope, idents, d, d.values)
+    const reqt = d.type ? p.types.resolve(d.type) : null
+    p.processAssign(d.idents, d.values, d, reqt, /*onlyDef=*/true)
 
     return d
   }
@@ -589,7 +601,7 @@ export class Parser extends scanner.Scanner {
     // it will use that instead. Whenever we encounter a return statement, we
     // will check the expected return type with the actual return type.
     //
-    const sig = p.funSig(isInitFun ? u_t_void : u_t_auto)
+    const sig = p.funSig(isInitFun ? u_t_nil/*u_t_void*/ : u_t_auto)
 
     const f = new FunExpr(pos, p.scope, name, sig, isInitFun)
 
@@ -598,7 +610,7 @@ export class Parser extends scanner.Scanner {
       if (sig.params.length > 0) {
         p.syntaxError(`init function with parameters`, sig.pos)
       }
-      if (sig.result !== u_t_void) {
+      if (sig.result !== u_t_nil/*u_t_void*/) {
         p.syntaxError(`init function with result`, sig.pos)
       }
     } else {
@@ -665,15 +677,20 @@ export class Parser extends scanner.Scanner {
     } else {
       if (sig.result == u_t_auto) {
         // for functions without a body and that is missing an explicit
-        // result type, void is assumed.
-        sig.result = u_t_void
+        // result type, nil/void is assumed.
+        sig.result = u_t_nil //u_t_void
       }
       p.popScope()
     }
 
-    const funtype = p.types.resolve(f)
-    
-    if (name && !isInitFun) {
+    if (sig.result instanceof UnresolvedType) {
+      sig.result.addRef(sig)
+    }
+
+    const funtype = p.types.resolve(f) as FunType
+    assert(funtype.constructor === FunType) // funtype always resolves
+
+    if (name && name.value !== p._id__ && !isInitFun) {
       // since we declared the name of the function, the name now represents
       // the function and thus its type.
       name.type = funtype
@@ -728,7 +745,7 @@ export class Parser extends scanner.Scanner {
 
       // parse type or name
       if (p.tok == token.NAME) {
-        typ = p.dotident(p.ident())
+        typ = p.dotident(null, p.ident())
       } else {
         // Note: No need to check for ";" or ")" since the "while" condition
         // checks for ")" and an empty parameter set with linebreaks never
@@ -973,15 +990,35 @@ export class Parser extends scanner.Scanner {
     )
   }
 
-  assignment(lhs :Expr[]) :Assignment {
-    // Assignment = ExprList "=" ExprList
+
+  processAssign(
+    lhs :Expr[],
+    rhs :Expr[]|null,
+    decl :Node,
+    reqt :Type|null,
+    onlyDef :bool,
+  ) {
     const p = this
-    p.want(token.ASSIGN) // "="
 
-    const s = new Assignment(lhs[0].pos, p.scope, token.ASSIGN, lhs, [])
-
-    // parse right-hand side in context of the function
-    s.rhs = p.exprList(/*ctx=*/s)
+    function maybeConvRVal(typ :Type, rval :Expr, index :int) {
+      if (!(typ instanceof UnresolvedType)) {
+        const convx = p.types.convert(typ, rval)
+        if (!convx) {
+          p.error(
+            (rval.type instanceof UnresolvedType ?
+              `cannot convert "${rval}" to type ${typ}` :
+              `cannot convert "${rval}" (type ${rval.type}) to type ${typ}`
+            ),
+            rval.pos
+          )
+        } else if (convx !== rval) {
+          // no error and conversion is needed.
+          // replace original expression with conversion expression
+          assert(rhs != null)
+          ;(rhs as any)[index] = convx
+        }
+      }
+    }
 
     // Check each left-hand identifier against scope and unresolved.
     // Note that exprList already has called p.resolve on all ids.
@@ -996,52 +1033,69 @@ export class Parser extends scanner.Scanner {
     //
     for (let i = 0; i < lhs.length; ++i) {
       const id = lhs[i]
-      if (id instanceof Ident) {
-        assert(s.rhs[i])
 
-        // Decide declare a new ent, or store to existing one
-        if (id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
-          id.incrWrite()
-
-          const typexpr = id.ent.getTypeExpr()
-          const typ = typexpr ? p.types.resolve(typexpr) : null
-          
-          if (typ) {
-            // check & resolve type, converting RHS if needed
-            id.type = typ
-
-            const val = s.rhs[i]
-            const convertedVal = p.types.convert(typ, val)
-
-            if (!convertedVal) {
-              p.error(
-                (val.type instanceof UnresolvedType ?
-                  `cannot convert "${val}" to type ${typ}` :
-                  `cannot convert "${val}" (type ${val.type}) to type ${typ}`
-                ),
-                val.pos
-              )
-            } else if (convertedVal !== val) {
-              // no error and conversion is needed.
-              // replace original expression with conversion expression
-              s.rhs[i] = convertedVal
-            }
-          } else {
-            debuglog(`ent without type at id ${id}`)
-          }
-
-        } else {
-          // since we are about to redeclare, clear any "unresolved" mark for
-          // this identifier expression.
-          if (p.unresolved) { p.unresolved.delete(id) } // may be noop
-          p.declare(id.scope, id, s, s.rhs[i])
-          id.type = p.types.resolve(s.rhs[i])
-          if (id.type instanceof UnresolvedType) {
-            id.type.addRef(id)
-          }
-        }
+      if (!(id instanceof Ident)) {
+        debuglog(`TODO LHS is not an id (type is ${id.constructor.name})`)
+        continue
       }
-    }
+
+      // Decide to store to an existing ent, or declare a new one
+      if (!onlyDef && rhs && id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
+        const rval = rhs[i]
+
+        id.incrWrite()
+
+        const typexpr = id.ent.getTypeExpr()
+        assert(typexpr != null)
+        const typ = p.types.resolve(typexpr as Expr)
+
+        // check & resolve type, converting rval if needed
+        id.type = typ
+        maybeConvRVal(typ, rval, i)
+
+        continue
+      }
+
+      
+      // new declaration
+      //
+      // since we are about to redeclare, clear any "unresolved" mark for
+      // this identifier expression.
+      const rval = rhs ? rhs[i] : null
+
+      if (reqt) {
+        id.type = reqt
+        if (rval) {
+          // see if we need to convert the rval to fit the destination type
+          maybeConvRVal(reqt, rval, i)
+        }
+      } else {
+        assert(rval, "processAssign called with no reqt and no rvals")
+        id.type = p.types.resolve(rval as Expr)
+      }
+      
+      if (p.unresolved) { p.unresolved.delete(id) } // may be noop
+      p.declare(id.scope, id, decl, rval)
+
+      if (id.type instanceof UnresolvedType) {
+        id.type.addRef(id)
+      }
+
+    } // end for loop
+  }
+
+
+  assignment(lhs :Expr[], reqt :Type|null = null) :Assignment {
+    // Assignment = ExprList "=" ExprList
+    const p = this
+    p.want(token.ASSIGN) // "="
+
+    const s = new Assignment(lhs[0].pos, p.scope, token.ASSIGN, lhs, [])
+
+    // parse right-hand side in context of the function
+    s.rhs = p.exprList(/*ctx=*/s)
+
+    p.processAssign(s.lhs, s.rhs, s, /*reqt=*/reqt, /*onlyDef=*/false)
 
     return s
   }
@@ -1162,7 +1216,7 @@ export class Parser extends scanner.Scanner {
       case token.XOR: // unary operators
       case token.FUN:
       case token.LPAREN: // operands
-      case token.LBRACK:
+      case token.LBRACKET:
       // case token.STRUCT:
       // case token.CHAN:
       case token.INTERFACE: // composite types
@@ -1292,18 +1346,18 @@ export class Parser extends scanner.Scanner {
 
     const n = new ReturnExpr(pos, p.scope, null)
 
-    // expected return type (may be u_t_auto; u_t_void for init)
+    // expected return type (may be u_t_auto; u_t_nil/u_t_void for init)
     const fi = p.currFun()
     const frtype = fi.f.sig.result as Type  // ok; already resolved
     assert(frtype instanceof Type, "currFun sig.result type not resolved")
 
     if (p.tok == token.SEMICOLON || p.tok == token.RBRACE) {
       // no result; just "return"
-      if (frtype !== u_t_void) {
+      if (frtype !== u_t_nil/*u_t_void*/) {
         if (frtype === u_t_auto && fi.autort == null) {
           // if `fi.autort != null` that means the block returns both
           // some type and nothing, which is invalid.
-          fi.f.sig.result = u_t_void
+          fi.f.sig.result = u_t_nil //u_t_void
         } else {
           p.syntaxError(`missing return value; expecting ${fi.autort || frtype}`)
         }
@@ -1324,7 +1378,7 @@ export class Parser extends scanner.Scanner {
         // e.g. "return 1, 2" == "return (1, 2)"
     )
 
-    if (frtype === u_t_void) {
+    if (frtype === u_t_nil/*u_t_void*/) {
       p.syntaxError("function does not return a value", rval.pos)
       return n
     }
@@ -1375,6 +1429,7 @@ export class Parser extends scanner.Scanner {
     // Expression = UnaryExpr | Expression binary_op Expression
     const p = this
     let x = p.unaryExpr(ctx)
+
     while (
       (token.operator_beg < p.tok && p.tok < token.operator_end) &&
       p.prec > pr)
@@ -1385,6 +1440,7 @@ export class Parser extends scanner.Scanner {
       p.next()
       x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx))
     }
+
     return x
   }
 
@@ -1401,6 +1457,10 @@ export class Parser extends scanner.Scanner {
       case token.XOR: {
         // e.g. "-x", "!y"
         p.next()
+        if (token.literal_beg < p.tok && p.tok < token.literal_end) {
+          // common case of negated literal, e.g. "-3", "+0.0"
+          return p.basicLit(ctx, t)
+        }
         return new Operation(pos, p.scope, t, p.unaryExpr(ctx))
       }
 
@@ -1447,8 +1507,13 @@ export class Parser extends scanner.Scanner {
         x = p.call(x, ctx)
         break  // may be more calls, e.g. foo()()()
 
-      case token.ASSIGN:
-        return p.assignment([x])
+      case token.LBRACKET:
+        x = p.bracketExpr(x, ctx)
+        break
+
+      case token.DOT:
+        x = p.selectorExpr(x, ctx)
+        break
 
       default:
         break loop
@@ -1499,10 +1564,10 @@ export class Parser extends scanner.Scanner {
     switch (p.tok) {
       case token.NAME:
       case token.NAMEAT:
-        return p.dotident(p.resolve(p.ident()))
+        return p.dotident(ctx, p.resolve(p.ident()))
 
       case token.LPAREN:
-        return p.parenOrTupleExpr(keepParens, ctx)
+        return p.parenExpr(keepParens, ctx)
 
       case token.FUN:
         return p.funExpr(ctx)
@@ -1516,7 +1581,6 @@ export class Parser extends scanner.Scanner {
       case token.RETURN:
         return p.returnExpr(ctx)
 
-
       case token.IF:
         return p.ifExpr(ctx)
 
@@ -1528,10 +1592,7 @@ export class Parser extends scanner.Scanner {
 
       default: {
         if (token.literal_beg < p.tok && p.tok < token.literal_end) {
-          const x = new BasicLit(p.pos, p.scope, p.tok, p.takeByteValue())
-          x.type = p.universe.basicLitType(x, p.ctxType(ctx), p.basicLitErrH)
-          p.next() // consume literal
-          return x
+          return p.basicLit(ctx)
         }
 
         const x = p.bad()
@@ -1540,6 +1601,17 @@ export class Parser extends scanner.Scanner {
         return x
       }
     }
+  }
+
+
+  basicLit(ctx :exprCtx, op? :token) :BasicLit {
+    const p = this
+    assert(token.literal_beg < p.tok && p.tok < token.literal_end)
+    const x = new BasicLit(p.pos, p.scope, p.tok, p.takeByteValue(), op)
+    const reqt = p.ctxType(ctx)
+    x.type = p.universe.basicLitType(x, reqt, p.basicLitErrH, op)
+    p.next() // consume literal
+    return x
   }
 
 
@@ -1558,9 +1630,192 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  parenOrTupleExpr(keepParens :bool, ctx :exprCtx) :Expr {
+  selectorExpr(operand :Expr, ctx :exprCtx) :SelectorExpr|IndexExpr {
+    // SelectorExpr = Expr "." ( Ident | IntLit )
+    const p = this
+    p.want(token.DOT)
+    const pos = p.pos  // pos is after "."
+
+    let rhs :Expr
+    if (p.tok as token == token.NAME) {
+      // e.g. "a.b"
+      rhs = p.dotident(ctx, p.ident())
+    } else if (
+      (p.tok as token) > token.literal_int_beg &&
+      (p.tok as token) < token.literal_int_end
+    ) {
+      // e.g. "a.3"
+      return p.types.resolveIndex(
+        new IndexExpr(pos, p.scope, operand, p.basicLit(ctx))
+      )
+    } else {
+      p.syntaxError('expecting name or integer after "."')
+      rhs = p.bad(pos)
+    }
+
+    return new SelectorExpr(pos, p.scope, operand, rhs)
+  }
+
+
+  dotident(ctx :exprCtx, ident :Ident) :Ident|SelectorExpr|IndexExpr {
+    // dotident = Ident | SelectorExpr
+    const p = this
+    return p.tok == token.DOT ? p.selectorExpr(ident, ctx) : ident
+  }
+
+
+  bracketExpr(operand :Expr, ctx :exprCtx) :IndexExpr|SliceExpr {
+    // bracketExpr = IndexExpr | SliceExpr
+    // IndexExpr   = Expr "[" Expr "]"
+    // SliceExpr   = Expr "[" Expr? ":" Expr? "]"
+    const p = this
+    const pos = p.pos
+    p.want(token.LBRACKET)
+
+    let x1 :Expr|null = null
+    if (p.tok != token.COLON) {
+      x1 = p.expr(ctx)
+    }
+
+    if (p.got(token.COLON)) {
+      // slice with implicit start, e.g. "operand[:end]"
+      let end :Expr|null = null
+      if (!p.got(token.RBRACKET)) {
+        end = p.expr(ctx)
+        p.want(token.RBRACKET)
+      } // else: slice with implicit end, e.g. "operand[:]"
+      return new SliceExpr(pos, p.scope, operand, x1, end)
+    }
+
+    // index
+    p.want(token.RBRACKET)
+
+    return p.types.resolveIndex(
+      new IndexExpr(pos, p.scope, operand, x1 as Expr)
+    )
+  }
+
+
+  // // resolveIndex attempts to resolve the 
+  // // returns ix as a convenience
+  // //
+  // resolveIndex(ix :IndexExpr) :IndexExpr {
+  //   const p = this
+
+  //   // for type inference of the IndexExpr to work, we need to inspect the type
+  //   // of the operand
+  //   let opt = p.types.resolve(ix.operand)
+  //   if (opt instanceof UnresolvedType) {
+  //     // defer to bind stage
+  //     debuglog(`[index type] deferred to bind stage`)
+  //   } else if (opt instanceof TupleType) {
+  //     p.resolveTupleIndex(ix, opt)
+  //   } else {
+  //     debuglog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
+  //   }
+  //   return ix
+  // }
+
+
+  // resolveTupleIndex(ix :IndexExpr, opt :TupleType) {
+  //   const p = this
+
+  //   let it = p.types.resolve(ix.index)
+  //   if (it instanceof UnresolvedType) {
+  //     debuglog(`[index type] deferred to bind stage`)
+  //     ix.type = p.types.markUnresolved(ix)
+  //     return
+  //   }
+
+  //   // index must be constant for tuple access
+  //   let index = p.resolveLitConstant(ix.index)
+  //   if (!index) {
+  //     // TODO: somehow track this and complete the check during bind
+  //     p.syntaxError('non-constant tuple index', ix.index.pos)
+  //     return
+  //   }
+
+  //   // check type to make sure index is an integer
+  //   if (
+  //     index.type && !(index.type instanceof IntType) ||
+  //     !(index instanceof BasicLit) ||
+  //     !index.isInt()
+  //   ) {
+  //     p.syntaxError(`invalid index type ${index.type || index}`, ix.index.pos)
+  //     return
+  //   }
+
+  //   // parse the integer; returns -1 on failure
+  //   ix.indexv = index.parseUInt()
+  //   if (ix.indexv == -1) {
+  //     p.syntaxError(`invalid index ${index}`, ix.index.pos)
+  //     return
+  //   }
+
+  //   if (ix.indexv >= opt.types.length) {
+  //     p.syntaxError(`out-of-bounds tuple index ${index} on type ${opt}`, ix.pos)
+  //     return
+  //   }
+
+  //   // success -- type of IndexExpr found
+  //   ix.type = opt.types[ix.indexv]
+  // }
+
+
+  // // resolveLitConstant attempts to resolve the constant value of x, expected
+  // // to be a LiteralExpr. If x or anything x might refer to is not constant,
+  // // null is returned.
+  // //
+  // resolveLitConstant(x :Expr) :LiteralExpr|null {
+  //   const p = this
+
+  //   if (x instanceof LiteralExpr) {
+  //     return x
+  //   }
+
+  //   if (x instanceof Ident) {
+  //     if (x.ent && x.ent.writes == 0 && x.ent.value) {
+  //       // Note: we check `x.ent.writes == 0` to make sure that x is a constant
+  //       // i.e. that there are no potential conditional branches that might
+  //       // change the value of x.
+  //       return p.resolveLitConstant(x.ent.value)
+  //     }
+  //   } else if (x instanceof IndexExpr) {
+  //     let opt = p.types.resolve(x.operand)
+
+  //     if (opt instanceof TupleType) {
+  //       let tuple :TupleExpr
+  //       if (x.operand instanceof Ident) {
+  //         assert(x.operand.ent != null) // should have been resolved
+  //         const ent = x.operand.ent as Ent
+  //         assert(ent.value instanceof TupleExpr)
+  //         tuple = ent.value as TupleExpr
+  //       } else {
+  //         // TODO: handle selectors to fields
+  //         assert(x.operand instanceof TupleExpr)
+  //         tuple = x.operand as TupleExpr
+  //       }
+
+  //       if (x.indexv >= 0) {
+  //         assert(x.indexv < tuple.exprs.length) // bounds checked when resolved
+  //         return p.resolveLitConstant(tuple.exprs[x.indexv])
+  //       } else {
+  //         debuglog(`x.indexv < 0 for IndexExpr ${x}`)
+  //       }
+  //     } else {
+  //       debuglog(`TODO ${x.constructor.name} operand ${opt}`)
+  //     }
+  //   } else {
+  //     debuglog(`TODO ${x.constructor.name}`)
+  //   }
+
+  //   return null
+  // }
+
+
+  parenExpr(keepParens :bool, ctx :exprCtx) :Expr {
+    // ParenExpr = "(" Expr ","? ")" | TupleExpr | Assignment
     // TupleExpr = "(" Expr ("," Expr)+ ","? ")"
-    // ParenExpr = "(" Expr ","? ")"
     const p = this
     const pos = p.pos
     p.want(token.LPAREN)
@@ -1568,6 +1823,12 @@ export class Parser extends scanner.Scanner {
     const l = []
     while (true) {
       l.push(p.expr(ctx))
+      if (p.tok == token.ASSIGN) {
+        // e.g. "(a, b = 1, 2)"
+        const x = p.assignment(l)
+        p.want(token.RPAREN)
+        return x
+      }
       if (!p.ocomma(token.RPAREN)) {
         break  // error: unexpected ;, expecting comma, or )
       }
@@ -1609,7 +1870,7 @@ export class Parser extends scanner.Scanner {
       // TODO: all other types
 
       case token.NAME:
-        x = p.dotident(p.resolve(p.ident()))
+        x = p.dotident(null, p.resolve(p.ident()))
         break
 
       case token.LPAREN:
@@ -1665,17 +1926,6 @@ export class Parser extends scanner.Scanner {
       l.push(p.ident())
     }
     return l
-  }
-
-  dotident(ident :Ident) :Expr {
-    const p = this
-    if (p.tok == token.DOT) {
-      const pos = p.pos
-      p.next()
-      const rhs = p.dotident(p.ident())
-      return new SelectorExpr(pos, p.scope, ident, rhs)
-    }
-    return ident
   }
 
   ident() :Ident {
@@ -1809,7 +2059,8 @@ export class Parser extends scanner.Scanner {
     }
   }
 
-  // syntax_error reports a syntax error at the current line.
+  // syntaxError reports a syntax error
+  //
   syntaxError(msg :string, pos :Pos = this.pos) {
     const p = this
     const position = p.sfile.position(pos)
@@ -1836,7 +2087,10 @@ export class Parser extends scanner.Scanner {
     }
 
     p.errorAt("unexpected " + tokstr(p.tok) + msg, position)
-    console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
+    if (DEBUG) {
+      // print token state when compiled in debug mode
+      console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
+    }
   }
 
   // diag reports a diagnostic message, or an error if k is ERROR

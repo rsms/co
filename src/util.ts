@@ -40,9 +40,8 @@ function bufcopy(bytes :ArrayLike<byte>, addlSize :int) {
 }
 
 
-// asciibuf creates a new buffer based on a string. It simply creates an array
-// of bytes where each byte corresponds to the character value of the input
-// string. Thus, the string must only contain characters in the range [0-127]
+// asciibuf creates a byte array from a string of ASCII characters.
+// The string must only contain character values in the range [0-127].
 //
 export function asciibuf(s :string) :Uint8Array {
   return Uint8Array.from(
@@ -51,10 +50,12 @@ export function asciibuf(s :string) :Uint8Array {
   )
 }
 
-// buf8str interprets a byte array as UTF-8 text
+
+// asciistr creates a string from bytes representing ASCII characters.
+// The byte array must only contain values in the range [0-127].
 //
-export function buf8str(b :Uint8Array) :string {
-  return utf8.decodeToString(b)
+export function asciistr(b :ArrayLike<byte>) :string {
+  return String.fromCharCode.apply(null, b)
 }
 
 
