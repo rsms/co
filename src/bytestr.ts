@@ -1,4 +1,4 @@
-import { bufcmp } from './util'
+import { bufcmp, asciibuf } from './util'
 import * as utf8 from './utf8'
 //
 // Interned byte strings
@@ -63,4 +63,10 @@ export function hashBytes(buf :ArrayLike<byte>, offs :int, length :int) {
     h = (h ^ buf[i++]) * 0x1000193
   }
   return h >>> 0
+}
+
+
+export function asciiByteStr(s :string) :ByteStr {
+  let b = asciibuf(s)
+  return new ByteStr(hashBytes(b, 0, b.length), b)
 }

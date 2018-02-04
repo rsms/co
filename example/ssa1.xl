@@ -1,0 +1,39 @@
+// fun isqrt(x int) -> return x
+
+fun dist(x int, y int) int {
+  // a = x + y
+  // b = 1 + a * (a / (5 - 8))
+  // a += 5
+  // b++
+  // a - b // warn: unused operation
+  // return a + b
+  // // a
+
+  // x, y = y, x
+
+  // a = x + y
+  // a, x, y = x, y, a
+
+  // b = x || y || 3
+  // b = x && y
+  // b
+
+  if x > 0 || x < 0 {
+    x = x * 2
+  }
+  // if y > 0 {
+  //   y = y - 3
+  // }
+  y
+
+  // x = x * x
+  // y = y * y
+  // if x > 0 || x < 0 {
+  //   x = x * 2
+  // }
+  // else {
+  //   x = x / 2
+  // }
+  // x * y
+  // isqrt(x + y)
+}

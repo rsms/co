@@ -10,6 +10,7 @@ import {
   Expr,
   Ident,
   BasicLit,
+  // ParenExpr,
   RestExpr,
   FunExpr,
   LiteralExpr,
@@ -23,7 +24,7 @@ import {
   ReturnExpr,
   IfExpr,
   IndexExpr,
-  SliceExpr,
+  // SliceExpr,
   
   Type,
   UnresolvedType,
@@ -37,6 +38,7 @@ import {
   UnionType,
 
   u_t_nil, // u_t_void,
+  u_t_bool,
   u_t_str,
   u_t_optstr,
 } from './ast'
@@ -156,6 +158,10 @@ export class TypeResolver extends ErrorReporter {
       return null
     }
 
+    // if (n instanceof ParenExpr) {
+    //   return r.resolve(n.x)
+    // }
+
     if (n instanceof Block) {
       // type of block is the type of the last statement, or in the case
       // of return, the type of the returned value.
@@ -216,6 +222,11 @@ export class TypeResolver extends ErrorReporter {
         return xt
       } else {
         const yt = r.resolve(n.y)
+
+        if (n.op > token.cmpop_beg && n.op < token.cmpop_end) {
+          // comparison operations always yield boolean values
+          return u_t_bool
+        }
 
         if (xt instanceof UnresolvedType || yt instanceof UnresolvedType) {
           // operation's effective type not yet know
@@ -763,7 +774,7 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
   // interpret x
   const xs = x.isSignedInt()
   let xv = xs ? x.parseSInt() : x.parseUInt()
-  const xneg = x.op == token.SUB
+  // const xneg = x.op == token.SUB
   if ((!xs && xv < 0) || isNaN(xv)) {
     return null
   }
@@ -777,7 +788,7 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
     // interpret y
     const ys = y.isSignedInt()
     let yv = ys ? y.parseSInt() : y.parseUInt()
-    const yneg = y.op == token.SUB
+    // const yneg = y.op == token.SUB
     if ((!ys && yv < 0) || isNaN(yv)) {
       return null
     }

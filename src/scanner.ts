@@ -565,8 +565,8 @@ export class Scanner extends ErrorReporter {
           s.tok = token.AND_ASSIGN
           s.prec = prec.LOWEST
         } else if (s.gotchar(ch)) { // &&
-          s.tok = token.LAND
-          s.prec = prec.AND
+          s.tok = token.ANDAND
+          s.prec = prec.ANDAND
         } else {
           s.tok = token.AND
           s.prec = prec.MUL
@@ -579,8 +579,8 @@ export class Scanner extends ErrorReporter {
           s.tok = token.OR_ASSIGN
           s.prec = prec.LOWEST
         } else if (s.gotchar(ch)) { // ||
-          s.tok = token.LOR
-          s.prec = prec.OR
+          s.tok = token.OROR
+          s.prec = prec.OROR
         } else {
           s.tok = token.OR
           s.prec = prec.ADD

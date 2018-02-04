@@ -1,5 +1,5 @@
 import { ByteStr, ByteStrSet } from './bytestr'
-import { asciibuf, bufcmp, debuglog } from './util'
+import { asciibuf, bufcmp } from './util'
 import { token, tokstr } from './token'
 import { Pos } from './pos'
 import { TypeSet } from './typeset'
@@ -11,7 +11,6 @@ import {
   Type,
   BasicType,
   IntType,
-  u_t_auto,
   u_t_nil,
   u_t_bool,
   u_t_uint,
@@ -27,7 +26,6 @@ import {
   u_t_f32,
   u_t_f64,
   u_t_str,
-  u_t_optstr,
 } from './ast'
 
 export const universeTypes = new Map<string,Type>()
@@ -840,18 +838,18 @@ function intBits(x :BasicLit, neg :bool) :int {
 }
 
 
-function smallestIntType(bits :int, neg :bool) :IntType {
-  return (
-    bits <= 7 ? u_t_i8 :
-    bits <= 8 && !neg ? u_t_u8 :
-    bits <= 15 ? u_t_i16 :
-    bits <= 16 && !neg ? u_t_u16 :
-    bits <= 31 ? u_t_i32 :
-    bits <= 32 && !neg ? u_t_u32 :
-    bits > 63 && !neg ? u_t_u64 :
-    u_t_i64
-  )
-}
+// function smallestIntType(bits :int, neg :bool) :IntType {
+//   return (
+//     bits <= 7 ? u_t_i8 :
+//     bits <= 8 && !neg ? u_t_u8 :
+//     bits <= 15 ? u_t_i16 :
+//     bits <= 16 && !neg ? u_t_u16 :
+//     bits <= 31 ? u_t_i32 :
+//     bits <= 32 && !neg ? u_t_u32 :
+//     bits > 63 && !neg ? u_t_u64 :
+//     u_t_i64
+//   )
+// }
 
 
 function intLitTypeFitter(

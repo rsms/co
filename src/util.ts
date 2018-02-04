@@ -1,5 +1,3 @@
-import * as utf8 from './utf8'
-
 // export function SplitFileExt(path :string) :[string, string] {
 //   let p = path.lastIndexOf('/')
 //   p = path.lastIndexOf('.', p == -1 ? 0 : p)

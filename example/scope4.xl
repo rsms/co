@@ -2,65 +2,49 @@
 //  scope1 is package
 //  scope2 is file (imports)
 
-// a i64 = 0  // define const scope1/a  -- only consts at file/package level
-// bob f32
+a i64 = 0  // define const scope1/a  -- only consts at file/package level
+bob f32
 
-// fun init {
-//   a = 1
-// }
-
-// fun foo() f32 -> 1.23
-
-// fun f0(x int) {  // scope3; define c|v scope1/x
-//   print(a)
-//   print(c)
-//   a = 2  // define var scope3/a
-
-//   b = 3  // define var scope3/b
-//   b = 4  // store scope3/b -- marks first decl of a as var
-
-//   {
-//     b = 5 // store scope3/b
-//     c = a // define var scope4/c
-//     d = 7 // define var scope4/d
-//   }
-
-//   {
-//     c = 9    // define var scope4'/c -- reuse var scope4/c
-//     d = true // define var scope4'/d
-//       // d needs a separate function var since type != scope4/d
-//   }
-
-//   d = c
-
-//   foores = foo()
-// }
-
-// fun ok4() (int, f64) {
-//   return 3, 4.5
-// }
-
-// fun print(_ int) {} // define fun scope1/print
-
-// // maybe defined in a different file
-// c i64 = 0xDEADBEEF // define const scope1/c
-
-
-// fun isqrt(_ int)int
-
-fun dist(x int, y int) int {
-  // a, b = x, y
-  t = (x, y)
-  if (a, b = x, y)[0] > 0 { b }
-  // x = x * x
-  // y = y * y
-  // if x > 0 {
-  //   x = x * 2
-  // } else {
-  //   x = x / 2
-  // }
-  // return isqrt(x + y)
+fun init {
+  a = 1
 }
+
+fun foo() f32 -> 1.23
+
+fun f0(x int) {  // scope3; define c|v scope1/x
+  print(a)
+  print(c)
+  a = 2  // define var scope3/a
+
+  b = 3  // define var scope3/b
+  b = 4  // store scope3/b -- marks first decl of a as var
+
+  {
+    b = 5 // store scope3/b
+    c = a // define var scope4/c
+    d = 7 // define var scope4/d
+  }
+
+  {
+    c = 9    // define var scope4'/c -- reuse var scope4/c
+    d = true // define var scope4'/d
+      // d needs a separate function var since type != scope4/d
+  }
+
+  d = c
+
+  foores = foo()
+}
+
+fun ok4() (int, f64) {
+  return 3, 4.5
+}
+
+fun print(_ int) {} // define fun scope1/print
+
+// maybe defined in a different file
+c i64 = 0xDEADBEEF // define const scope1/c
+
 
 
 // semantics:

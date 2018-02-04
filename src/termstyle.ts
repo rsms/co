@@ -123,7 +123,7 @@ export const style :Style = (
     'underline'     : sfn('4', '24'),
     'inverse'       : sfn('7', '27'),
 
-    'white'         : sfn('38;5;255', '39'),
+    'white'         : sfn('38;2;255;255;255', '39'),
     'grey'          : sfn('38;5;244', '39'),
     'black'         : sfn('38;5;16',  '39'),
     'blue'          : sfn('38;5;75',  '39'), // '38;2;120;160;255'
@@ -161,7 +161,7 @@ export const style :Style = (
 
 // streamStyle returns the most appropriate Style object for `w`
 export function streamStyle(w :has_isTTY) {
-  return termColorSupport && w.isTTY && style || noStyle
+  return termColorSupport && w.isTTY ? style : noStyle
 }
 
 export const stdoutStyle = (

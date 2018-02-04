@@ -2,8 +2,8 @@
 import { SrcFileSet, Pos } from './pos'
 import { ErrorCode, ErrorHandler, ErrorReporter } from './error'
 import * as utf8 from './utf8'
-import { debuglog } from './util'
 import { TypeResolver } from './resolve'
+// import { debuglog } from './util'
 import {
   File,
   Package,
@@ -167,20 +167,19 @@ class pkgBinder extends ErrorReporter {
     const b = this
 
     for (let ut of b.types.unresolved) {
+      // console.log('types.unresolved.size = ', b.types.unresolved.size)
       const t = ut.expr.type
 
       if (!(t instanceof UnresolvedType)) {
         // was probably resolved during step 2
         continue
       }
-
-      // debuglog(`${ut.expr} at ${b.fset.position(ut.expr.pos)}`)
   
       // attempt to resolve the type now that we can see the entire package
       ut.expr.type = null // clear so resolve can progress
-      const restyp = b.types.resolve(ut.expr)
+      const restyp = b.types.maybeResolve(ut.expr)
 
-      if (restyp instanceof UnresolvedType) {
+      if (!restyp) {
         ut.expr.type = t // restore original which might have refs
         b.error(`cannot resolve type of ${ut.expr}`, ut.expr.pos)
         continue

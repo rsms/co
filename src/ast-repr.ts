@@ -30,7 +30,7 @@ import {
   Assignment,
   Operation,
   CallExpr,
-  ParenExpr,
+  // ParenExpr,
   TupleExpr,
   BadExpr,
   SelectorExpr,
@@ -41,11 +41,11 @@ import {
   Type,
   UnresolvedType,
   BasicType,
-  StrType,
+  // StrType,
   RestType,
   TupleType,
   FunType,
-  UnionType,
+  // UnionType,
 } from './ast'
 
 
@@ -364,9 +364,9 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return s + '))'
   }
 
-  if (n instanceof ParenExpr) {
-    return s + ' ' + repr1(n.x, newline, c) + ')'
-  }
+  // if (n instanceof ParenExpr) {
+  //   return s + ' ' + repr1(n.x, newline, c) + ')'
+  // }
 
   if (n instanceof TypeConvExpr) {
     return s + ' ' + repr1(n.expr, newline, c) + ')'

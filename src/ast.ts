@@ -14,10 +14,10 @@ import { strtou } from './strtou'
 //    Stmt
 //      NoOpStmt
 //      Decl
+//        MultiDecl
 //        ImportDecl
 //        VarDecl
 //        TypeDecl
-//        MultiDecl
 //      Expr
 //        Block
 //        Ident
@@ -86,7 +86,7 @@ export class Field extends Node {
 //
 //    fun a() { ... };  a¹()
 //    ~~~~~~~~~~~~~~~   ↑
-//           ↑       reads.add(x²)
+//           ↑       reads.add(a¹)
 //      decl==value
 //
 //
@@ -100,6 +100,7 @@ export class Ent {
     public decl  :Node,
     public value :Expr|null,
     public data  :any = null,
+    public type  :Type|null = null, // TODO: use this
   ) {}
 
   getTypeExpr() :Expr | null {
@@ -349,24 +350,9 @@ export class IfExpr extends Expr {
   }
 }
 
-export class Assignment extends Expr {
-  constructor(pos :Pos, scope :Scope,
-  public op  :token, // ILLEGAL means no operation
-  public lhs :Expr[],
-    // Rhs == ImplicitOne means Lhs++ (Op == Add) or Lhs-- (Op == Sub)
-  public rhs :Expr[],
-  ) {
-    super(pos, scope)
-  }
-
-  toString() :string {
-    return `${this.lhs.join(', ')} ${tokstr(this.op)} ${this.rhs.join(', ')}`
-  }
-}
-
 export class ReturnExpr extends Expr {
   constructor(pos :Pos, scope :Scope,
-  public result :Expr|null, // null means no explicit return values
+  public result :Expr, // u_t_nil means no explicit return values
   ) {
     super(pos, scope)
   }
@@ -524,6 +510,13 @@ export class BasicLit extends LiteralExpr {
   }
 }
 
+// export const ImplicitOne = new BasicLit(
+//   0,
+//   nilScope,
+//   token.INT,
+//   null as any as Uint8Array,
+// )
+
 export class StringLit extends LiteralExpr {
   constructor(pos :Pos, scope :Scope,
     public value :Uint8Array
@@ -533,6 +526,20 @@ export class StringLit extends LiteralExpr {
 
   toString() :string {
     return JSON.stringify(utf8.decodeToString(this.value))
+  }
+}
+
+export class Assignment extends Expr {
+  constructor(pos :Pos, scope :Scope,
+  public op  :token, // ILLEGAL means no operation
+  public lhs :Expr[],
+  public rhs :Expr[], // empty == lhs++ or lhs--
+  ) {
+    super(pos, scope)
+  }
+
+  toString() :string {
+    return `${this.lhs.join(', ')} ${tokstr(this.op)} ${this.rhs.join(', ')}`
   }
 }
 
@@ -557,17 +564,17 @@ export class CallExpr extends Expr {
   }
 }
 
-export class ParenExpr extends Expr {
-  // (X)
-  constructor(pos :Pos, scope :Scope,
-  public x :Expr,
-  ) {
-    super(pos, scope)
-  }
-}
+// export class ParenExpr extends Expr {
+//   // (X)
+//   constructor(pos :Pos, scope :Scope,
+//   public x :Expr,
+//   ) {
+//     super(pos, scope)
+//   }
+// }
 
 export class FunExpr extends Expr {
-  body    :Expr|null = null // nil = forward declaration
+  body :Expr|null = null // nil = forward declaration
   // nlocali32 :int = 0
   // nlocali64 :int = 0
   // nlocalf32 :int = 0
@@ -585,8 +592,8 @@ export class FunExpr extends Expr {
 
 export class FunSig extends Node {
   constructor(pos :Pos, scope :Scope,
-  public params  :Field[],
-  public result  :Expr,
+  public params :Field[],
+  public result :Expr,
   ) {
     super(pos, scope)
   }
@@ -701,22 +708,18 @@ export const
   u_t_auto = new BasicType(0, 'auto')
 , u_t_nil  = new BasicType(0, 'nil')
 , u_t_bool = new BasicType(1, 'bool')
-
-, u_t_uint = new IntType(uintz,   'uint', false)
-, u_t_int  = new IntType(uintz-1, 'int', true)
-
-, u_t_i8  = new IntType(7,  'i8', true)
-, u_t_i16 = new IntType(15, 'i16', true)
-, u_t_i32 = new IntType(31, 'i32', true)
-, u_t_i64 = new IntType(63, 'i64', true)
-
 , u_t_u8  = new IntType(8,  'u8', false)
+, u_t_i8  = new IntType(7,  'i8', true)
 , u_t_u16 = new IntType(16, 'u16', false)
+, u_t_i16 = new IntType(15, 'i16', true)
 , u_t_u32 = new IntType(32, 'u32', false)
+, u_t_i32 = new IntType(31, 'i32', true)
 , u_t_u64 = new IntType(64, 'u64', false)
-
+, u_t_i64 = new IntType(63, 'i64', true)
 , u_t_f32 = new BasicType(32, 'f32')
 , u_t_f64 = new BasicType(64, 'f64')
+, u_t_uint = new IntType(uintz,   'uint', false)
+, u_t_int  = new IntType(uintz-1, 'int', true)
 
 
 export class StrType extends Type {
@@ -924,9 +927,16 @@ export class File {
     public sfile      :SrcFile,
     public scope      :Scope,
     public imports    :ImportDecl[] | null,  // imports in this file
-    public decls      :Decl[],               // top-level declarations
+    public decls      :(Decl|FunExpr)[],     // top-level declarations
     public unresolved :Set<Ident> | null,    // unresolved references
   ) {}
+
+  toString() :string {
+    return (
+      `File("${this.sfile.name}"; ${this.decls.length} decls` +
+      ( this.imports ? `; ${this.imports.length} imports)` : '' )
+    )
+  }
 }
 
 export class Package {

@@ -1,4 +1,4 @@
-import { SrcFile, Position, Pos } from './pos'
+import { SrcFile, Pos } from './pos'
 import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
@@ -6,7 +6,7 @@ import { TypeResolver } from './resolve'
 import { ByteStr, ByteStrSet } from './bytestr'
 import { Universe } from './universe'
 import { debuglog } from './util'
-import { strtou } from './strtou'
+import { DiagHandler, DiagKind } from './diag'
 import {
   File,
   Scope,
@@ -27,7 +27,7 @@ import {
 
   Expr,
   Ident,
-  LiteralExpr,
+  // LiteralExpr,
   RestExpr,
   FunExpr,
   FunSig,
@@ -39,7 +39,7 @@ import {
   Assignment,
   Operation,
   CallExpr,
-  ParenExpr,
+  // ParenExpr,
   TupleExpr,
   BadExpr,
   SelectorExpr,
@@ -52,26 +52,13 @@ import {
   StrType,
   UnresolvedType,
   UnionType,
-  TupleType,
+  // TupleType,
 
   u_t_nil,
   u_t_auto,
-  u_t_uint,
+  u_t_f32,
+  u_t_f64,
 } from './ast'
-
-// type of diagnostic
-export enum DiagKind {
-  INFO,
-  WARN,
-  ERROR, // Note: for config only; never reported to a DiagHandler
-}
-
-// A DiagHandler may be provided to Parser.init. If a diagnostic message is
-// produces and a handler was installed, the handler is called with a
-// position, kind of diagnostic and a message.
-// The position points to the beginning of the related source code.
-//
-export type DiagHandler = (p :Position, msg :string, k :DiagKind) => void
 
 const kEmptyByteArray = new Uint8Array(0)
 const kBytes__ = new Uint8Array([0x5f]) // '_'
@@ -124,14 +111,14 @@ export class Parser extends scanner.Scanner {
   _id_init   :ByteStr
 
   initParser(
-    sfile    :SrcFile,
-    sdata    :Uint8Array,
-    universe :Universe,
-    pkgscope :Scope|null,
-    typeres  :TypeResolver,
-    errh     :ErrorHandler|null = null,
-    diagh    :DiagHandler|null = null,
-    smode    :scanner.Mode = scanner.Mode.None
+    sfile      :SrcFile,
+    sdata      :Uint8Array,
+    universe   :Universe,
+    pkgscope   :Scope|null,
+    typeres    :TypeResolver,
+    errh       :ErrorHandler|null = null,
+    diagh      :DiagHandler|null = null,
+    smode      :scanner.Mode = scanner.Mode.None,
   ) {
     const p = this
     super.init(sfile, sdata, errh, smode)
@@ -234,13 +221,13 @@ export class Parser extends scanner.Scanner {
     if (s.decls) for (let [name, ent] of s.decls) {
       if (ent.nreads == 0) {
         if (ent.decl instanceof Field) {
-          p.diag(DiagKind.WARN, `${name} not used`, ent.decl.pos, (
+          p.diag("warn", `${name} not used`, ent.decl.pos, (
             ent.decl.scope.isFunScope ? 'E_UNUSED_PARAM' :
             'E_UNUSED_FIELD'
           ))
         } else {
           p.diag(
-            DiagKind.WARN,
+            "warn",
             `${name} declared and not used`,
             ent.decl.pos,
             'E_UNUSED_VAR'
@@ -260,10 +247,14 @@ export class Parser extends scanner.Scanner {
       return
     }
 
+    assert(ident.ent == null)
+
     const ent = new Ent(ident.value, decl, x)
     if (!scope.declareEnt(ent)) {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
+
+    ident.ent = ent
     // TODO: in the else branch, we could count locals/registers needed here.
     // For instance, "currFun().local_i32s_needed++"
   }
@@ -660,6 +651,21 @@ export class Parser extends scanner.Scanner {
       // definitions.
       p.popScope()
 
+      // handle implicit return
+      if (f.body instanceof Block) {
+        let lastindex = f.body.list.length - 1
+        let result = f.body.list[lastindex]
+        if (result instanceof Expr && !(result instanceof ReturnExpr)) {
+          let ret = new ReturnExpr(
+            result.pos,
+            result.scope,
+            result,
+          )
+          ret.type = p.types.resolve(result)
+          f.body.list[lastindex] = ret
+        }
+      }
+
       if (sig.result === u_t_auto) {
         // inferred result type
         if (fi.autort == null) {
@@ -904,11 +910,28 @@ export class Parser extends scanner.Scanner {
     if (p.tok == token.LBRACE) {
       // Block
       return p.block()
+      // let b = p.block()
+      // if (b.list.length > 0) {
+      //   let laststmt = b.list[b.list.length-1]
+      //   if (laststmt instanceof ReturnExpr) {
+      //     // unwrap "return" when it is the last statement in a function, since
+      //     // last statement is implicit.
+      //     b.list[b.list.length-1] = laststmt.result
+      //   }
+      // }
+      // return b
     }
 
     if (p.got(token.ARROWR)) {
       // "->" Expr
       return p.expr(/*ctx=*/null)
+      // let x = p.expr(/*ctx=*/null)
+      // if (x instanceof ReturnExpr) {
+      //   // unwrap "return" when it is the last statement in a function, since
+      //   // last statement is implicit.
+      //   return x.result
+      // }
+      // return x
     }
 
     // error
@@ -1097,6 +1120,8 @@ export class Parser extends scanner.Scanner {
 
     p.processAssign(s.lhs, s.rhs, s, /*reqt=*/reqt, /*onlyDef=*/false)
 
+    p.types.resolve(s)
+
     return s
   }
 
@@ -1143,14 +1168,16 @@ export class Parser extends scanner.Scanner {
 
     // single expression
 
-    p.types.resolve(lhs[0])
+    let t = p.types.resolve(lhs[0])
 
     if (token.assignop_beg < p.tok && p.tok < token.assignop_end) {
       // lhs op= rhs;  e.g. "x += 2"
       const op = p.tok
       p.next() // consume operator
+      p.checkBasicTypeMutation(lhs[0], t)
       const s = new Assignment(pos, p.scope, op, lhs, [])
       s.rhs = p.exprList(/*ctx=*/s)
+      p.types.resolve(s)
       return s
     }
 
@@ -1158,15 +1185,10 @@ export class Parser extends scanner.Scanner {
       // lhs++ or lhs--
       const op = p.tok
       p.next() // consume operator
-      // check operand type
-      const operand = lhs[0]
-      if (operand instanceof Ident &&
-          operand.ent &&
-          !(operand.ent.decl instanceof VarDecl)
-      ) {
-        p.syntaxError(`cannot mutate ${operand}`, operand.pos)
-      }
-      return new Assignment(pos, p.scope, op, lhs, emptyExprList)
+      p.checkBasicTypeMutation(lhs[0], t)
+      let s = new Assignment(pos, p.scope, op, lhs, emptyExprList)
+      p.types.resolve(s)
+      return s
     }
 
     if (p.tok == token.ARROWL) {
@@ -1181,6 +1203,17 @@ export class Parser extends scanner.Scanner {
 
     // else: expr
     return lhs[0]
+  }
+
+
+  checkBasicTypeMutation(x :Expr, t :Type) {
+    if (!(t instanceof IntType) &&
+      t !== u_t_f32 && t !== u_t_f64 &&
+      !(t instanceof UnresolvedType)
+    ) {
+      // debuglog(`operand type: ${x.constructor.name}`, x)
+      this.syntaxError(`cannot mutate ${x}`, x.pos)
+    }
   }
 
 
@@ -1309,11 +1342,11 @@ export class Parser extends scanner.Scanner {
     // optional semicolon after "then" expr.
     // allows us to peek ahead and see if an "else" follows,
     // allowing "else" to follow on the next line.
-    let consumedSemiAt = -1
-    if (!(then instanceof Block) && p.tok == token.SEMICOLON) {
-      consumedSemiAt = p.offset
-      p.next()
-    }
+    // let consumedSemiAt = -1
+    // if (!(then instanceof Block) && p.tok == token.SEMICOLON) {
+    //   consumedSemiAt = p.offset
+    //   p.next()
+    // }
 
     const s = new IfExpr(pos, scope, cond, then, null)
 
@@ -1325,11 +1358,15 @@ export class Parser extends scanner.Scanner {
         s.els_ = p.expr(ctx)
         p.popScope()
       }
-    } else if (consumedSemiAt != -1) {
-      // revert semicolon (we just wanted to peek ahead for "else")
-      p.setOffset(consumedSemiAt - 1)
-      p.next()
     }
+    // else if (consumedSemiAt != -1) {
+    //   debuglog(`revert SEMI`)
+    //   // revert semicolon (we just wanted to peek ahead for "else")
+    //   p.setOffset(consumedSemiAt)
+    //   p.tok = token.SEMICOLON
+    //   // p.next()
+    //   // assert(p.tok == token.SEMICOLON, `"${tokstr(p.tok)}" is not SEMICOLON`)
+    // }
 
     if (!hasIfScope) {
       p.popScope()
@@ -1344,7 +1381,7 @@ export class Parser extends scanner.Scanner {
 
     p.want(token.RETURN)
 
-    const n = new ReturnExpr(pos, p.scope, null)
+    const n = new ReturnExpr(pos, p.scope, u_t_nil)
 
     // expected return type (may be u_t_auto; u_t_nil/u_t_void for init)
     const fi = p.currFun()
@@ -1467,18 +1504,19 @@ export class Parser extends scanner.Scanner {
       case token.AND: {
         p.next()
         // unaryExpr may have returned a parenthesized composite literal
-        // (see comment in operand) - remove parentheses if any
-        return new Operation(pos, p.scope, t, unparen(p.unaryExpr(ctx)))
+        // (see comment in operand)
+        return new Operation(pos, p.scope, t, p.unaryExpr(ctx))
+        // legacy: unparen(p.unaryExpr(ctx)) to unwrap ParenExpr.
       }
 
       // TODO: case token.ARROWL; `<-x`, `<-chan E`
     }
 
-    return p.primExpr(/*keepParens*/true, ctx)
+    return p.primExpr(ctx)
   }
 
 
-  primExpr(keepParens :bool, ctx :exprCtx) :Expr {
+  primExpr(ctx :exprCtx) :Expr {
     // PrimaryExpr =
     //   Operand |
     //   Conversion |
@@ -1498,7 +1536,7 @@ export class Parser extends scanner.Scanner {
     //   [ (  ExpressionList | Type [ "," ExpressionList ] ) [ "..." ] [ "," ]]
     //   ")" .
     const p = this
-    let x = p.operand(keepParens, ctx)
+    let x = p.operand(ctx)
 
     loop:
     while (true) switch (p.tok) {
@@ -1554,7 +1592,7 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  operand(keepParens :bool, ctx :exprCtx) :Expr {
+  operand(ctx :exprCtx) :Expr {
     // Operand   = Literal | OperandName | MethodExpr | "(" Expression ")" .
     // Literal   = BasicLit | CompositeLit | FunctionLit .
     // BasicLit  = int_lit | float_lit | imaginary_lit | rune_lit | string_lit
@@ -1567,7 +1605,7 @@ export class Parser extends scanner.Scanner {
         return p.dotident(ctx, p.resolve(p.ident()))
 
       case token.LPAREN:
-        return p.parenExpr(keepParens, ctx)
+        return p.parenExpr(ctx)
 
       case token.FUN:
         return p.funExpr(ctx)
@@ -1813,7 +1851,7 @@ export class Parser extends scanner.Scanner {
   // }
 
 
-  parenExpr(keepParens :bool, ctx :exprCtx) :Expr {
+  parenExpr(ctx :exprCtx) :Expr {
     // ParenExpr = "(" Expr ","? ")" | TupleExpr | Assignment
     // TupleExpr = "(" Expr ("," Expr)+ ","? ")"
     const p = this
@@ -1839,10 +1877,11 @@ export class Parser extends scanner.Scanner {
     p.want(token.RPAREN)
 
     return (
-      l.length == 1 ? (
-        keepParens ? new ParenExpr(pos, p.scope, l[0]) :
-        l[0]
-      ) :
+      // l.length == 1 ? (
+      //   p.keepParens ? new ParenExpr(pos, p.scope, l[0]) :
+      //   l[0]
+      // ) :
+      l.length == 1 ? l[0] :
       new TupleExpr(pos, p.scope, l)
     )
   }
@@ -2101,7 +2140,7 @@ export class Parser extends scanner.Scanner {
     //   // level overridden?
     //   k = p.diagConfig[code] || k
     // }
-    if (k == DiagKind.ERROR) {
+    if (k == "error") {
       p.error(msg, pos, code)
     } else if (p.diagh) {
       p.diagh(p.sfile.position(pos), msg, k)
@@ -2111,12 +2150,12 @@ export class Parser extends scanner.Scanner {
 }
 
 // unparen removes all parentheses around an expression.
-function unparen(x :Expr) :Expr {
-  while (x instanceof ParenExpr) {
-    x = x.x
-  }
-  return x
-}
+// function unparen(x :Expr) :Expr {
+//   while (x instanceof ParenExpr) {
+//     x = x.x
+//   }
+//   return x
+// }
 
 function isEmptyFunExpr(d :Decl) :bool {
   return d instanceof FunExpr && !d.body

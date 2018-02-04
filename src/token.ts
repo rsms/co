@@ -22,8 +22,8 @@ export function tokstr(t :token) :string {
 // Operator precedences
 export enum prec {
   LOWEST, // = := ! <- ->
-  OR,     // ||
-  AND,    // &&
+  OROR,     // ||
+  ANDAND,    // &&
   CMP,    // == != < <= > >=
   ADD,    // + - | ^
   MUL,    // * / % & &^ << >>
@@ -95,11 +95,12 @@ export enum token {
   ARROWL,         // <-
   ARROWR,         // ->
 
+  cmpop_beg,
   // prec.OR
-  LOR, // ||
+  OROR, // ||
   
   // prec.AND
-  LAND, // &&
+  ANDAND, // &&
 
   // prec.CMP
   EQL, // ==
@@ -108,7 +109,8 @@ export enum token {
   LEQ, // <=
   GTR, // >
   GEQ, // >=
-  
+  cmpop_end,
+
   // prec.ADD
   ADD, // +
   SUB, // -
@@ -156,7 +158,11 @@ export enum token {
   SYMBOL,
   TYPE,
   // VAR,
-  keyword_end
+  keyword_end,
+
+  // IR only
+  IFZ,  // if-not
+  GOTO,
 } // enum T
 
 
@@ -196,8 +202,8 @@ const tokenStrings = new Map<token, string>([
   [token.SHR_ASSIGN,     ">>="],
   [token.AND_NOT_ASSIGN, "&^="],
 
-  [token.LAND,   "&&"],
-  [token.LOR,    "||"],
+  [token.ANDAND, "&&"],
+  [token.OROR,   "||"],
   [token.ARROWL, "<-"],
   [token.ARROWR, "->"],
   [token.INC,    "++"],
@@ -227,6 +233,9 @@ const tokenStrings = new Map<token, string>([
   [token.RBRACE,    "}"],
   [token.SEMICOLON, ";"],
   [token.COLON,     ":"],
+
+  [token.IFZ,       "ifz"],
+  [token.GOTO,      "goto"],
 ]) // tokenStrings
 
 for (let i = token.keyword_beg+1; i < token.keyword_end; ++i) {

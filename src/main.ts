@@ -1,4 +1,4 @@
-import { Parser, DiagKind } from './parser'
+import { Parser } from './parser'
 import { bindpkg } from './bind'
 import * as scanner from './scanner'
 import { Position, SrcFileSet } from './pos'
@@ -9,12 +9,22 @@ import { Package, Scope, Ent } from './ast'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
+import { IRBuilder } from './ir'
 
 import * as fs from 'fs'
 
 
 const reprOptions = {colors:stdoutSupportsStyle}
 
+
+function errh(p :Position, msg :string, typ :string) {
+  console.error(stdoutStyle.red(`${p}: ${msg} (${typ})`))
+}
+
+function diagh(p :Position, msg :string, typ :string) {
+  const m = `[diag] ${p}: ${typ}: ${msg}`
+  console.log(typ == "info" ? stdoutStyle.cyan(m) : stdoutStyle.lightyellow(m))
+}
 
 interface ParseResults {
   pkg     :Package
@@ -30,26 +40,15 @@ function parsePkg(
 ) :Promise<ParseResults> {
 
   const pkg = new Package(name, new Scope(universe.scope))
-  const sfileSet = new SrcFileSet()
+  const fset = new SrcFileSet()
 
-  const errh = (p :Position, msg :string, typ :string) => {
-    console.error(stdoutStyle.red(`${p}: ${msg} (${typ})`))
-  }
-
-  const diagh = (p :Position, msg :string, k :DiagKind) => {
-    const m = `[diag] ${p}: ${msg} (${DiagKind[k]})`
-    console.log(k == DiagKind.INFO ? stdoutStyle.cyan(m) : stdoutStyle.lightyellow(m))
-  }
-
-  typeres.init(sfileSet, universe, errh)
+  typeres.init(fset, universe, errh)
 
   for (let filename of sources) {
-    console.log(
-      '\n--------------------------------------------------------\n' + 
-      `parse ${filename}`
-    )
+    banner(`parse ${filename}`)
+
     const sdata = fs.readFileSync(filename, {flag:'r'}) as Uint8Array
-    const sfile = sfileSet.addFile(filename, sdata.length)
+    const sfile = fset.addFile(filename, sdata.length)
 
     parser.initParser(
       sfile,
@@ -90,15 +89,12 @@ function parsePkg(
   }
 
   // bind and assemble package
-  console.log(
-    '\n--------------------------------------------------------\n' + 
-    `bind & assemble ${pkg}`
-  )
+  banner(`bind & assemble ${pkg}`)
   function importer(_imports :Map<string,Ent>, _path :string) :Promise<Ent> {
     return Promise.reject(new Error(`not found`))
   }
 
-  return bindpkg(pkg, sfileSet, importer, typeres, errh)
+  return bindpkg(pkg, fset, importer, typeres, errh)
     .then(hasErrors => ( { pkg, success: !hasErrors } ))
 }
 
@@ -110,25 +106,57 @@ function main() {
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  const sources = ['example/slice-and-index.xl']
+  const sources = ['example/ssa1.xl']
 
   parsePkg("example", sources, universe, parser, typeres).then(r => {
     if (!r.success) {
       return
     }
 
-    // print AST
+    const irb = new IRBuilder()
+    irb.init(diagh)
+
+    // print AST & build IR
     for (const file of r.pkg.files) {
-      console.log('\n========================================================')
-      console.log(
-        `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
-      console.log('--------------------------------------------------------')
+      banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
+
       for (let decl of file.decls) {
         console.log(astRepr(decl, reprOptions))
       }
+
+      // build SSA IR
+      banner(`ssa-ir ${file.sfile.name}`)
+      let sfile = file.sfile
+      for (let d of file.decls) {
+        irb.addTopLevel(sfile, d)
+      }
     }
 
+  }).catch(err => {
+    console.error(err.stack || ''+err)
+    process.exit(1)
   })
+}
+
+
+// banner prints a large message, using terminal styling when available.
+//
+function banner(message :string) {
+  if (stdoutSupportsStyle) {
+    // '\x1b[47;30m'    black on white
+    // '\x1b[40;37;1m'  bold white on black
+    // '\x1b[44;37;1m'  bold white on blue
+    const s = (s :string) => '\x1b[40m' + stdoutStyle.white(s) + '\x1b[0m'
+    process.stdout.write(
+      s('\n\n  ' + message + '\n') + '\n\n'
+    )
+  } else {
+    console.log(
+      '\n========================================================\n' +
+      message +
+      '\n--------------------------------------------------------'
+    )
+  }
 }
 
 
