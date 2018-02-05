@@ -433,6 +433,7 @@ export class RestExpr extends Expr {
 export class LiteralExpr extends Expr {}
 
 export class BasicLit extends LiteralExpr {
+  type :BasicType
   constructor(pos :Pos, scope :Scope,
     public kind  :token, // kind
     public value :Uint8Array,
@@ -454,6 +455,10 @@ export class BasicLit extends LiteralExpr {
       token.literal_int_beg < this.kind &&
       this.kind < token.literal_int_end
     )
+  }
+
+  isFloat() :bool {
+    return this.kind == token.FLOAT
   }
 
   // isSignedInt returns true if the literal int is signed.
@@ -507,6 +512,17 @@ export class BasicLit extends LiteralExpr {
     }
 
     return strtou(this.value, base, offs)
+  }
+
+  parseFloat() :number {
+    assert(this.isFloat(), "called parseFloat on non-float")
+    let str = String.fromCharCode.apply(null, this.value)
+    let c = parseFloat(str)
+    assert(!isNaN(c), `failed to parse "${str}"`)
+    if (!isNaN(c) && this.op == token.SUB) {
+      c = -c
+    }
+    return c
   }
 }
 
@@ -672,9 +688,18 @@ export class UnresolvedType extends Type {
   }
 }
 
+// register storage type needed for a basic type
+export enum RegType {
+  i32,
+  i64,
+  f32,
+  f64
+}
+
 export class BasicType extends Type {
   constructor(
     public bitsize :int,
+    public regtype :RegType,
     public name    :string, // only used for debugging and printing
   ) {
     super(0, nilScope)
@@ -693,33 +718,33 @@ export class BasicType extends Type {
 
 
 export class IntType extends BasicType {
-  constructor(bitsize :int, name :string,
+  constructor(bitsize :int, regtype :RegType, name :string,
     public signed :bool, // true if type is signed
   ) {
-    super(bitsize, name)
+    super(bitsize, regtype, name)
   }
 }
 
 // basic type constants
 const uintz :number = 32 // TODO: target-dependant
+const uintregtype = uintz <= 32 ? RegType.i32 : RegType.i64
 
 export const
-  // u_t_void = new BasicType(0, 'void')
-  u_t_auto = new BasicType(0, 'auto')
-, u_t_nil  = new BasicType(0, 'nil')
-, u_t_bool = new BasicType(1, 'bool')
-, u_t_u8  = new IntType(8,  'u8', false)
-, u_t_i8  = new IntType(7,  'i8', true)
-, u_t_u16 = new IntType(16, 'u16', false)
-, u_t_i16 = new IntType(15, 'i16', true)
-, u_t_u32 = new IntType(32, 'u32', false)
-, u_t_i32 = new IntType(31, 'i32', true)
-, u_t_u64 = new IntType(64, 'u64', false)
-, u_t_i64 = new IntType(63, 'i64', true)
-, u_t_f32 = new BasicType(32, 'f32')
-, u_t_f64 = new BasicType(64, 'f64')
-, u_t_uint = new IntType(uintz,   'uint', false)
-, u_t_int  = new IntType(uintz-1, 'int', true)
+  u_t_auto = new BasicType(0, RegType.i32, 'auto')  // special
+, u_t_nil  = new BasicType(0, RegType.i32, 'nil')   // special; aka "void"
+, u_t_bool = new BasicType(1, RegType.i32, 'bool')
+, u_t_u8  = new IntType(8,  RegType.i32, 'u8', false)
+, u_t_i8  = new IntType(7,  RegType.i32, 'i8', true)
+, u_t_u16 = new IntType(16, RegType.i32, 'u16', false)
+, u_t_i16 = new IntType(15, RegType.i32, 'i16', true)
+, u_t_u32 = new IntType(32, RegType.i32, 'u32', false)
+, u_t_i32 = new IntType(31, RegType.i32, 'i32', true)
+, u_t_u64 = new IntType(64, RegType.i64, 'u64', false)
+, u_t_i64 = new IntType(63, RegType.i64, 'i64', true)
+, u_t_f32 = new BasicType(32, RegType.f32, 'f32')
+, u_t_f64 = new BasicType(64, RegType.f64, 'f64')
+, u_t_uint = new IntType(uintz,  uintregtype, 'uint', false)
+, u_t_int  = new IntType(uintz-1,uintregtype, 'int', true)
 
 
 export class StrType extends Type {

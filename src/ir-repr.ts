@@ -1,4 +1,4 @@
-import { Fun, Block, BlockKind, Id, Tac, Value } from './ir'
+import { Fun, Block, BlockKind, Value, Op } from './ir'
 import { tokstr } from './token'
 import { Style, stdoutStyle, style, noStyle } from './termstyle'
 import { asciistr } from './util'
@@ -20,59 +20,28 @@ class IRFmt {
   }
 }
 
-function fmttype(f :IRFmt, t :ast.Type) :string {
-  return f.types ? f.style.grey('<'+t+'>') : ''
-}
-
 function fmtval(f :IRFmt, v :Value) :string {
-  let name = v.toString()
-  if (v instanceof Id) {
-    return (
-      ( name[0] == '%' ? f.style.italic('t'+name.substr(1)) :
-        f.style.white(name)
-      ) +
-      fmttype(f, v.type)
-    )
-  } else {
-    // const
-    return f.style.pink(asciistr(v.value)) + fmttype(f, v.type)
+  let s = `v${v.id} = `
+  s += Op[v.op]
+  if (f.types) {
+    s += ' ' + f.style.grey(`<${v.type}>`)
   }
+  if (v.args) for (let arg of v.args) {
+    s += ' ' + arg
+  }
+  if (v.aux !== null) {
+    s += ' [' + v.aux + ']'
+  }
+  return s
 }
 
 
-function printtac(f :IRFmt, c :Tac, indent :string) {
-  if (c.dst) {
-    if (c.dst instanceof Block) {
-      // branch, e.g. "if x goto dst; else goto y"
-      f.println(
-        indent +
-        tokstr(c.op) + fmtval(f, c.x) + fmtval(f, c.dst) +
-        (c.y ? ' ' + fmtval(f, c.y) : '')
-      )
-    } else {
-      // assignment, e.g. "x = y", "x = y + 3"
-      f.println(
-        indent +
-        fmtval(f, c.dst) + ' = ' + fmtval(f, c.x) +
-        ( c.y ? ' ' + tokstr(c.op) + ' ' + fmtval(f, c.y) : '')
-      )
-    }
-  } else {
-    assert(c.op, "no op or dest")
-    f.println(
-      indent +
-      tokstr(c.op) + fmtval(f, c.x) + (c.y ? ' ' + fmtval(f, c.y) : '')
-    )
-  }
+function printval(f :IRFmt, v :Value, indent :string) {
+  f.println(indent + fmtval(f, v))
 }
 
 
-function printblock(
-  f :IRFmt,
-  b :Block,
-  indent :string,
-) :Block|null
-{
+function printblock(f :IRFmt, b :Block, indent :string) {
   let label = b.toString()
   let preds = ''
   if (b.preds && b.preds.length) {
@@ -81,8 +50,9 @@ function printblock(
   }
   f.println(indent + f.style.lightyellow(label + ':') + preds)
 
-  for (let c of b.code) {
-    printtac(f, c, /*indent=*/indent + '  ')
+  let valindent = indent + '  '
+  for (let v of b.values) {
+    printval(f, v, valindent)
   }
 
   switch (b.kind) {
@@ -99,7 +69,7 @@ function printblock(
         f.style.cyan('cont') + f.rarr +
         f.style.lightyellow(contb.toString())
       )
-      return contb
+      break
     }
 
     case BlockKind.If: {
@@ -114,11 +84,11 @@ function printblock(
       f.println(
         indent +
         f.style.cyan('if') +
-        ' ' + fmtval(f, b.control as Value) + f.rarr +
+        ` ${b.control}${f.rarr}` +
         f.style.lightyellow(thenb.toString()) + ' ' +
         f.style.lightyellow(elseb.toString())
       )
-      return elseb
+      break
     }
 
     case BlockKind.Ret: {
@@ -127,24 +97,21 @@ function printblock(
       assert(b.control, "missing control (return) value")
       f.println(
         indent +
-        f.style.cyan('ret ') + fmtval(f, b.control as Value)
+        f.style.cyan('ret ') + b.control
       )
-      return null
+      break
     }
 
     default:
       assert(false, `unexpected block kind ${BlockKind[b.kind]}`)
   }
-
-  return null
 }
 
 
 function printfun(f :IRFmt, fn :Fun) {
   f.println(
     f.style.white(fn.toString()) +
-    '(' + fn.params.map(p => p.toString()).join(', ') + ')' +
-    fmttype(f, fn.restype)
+    ' (' + fn.type.inputs.join(' ') + ')->' + fn.type.result
   )
   let first = true
   for (let b of fn.blocks) {
@@ -159,16 +126,16 @@ function printfun(f :IRFmt, fn :Fun) {
 
 
 export interface Options {
-  types?  :bool  // include type annotations
+  noTypes?  :bool  // include type annotations
   colors? :bool
     // true: always generate ANSI-styled output
     // false: never generate ANSI-styled output
     // undefined: generate ANSI-styled output if stdout is a TTY
 }
 
-export function irrepr(v :Fun|Block|Tac, w? :LineWriter, o? :Options) {
+export function irrepr(v :Fun|Block|Value, w? :LineWriter, o? :Options) {
   let f = new IRFmt(
-    /*types*/ !!(o && !!o.types),
+    /*types*/ !(o && o.noTypes),
     /*style*/ (
       o && o.colors ? style :
       o && o.colors === false ? noStyle :
@@ -178,11 +145,11 @@ export function irrepr(v :Fun|Block|Tac, w? :LineWriter, o? :Options) {
   )
   if (v instanceof Fun) {        printfun(f, v) }
   else if (v instanceof Block) { printblock(f, v, /*indent=*/'') }
-  else if (v instanceof Tac) {   printtac(f, v, /*indent=*/'') }
+  else if (v instanceof Value) { printval(f, v, /*indent=*/'') }
   else { assert(false, `unexpected value ${v}`) }
 }
 
-export function irreprstr(v :Fun|Block|Tac, options? :Options) :string {
+export function irreprstr(v :Fun|Block|Value, options? :Options) :string {
   let str = ''
   let w = (s :string) => { str += s }
   irrepr(v, w, options)

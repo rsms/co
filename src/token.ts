@@ -124,7 +124,7 @@ export enum token {
   AND,     // &
   AND_NOT, // &^
   SHL,     // <<
-  SHR,     // >>
+  SHR,     // >>  (arithmetic when signed, logical when unsigned)
 
   operator_end,
 
@@ -161,8 +161,9 @@ export enum token {
   keyword_end,
 
   // IR only
-  IFZ,  // if-not
-  GOTO,
+  LOAD,
+  STORE,
+  COPY,
 } // enum T
 
 
@@ -234,8 +235,9 @@ const tokenStrings = new Map<token, string>([
   [token.SEMICOLON, ";"],
   [token.COLON,     ":"],
 
-  [token.IFZ,       "ifz"],
-  [token.GOTO,      "goto"],
+  [token.LOAD,      "load"],
+  [token.STORE,     "store"],
+  [token.COPY,      "copy"],
 ]) // tokenStrings
 
 for (let i = token.keyword_beg+1; i < token.keyword_end; ++i) {

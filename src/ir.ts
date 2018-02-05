@@ -4,54 +4,367 @@ import { Pos, SrcFile } from './pos'
 import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
+import { Type, FunType, BasicType, IntType, RegType } from './ast'
 import { irrepr } from './ir-repr'
 
 
 const byteStr__ = asciiByteStr("_")
 const byteStr_anonfun = asciiByteStr('anonfun')
 
+// operators
+export enum Op {
+  // special
+  None = 0, // nothing (invalid)
+  FwdRef,   // forward reference (SSA)
+  Param,    // function parameter
+  Copy,
+  Phi,
 
-export class Id {
-  constructor(
-  public type :ast.Type,
-  public name :ByteStr,
-  ){}
+  // constants
+  i32Const, // load an integer as i32
+  i64Const, // load an integer as i64
+  f32Const, // load a number as f32
+  f64Const, // load a number as f64
 
-  toString() :string {
-    return this.name.toString()
+  // memory load
+  i32Load,     // load 4 bytes as i32
+  i32load8_s,  // load 1 byte and sign-extend i8 to i32
+  i32load8_u,  // load 1 byte and zero-extend i8 to i32
+  i32load16_s, // load 2 bytes and sign-extend i16 to i32
+  i32load16_u, // load 2 bytes and zero-extend i16 to i32
+  i64Load,     // load 8 bytes as i64
+  i64load8_s,  // load 1 byte and sign-extend i8 to i64
+  i64load8_u,  // load 1 byte and zero-extend i8 to i64
+  i64load16_s, // load 2 bytes and sign-extend i16 to i64
+  i64load16_u, // load 2 bytes and zero-extend i16 to i64
+  i64load32_s, // load 4 bytes and sign-extend i32 to i64
+  i64load32_u, // load 4 bytes and zero-extend i32 to i64
+  f32Load,     // load 4 bytes as f32
+  f64Load,     // load 8 bytes as f64
+
+  // memory store
+  i32Store,    // store 4 bytes (no conversion)
+  i32Store8,   // wrap i32 to i8 and store 1 byte
+  i32Store16,  // wrap i32 to i16 and store 2 bytes
+  i64Store,    // store 8 bytes (no conversion)
+  i64Store8,   // wrap i64 to i8 and store 1 byte
+  i64Store16,  // wrap i64 to i16 and store 2 bytes
+  i64Store32,  // wrap i64 to i32 and store 4 bytes
+  f32Store,    // store 4 bytes (no conversion)
+  f64Store,    // store 8 bytes (no conversion)
+
+  // integer operators
+  i32Add,    // +  sign-agnostic addition
+  i32Sub,    // -  sign-agnostic subtraction
+  i32Mul,    // *  sign-agnostic multiplication (lower 32-bits)
+  i32Div_s,  // /  signed division (result is truncated toward zero)
+  i32Div_u,  // /  unsigned division (result is floored)
+  i32Rem_s,  // %  signed remainder (result has the sign of the dividend)
+  i32Rem_u,  // %  unsigned remainder
+  i32Neg,   // -N negation
+  i32And,    // &  sign-agnostic bitwise and
+  i32Or,     // |  sign-agnostic bitwise inclusive or
+  i32Xor,    // ^  sign-agnostic bitwise exclusive or
+  i32Shl,    // << sign-agnostic shift left
+  i32Shr_u,  // >>> zero-replicating (logical) shift right
+  i32Shr_s,  // >> sign-replicating (arithmetic) shift right
+  i32Rotl,   //    sign-agnostic rotate left
+  i32Rotr,   //    sign-agnostic rotate right
+  i32Eq,     // == sign-agnostic compare equal
+  i32Ne,     // != sign-agnostic compare unequal
+  i32Lt_s,   // <  signed less than
+  i32Lt_u,   // <  unsigned less than
+  i32Le_s,   // <= signed less than or equal
+  i32Le_u,   // <= unsigned less than or equal
+  i32Gt_s,   // >  signed greater than
+  i32Gt_u,   // >  unsigned greater than
+  i32Ge_s,   // >= signed greater than or equal
+  i32Ge_u,   // >= unsigned greater than or equal
+  i32Clz,    //    sign-agnostic count leading zero bits
+             //    (All zero bits are considered leading if the value is zero)
+  i32Ctz,    //    sign-agnostic count trailing zero bits
+             //    (All zero bits are considered trailing if the value is zero)
+  i32Popcnt, //    sign-agnostic count number of one bits
+  i32Eqz,    // == compare equal to zero
+
+  i64Add, i64Sub, i64Mul, i64Div_s, i64Div_u, i64Rem_s, i64Rem_u, i64And,
+  i64Neg, i64Or, i64Xor, i64Shl, i64Shr_u, i64Shr_s, i64Rotl, i64Rotr, i64Eq,
+  i64Ne, i64Lt_s, i64Lt_u, i64Le_s, i64Le_u, i64Gt_s, i64Gt_u, i64Ge_s,
+  i64Ge_u, i64Clz, i64Ctz, i64Popcnt, i64Eqz,
+
+  // floating-point operators
+  f32Add,   // +  addition
+  f32Sub,   // -  subtraction
+  f32Mul,   // *  multiplication
+  f32Div,   // /  division
+  f32Abs,   //    absolute value
+  f32Neg,   // -N negation
+  f32Cps,   //    copysign
+  f32Ceil,  //    ceiling operator
+  f32Floor, //    floor operator
+  f32Trunc, //    round to nearest integer towards zero
+  f32Near,  //    round to nearest integer, ties to even
+  f32Eq,    // == compare ordered and equal
+  f32Ne,    // != compare unordered or unequal
+  f32Lt,    // <  compare ordered and less than
+  f32Le,    // <= compare ordered and less than or equal
+  f32Gt,    // >  compare ordered and greater than
+  f32Ge,    // >= compare ordered and greater than or equal
+  f32Sqrt,  //    square root
+  f32Min,   //    minimum (binary operator); if either operand is NaN, ret NaN
+  f32Max,   //    maximum (binary operator); if either operand is NaN, ret NaN
+
+  f64Add, f64Sub, f64Mul, f64Div, f64Abs, f64Neg, f64Cps, f64Ceil, f64Floor,
+  f64Trunc, f64Near, f64Eq, f64Ne, f64Lt, f64Le, f64Gt, f64Ge, f64Sqrt, f64Min,
+  f64Max,
+
+  // conversion
+  i32Wrap_i64,      // wrap a 64-bit int to a 32-bit int
+  i32Trunc_s_f32,   // truncate a 32-bit float to a signed 32-bit int
+  i32Trunc_s_f64,   // truncate a 64-bit float to a signed 32-bit int
+  i32Trunc_u_f32,   // truncate a 32-bit float to an unsigned 32-bit int
+  i32Trunc_u_f64,   // truncate a 64-bit float to an unsigned 32-bit int
+  i32Rein_f32,      // reinterpret the bits of a 32-bit float as a 32-bit int
+  i64Extend_s_i32,  // extend a signed 32-bit int to a 64-bit int
+  i64Extend_u_i32,  // extend an unsigned 32-bit int to a 64-bit int
+  i64Trunc_s_f32,   // truncate a 32-bit float to a signed 64-bit int
+  i64Trunc_s_f64,   // truncate a 64-bit float to a signed 64-bit int
+  i64Trunc_u_f32,   // truncate a 32-bit float to an unsigned 64-bit int
+  i64Trunc_u_f64,   // truncate a 64-bit float to an unsigned 64-bit int
+  i64Rein_f64,      // reinterpret the bits of a 64-bit float as a 64-bit int
+  f32Demote_f64,    // demote a 64-bit float to a 32-bit float
+  f32Convert_s_i32, // convert a signed 32-bit int to a 32-bit float
+  f32Convert_s_i64, // convert a signed 64-bit int to a 32-bit float
+  f32Convert_u_i32, // convert an unsigned 32-bit int to a 32-bit float
+  f32Convert_u_i64, // convert an unsigned 64-bit int to a 32-bit float
+  f32Rein_i32,      // reinterpret the bits of a 32-bit int as a 32-bit float
+  f64Promote_f32,   // promote a 32-bit float to a 64-bit float
+  f64Convert_s_i32, // convert a signed 32-bit int to a 64-bit float
+  f64Convert_s_i64, // convert a signed 64-bit int to a 64-bit float
+  f64Convert_u_i32, // convert an unsigned 32-bit int to a 64-bit float
+  f64Convert_u_i64, // convert an unsigned 64-bit int to a 64-bit float
+  f64Rein_i64,      // reinterpret the bits of a 64-bit int as a 64-bit float
+
+  // misc
+  Trap,             // aka "unreachable". Trap/crash
+}
+
+// getop returns the IR operator for the corresponding token operator and type
+//
+function getop(tok :token, t :BasicType) :Op {
+  switch (tok) {
+  case token.EQL: switch (t.regtype) { // ==
+    case RegType.i32: return Op.i32Eq
+    case RegType.i64: return Op.i64Eq
+    case RegType.f32: return Op.f32Eq
+    case RegType.f64: return Op.f64Eq
+  }; break
+  case token.NEQ: switch (t.regtype) { // !=
+    case RegType.i32: return Op.i32Ne
+    case RegType.i64: return Op.i64Ne
+    case RegType.f32: return Op.f32Ne
+    case RegType.f64: return Op.f64Ne
+  }; break
+  case token.LSS: switch (t.regtype) { // <
+    case RegType.i32: return (t as IntType).signed ? Op.i32Lt_s : Op.i32Lt_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Lt_s : Op.i64Lt_u
+    case RegType.f32: return Op.f32Lt
+    case RegType.f64: return Op.f64Lt
+  }; break
+  case token.LEQ: switch (t.regtype) { // <=
+    case RegType.i32: return (t as IntType).signed ? Op.i32Le_s : Op.i32Le_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Le_s : Op.i64Le_u
+    case RegType.f32: return Op.f32Le
+    case RegType.f64: return Op.f64Le
+  }; break
+  case token.GTR: switch (t.regtype) { // >
+    case RegType.i32: return (t as IntType).signed ? Op.i32Gt_s : Op.i32Gt_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Gt_s : Op.i64Gt_u
+    case RegType.f32: return Op.f32Gt
+    case RegType.f64: return Op.f64Gt
+  }; break
+  case token.GEQ: switch (t.regtype) { // >=
+    case RegType.i32: return (t as IntType).signed ? Op.i32Ge_s : Op.i32Ge_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Ge_s : Op.i64Ge_u
+    case RegType.f32: return Op.f32Ge
+    case RegType.f64: return Op.f64Ge
+  }; break
+  case token.ADD: switch (t.regtype) { // +
+    case RegType.i32: return Op.i32Add
+    case RegType.i64: return Op.i64Add
+    case RegType.f32: return Op.f32Add
+    case RegType.f64: return Op.f64Add
+  }; break
+  case token.SUB: switch (t.regtype) { // -
+    case RegType.i32: return Op.i32Sub
+    case RegType.i64: return Op.i64Sub
+    case RegType.f32: return Op.f32Sub
+    case RegType.f64: return Op.f64Sub
+  }; break
+  case token.MUL: switch (t.regtype) { // *
+    case RegType.i32: return Op.i32Mul
+    case RegType.i64: return Op.i64Mul
+    case RegType.f32: return Op.f32Mul
+    case RegType.f64: return Op.f64Mul
+  }; break
+  case token.QUO: switch (t.regtype) { // /
+    case RegType.i32: return (t as IntType).signed ? Op.i32Div_s : Op.i32Div_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Div_s : Op.i64Div_u
+    case RegType.f32: return Op.f32Div
+    case RegType.f64: return Op.f64Div
+  }; break
+  // The remaining operators are only available for integers
+  case token.REM: switch (t.regtype) { // %
+    case RegType.i32: return (t as IntType).signed ? Op.i32Rem_s : Op.i32Rem_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Rem_s : Op.i64Rem_u
+  }; break
+  case token.OR: switch (t.regtype) { // |
+    case RegType.i32: return Op.i32Or
+    case RegType.i64: return Op.i64Or
+  }; break
+  case token.XOR: switch (t.regtype) { // ^
+    case RegType.i32: return Op.i32Xor
+    case RegType.i64: return Op.i64Xor
+  }; break
+  case token.AND: switch (t.regtype) { // &
+    case RegType.i32: return Op.i32And
+    case RegType.i64: return Op.i64And
+  }; break
+  case token.SHL: switch (t.regtype) { // <<
+    case RegType.i32: return Op.i32Shl
+    case RegType.i64: return Op.i64Shl
+  }; break
+  case token.SHR: switch (t.regtype) { // >>
+    case RegType.i32: return (t as IntType).signed ? Op.i32Shr_s : Op.i32Shr_u
+    case RegType.i64: return (t as IntType).signed ? Op.i64Shr_s : Op.i64Shr_u
+  }; break
+  case token.AND_NOT: // &^  TODO implement (need to generalize/unroll)
+    assert(false, 'AND_NOT "&^" not yet supported')
+    return Op.None
+  default:
+    // unknown operator token
+    assert(false, `unexpected operator token ${token[tok]}`)
+    return Op.None
   }
+
+  // fallthrough from unhandled (but known) operator token
+  assert(false, `invalid operation for floating-point number`)
+  return Op.None
 }
 
 
-export class Const {
-  constructor(
-  public type  :ast.BasicType,
-  public value :Uint8Array,
-  ){}
+// storeop maps value type to store operator
+//
+function storeop(t :BasicType) :Op {
+  // select store operation
+  // i32Store,    // store 4 bytes (no conversion)
+  // i32Store8,   // wrap i32 to i8 and store 1 byte
+  // i32Store16,  // wrap i32 to i16 and store 2 bytes
+  // i64Store,    // store 8 bytes (no conversion)
+  // i64Store8,   // wrap i64 to i8 and store 1 byte
+  // i64Store16,  // wrap i64 to i16 and store 2 bytes
+  // i64Store32,  // wrap i64 to i32 and store 4 bytes
+  // f32Store,    // store 4 bytes (no conversion)
+  // f64Store,    // store 8 bytes (no conversion)
+  let bz :int
+  switch (t.regtype) {
+
+    case RegType.i32:
+      bz = (t as IntType).bitsize
+      if (bz <= 8) { return Op.i32Store8 }
+      if (bz <= 16) { return Op.i32Store16 }
+      assert(bz <= 32)
+      return Op.i32Store
+
+    case RegType.i64:
+      bz = (t as IntType).bitsize
+      if (bz <= 8) { return Op.i64Store8 }
+      if (bz <= 16) { return Op.i64Store16 }
+      if (bz <= 32) { return Op.i64Store32 }
+      assert(bz <= 64)
+      return Op.i64Store
+
+    case RegType.f32:
+      return Op.f32Store
+    
+    case RegType.f64:
+      return Op.f64Store
+  }
+  return Op.None
+}
+
+
+export type Aux = ByteStr | Uint8Array | number
+
+// Value is a three-address-code operation
+//
+export class Value {
+  id   :int   // unique identifier
+  op   :Op    // operation that computes this value
+  type :Type
+  b    :Block // containing block
+  aux  :Aux|null // auxiliary info for this value. Type depends on op and type.
+  args :Value[]|null = null // arguments of this value
+
+  // use count. Each appearance in args and Block.control counts once
+  uses :int = 0
+
+  users = new Set<Value>() // WIP
+
+  constructor(id :int, op :Op, type :Type, b :Block, aux :Aux|null) {
+    this.id = id
+    this.op = op
+    this.type = type
+    this.b = b
+    this.aux = aux
+  }
 
   toString() {
-    return asciistr(this.value)
+    return 'v' + this.id
   }
 }
 
+// Phi
+export class Phi extends Value {
+  // users = new Set<Value>()
 
-export type Value = Id | Const
-  // TODO: consider generating only Ids with intermediate load and stores
-  // of constants.
+  constructor(id :int, type :Type, b :Block) {
+    super(id, Op.Phi, type, b, null)
+  }
 
-// tac represents a three-address-code statement
-//
-// TODO: consider linking TACs as a linked-list instead of placing them
-// into an array of the block. May make optimizations easier.
-//
-export class Tac {
-  constructor(
-  public dst :Id|null, // positive branch when Block
-  public op  :token,    // i.e. + - * / % etc. ILLEGAL = not used
-  public x   :Value,
-  public y   :Value|null,
-  ){}
+  appendOperand(v :Value) {
+    dlog(`${v}`)
+    if (!this.args) {
+      this.args = [v]
+    } else {
+      this.args.push(v)
+    }
+    v.uses++ ; v.users.add(this)
+  }
+
+  // replaceBy replaces all uses of this Phi with v
+  //
+  replaceBy(v :Value) {
+    // FIXME link values using a doubly-linked list
+    // instead of an array owned by the block. Will
+    // make these operations a lot easier.
+
+    assert(this.users.size == 0, "TODO users")
+    // for (let user of this.users) {
+    // }
+
+    // this.op = Op.Copy
+    // this.args = [v]
+    // v.uses++
+
+    let i = this.b.values.indexOf(this)
+    assert(i != -1, "not in parent block but still references block")
+    this.b.values[i] = v
+    v.uses++
+    if (DEBUG) { ;(this as any).b = null }
+  }
 }
+
 
 // BlockKind denotes what specific kind a block is
 //
@@ -77,15 +390,55 @@ export class Block {
     // A value that determines how the block is exited. Its value depends
     // on the kind of the block. For instance, a BlockKind.If has a boolean
     // control value and BlockKind.Exit has a memory control value.
-  code     :Tac[] = []    // three-address code
 
-  constructor(kind :BlockKind, id :int) {
+  values   :Value[] = [] // three-address code
+  f        :Fun // containing function
+  sealed   :bool = false
+    // true if no further predecessors will be added
+
+  constructor(kind :BlockKind, id :int, f :Fun) {
     this.kind = kind
     this.id = id
+    this.f = f
   }
 
-  addTAC(dst :Id|null, op :token, x :Value, y :Value|null) {
-    this.code.push(new Tac(dst, op, x, y))
+  newPhi(t :Type) :Phi {
+    let v = this.f.newPhi(t, this)
+    this.values.push(v)
+    return v
+  }
+
+  // newValue0 return a value with no args
+  newValue0(op :Op, t :Type, aux :Aux|null = null) :Value {
+    let v = this.f.newValue(op, t, this, aux)
+    this.values.push(v)
+    return v
+  }
+
+  // newValue1 returns a new value in the block with one argument
+  newValue1(op :Op, t :Type, arg0 :Value, aux :Aux|null = null) :Value {
+    let v = this.f.newValue(op, t, this, aux)
+    v.args = [arg0]
+    arg0.uses++ ; arg0.users.add(v)
+    this.values.push(v)
+    return v
+  }
+
+  // newValue2 returns a new value in the block with two arguments and zero
+  // aux values.
+  newValue2(
+    op :Op,
+    t :Type,
+    arg0 :Value,
+    arg1 :Value,
+    aux :Aux|null = null,
+  ) :Value {
+    let v = this.f.newValue(op, t, this, aux)
+    v.args = [arg0, arg1]
+    arg0.uses++ ; arg0.users.add(v)
+    arg1.uses++ ; arg1.users.add(v)
+    this.values.push(v)
+    return v
   }
 
   toString() :string {
@@ -93,54 +446,80 @@ export class Block {
   }
 }
 
-// Edge represents a CFG edge.
-// Example edges for b branching to either c or d.
-// (c and d have other predecessors.)
-//   b.Succs = [{c,3}, {d,1}]
-//   c.Preds = [?, ?, ?, {b,0}]
-//   d.Preds = [?, {b,1}, ?]
-// These indexes allow us to edit the CFG in constant time.
-// In addition, it informs phi ops in degenerate cases like:
-// b:
-//    if k then c else c
-// c:
-//    v = Phi(x, y)
-// Then the indexes tell you whether x is chosen from
-// the if or else branch from b.
-//   b.Succs = [{c,0},{c,1}]
-//   c.Preds = [{b,0},{b,1}]
-// means x is chosen if k is true.
-// class Edge {
-//   constructor(
-//   // block edge goes to (in a Succs list) or from (in a Preds list)
-//   public b :Block,
-//   // index of reverse edge.  Invariant:
-//   //   e := x.Succs[idx]
-//   //   e.b.Preds[e.i] = Edge(x,idx)
-//   // and similarly for predecessors.
-//   public i :int,
-//   ){}
-// }
 
-// function
 export class Fun {
-  blocks  :Block[]  // blocks in generation order
-  params  :Id[]     // parameters
-  restype :ast.Type // result type
-  name    :ByteStr
-  // nextbid :int = 0  // block id counter
+  blocks :Block[]  // blocks in generation order
+  type   :FunType
+  name   :ByteStr
+  bid    :int = 0  // block ID allocator
+  vid    :int = 0  // value ID allocator
+  consts :Map<int,Value[]>|null = null
+    // constants cache, keyed by constant value; users must check value's
+    // Op and Type
 
-  constructor(params :Id[], restype :ast.Type, name :ByteStr) {
-    this.blocks = [new Block(BlockKind.Plain, 0)]
-    this.params = params
-    this.restype = restype
+  constructor(type :FunType, name :ByteStr) {
+    this.blocks = [new Block(BlockKind.Plain, 0, this)]
+    this.type = type
     this.name = name
   }
 
   newBlock(k :BlockKind) :Block {
-    let b = new Block(k, this.blocks.length)
+    assert(this.bid < 0xFFFFFFFF, "too many block IDs generated")
+    let b = new Block(k, ++this.bid, this)
     this.blocks.push(b)
     return b
+  }
+
+  newValue(op :Op, t :Type, b :Block, aux :Aux|null) :Value {
+    assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
+    // TODO we could use a free list and return values when they die
+    return new Value(++this.vid, op, t, b, aux)
+  }
+
+  newPhi(t :Type, b :Block) :Phi {
+    assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
+    return new Phi(++this.vid, t, b)
+  }
+
+  // constVal returns a constant value for c
+  // c must be smaller than Number.MAX_SAFE_INTEGER
+  // FIXME: work around the Number.MAX_SAFE_INTEGER limitation somehow
+  //
+  constVal(t :BasicType, c :int) :Value {
+    let f = this
+    let vv :Value[]|undefined
+
+    // Select operation based on type
+    let op :Op = Op.None
+    switch (t.regtype) {
+      case RegType.i32: op = Op.i32Const; break
+      case RegType.i64: op = Op.i64Const; break
+      case RegType.f32: op = Op.f32Const; break
+      case RegType.f64: op = Op.f64Const; break
+    }
+    assert(op != Op.None)
+
+    if (!f.consts) {
+      f.consts = new Map<int,Value[]>()
+    } else {
+      vv = f.consts.get(c)
+      if (vv) for (let v of vv) {
+        if (v.op == op && v.type.equals(t)) {
+          assert(v.aux === c, `cached const ${v} should have aux ${c}`)
+          return v
+        }
+      }
+    }
+    // create new const value
+    let v = f.blocks[0].newValue0(op, t, c)
+
+    // put into cache
+    if (!vv) {
+      f.consts.set(c, [v])
+    } else {
+      vv.push(v)
+    }
+    return v
   }
 
   toString() {
@@ -148,7 +527,7 @@ export class Fun {
   }
 }
 
-// package
+
 export class Pkg {
   nI32 :int = 0         // number of 32-bit integer globals
   nI64 :int = 0         // number of 64-bit integer globals
@@ -162,19 +541,20 @@ export class Pkg {
 
 const oneBuf = new Uint8Array([0x31])
 
-const constOne = new Map<ast.BasicType, Const>([
-  [ast.u_t_uint, new Const(ast.u_t_uint, oneBuf)],
-  [ast.u_t_int,  new Const(ast.u_t_int, oneBuf)],
-  [ast.u_t_i8,   new Const(ast.u_t_i8, oneBuf)],
-  [ast.u_t_i16,  new Const(ast.u_t_i16, oneBuf)],
-  [ast.u_t_i32,  new Const(ast.u_t_i32, oneBuf)],
-  [ast.u_t_i64,  new Const(ast.u_t_i64, oneBuf)],
-  [ast.u_t_u8,   new Const(ast.u_t_u8, oneBuf)],
-  [ast.u_t_u16,  new Const(ast.u_t_u16, oneBuf)],
-  [ast.u_t_u32,  new Const(ast.u_t_u32, oneBuf)],
-  [ast.u_t_u64,  new Const(ast.u_t_u64, oneBuf)],
-  [ast.u_t_f32,  new Const(ast.u_t_f32, oneBuf)],
-  [ast.u_t_f64,  new Const(ast.u_t_f64, oneBuf)],
+// TODO: remove this
+const constOne = new Map<BasicType, Uint8Array>([
+  [ast.u_t_uint, oneBuf],
+  [ast.u_t_int,  oneBuf],
+  [ast.u_t_i8,   oneBuf],
+  [ast.u_t_i16,  oneBuf],
+  [ast.u_t_i32,  oneBuf],
+  [ast.u_t_i64,  oneBuf],
+  [ast.u_t_u8,   oneBuf],
+  [ast.u_t_u16,  oneBuf],
+  [ast.u_t_u32,  oneBuf],
+  [ast.u_t_u64,  oneBuf],
+  [ast.u_t_f32,  oneBuf],
+  [ast.u_t_f64,  oneBuf],
 ])
 
 
@@ -184,12 +564,33 @@ export class IRBuilder {
   diagh :DiagHandler|null = null
   b     :Block       // current block
   f     :Fun         // current function
+  
+  vars :Map<ByteStr,Value>
+    // variable assignments in the current block (map from variable symbol
+    // to ssa value)
+  fwdVars :Map<ByteStr,Value>
+    // Op.FwdRef which records a value that's live on block input.
+    // Used for phi resolution.
+
+  defvars :(Map<ByteStr,Value>|null)[]
+    // all defined variables at the end of each block. Indexed by block id.
+    // null indicates there are no variables in that block.
+
+  pendphis :Map<Block,Map<ByteStr,Phi>>|null
+    // tracks pending, incomplete phis that are completed by sealBlock for
+    // blocks that are sealed after they have started. This happens when preds
+    // are not known at the time a block starts, but is known and registered
+    // before the block ends.
 
   init(diagh :DiagHandler|null = null) {
     const r = this
     r.pkg = new Pkg()
     r.sfile = null
     r.diagh = diagh
+    r.vars = new Map<ByteStr,Value>()
+    r.fwdVars = new Map<ByteStr,Value>()
+    r.defvars = []
+    r.pendphis = null
   }
 
   // startBlock sets the current block we're generating code in
@@ -198,23 +599,54 @@ export class IRBuilder {
     const r = this
     assert(r.b == null, "starting block without ending block")
     r.b = b
-    // r.vars = new Map<ast.Node,SSAValue>() // map[*Node]*ssa.Value{}
+    // Note vars and fwdVars are reset in endBlock
+  }
+
+  // startSealedBlock is a convenience for sealBlock followed by startBlock
+  //
+  startSealedBlock(b :Block) {
+    this.sealBlock(b)
+    this.startBlock(b)
+  }
+
+  // sealBlock sets b.sealed=true, indicating that no further predecessors
+  // will be added.
+  //
+  sealBlock(b :Block) {
+    const s = this
+    assert(!b.sealed, `block ${b} already sealed`)
+    dlog(`${b}`)
+    if (s.pendphis) {
+      let entries = s.pendphis.get(b)
+      if (entries) {
+        for (let [name, phi] of entries) {
+          s.addPhiOperands(name, phi)
+        }
+        s.pendphis.delete(b)
+      }
+    }
+    b.sealed = true
   }
 
   // endBlock marks the end of generating code for the current block.
   // Returns the (former) current block. Returns null if there is no current
   // block, i.e. if no code flows to the current execution point.
+  // The block sealed if not already sealed.
   //
   endBlock() :Block {
     const r = this
     let b = r.b
     assert(b != null, "no current block")
-    // for len(r.defvars) <= int(b.ID) {
-    //   r.defvars = append(r.defvars, nil)
-    // }
-    // r.defvars[b.ID] = r.vars
+    while (r.defvars.length <= b.id) {
+      r.defvars.push(null)
+    }
+    r.defvars[b.id] = r.vars
+    r.vars = new Map<ByteStr,Value>()
+    r.fwdVars.clear()
     ;(r as any).b = null
-    // r.vars = null
+    if (!b.sealed) {
+      r.sealBlock(b)
+    }
     return b
   }
 
@@ -245,16 +677,16 @@ export class IRBuilder {
         r.addTopLevel(sfile, d2)
       }
     } else if (d instanceof ast.VarDecl) {
-      r.addVarDecl(d)
+      r.global(d)
     } else if (d instanceof ast.FunExpr) {
       if (d.isInit) {
         // Sanity checks (parser has already checked these things)
         assert(d.sig.params.length == 0, 'init fun with parameters')
         assert(d.sig.result === ast.u_t_nil, 'init fun with result')
         assert(d.body, 'missing body')
-        r.addInitCode(d.body as ast.Expr)
+        r.initCode(d.body as ast.Expr)
       } else {
-        r.addFun(d)
+        r.fun(d)
       }
     } else if (d instanceof ast.ImportDecl) {
       dlog(`TODO ImportDecl`)
@@ -263,42 +695,42 @@ export class IRBuilder {
     }
   }
 
-  addVarDecl(v :ast.VarDecl) {
+  global(v :ast.VarDecl) {
     dlog(`TODO`)
   }
 
-  addInitCode(body :ast.Expr) {
+  initCode(body :ast.Expr) {
     // const r = this
     // const f = r.pkg.init || (r.pkg.init = new Fun([], ast.u_t_nil, 'init'))
     // r.block(f, null, body, 'init')
     // console.log(`\n-----------------------\n${f}`)
   }
 
-  addFun(x :ast.FunExpr) {
+  fun(x :ast.FunExpr) {
     const r = this
     assert(x.body, `unresolved function ${x}`)
     assert(x.type, "unresolved function type")
-    
-    // map parameters to Ids
-    let params :Id[] = x.sig.params.map(field => {
-      assert(field.type.type, "unresolved type")
-      return new Id(
-        field.type.type as ast.Type,
-        field.name ? field.name.value : byteStr__,
-      )
-    })
 
-    let funtype = x.type as ast.FunType
+    let funtype = x.type as FunType
+    let f = new Fun(funtype, x.name ? x.name.value : byteStr_anonfun)
+    let entryb = f.blocks[0]
 
-    let f = new Fun(
-      params,
-      funtype.result,
-      x.name ? x.name.value : byteStr_anonfun,
-    )
+    // initialize locals
+    for (let i = 0; i < x.sig.params.length; i++) {
+      let p = x.sig.params[i]
+      if (p.name) {
+        let t = funtype.inputs[i] as Type
+        let name = p.name.value
+        let v = entryb.newValue0(Op.Param, t, name)
+        r.vars.set(name, v)
+      }
+    }
 
     r.startFun(f)
-    r.startBlock(f.blocks[0])
+    r.startSealedBlock(entryb)
+
     r.block(x.body as ast.Expr)
+
     assert((r as any).b == null, "function exit block not ended")
     r.endFun()
 
@@ -333,35 +765,18 @@ export class IRBuilder {
     const r = this
     // dlog(`>> ${s.constructor.name}`)
 
-    if (s instanceof ast.Operation) {
-      if (s.y) {
-        // binary operation
-        if (!isLast) {
-          // binary operation is useless without destination -- skip
-          r.diag('warn', `unused operation`, s.x.pos)
-        }
-      } else {
-        // unary operation
-        let x = r.expr(s.x)
-        assert(x instanceof Id, `unary op on non-var ${x}`)
-        let v = x as Id
-        r.b.addTAC(v, s.op, x, null)
-      }
-
-    } else if (s instanceof ast.IfExpr) {
+    if (s instanceof ast.IfExpr) {
       r.if_(s)
 
     } else if (s instanceof ast.ReturnExpr) {
       r.ret(r.expr(s.result))
 
-    } else if (s instanceof ast.Ident) {
-      if (!isLast) {
-        r.diag('warn', `unused expression`, s.pos)
-      }
-      r.expr(s)
-
     } else if (s instanceof ast.Expr) {
-      r.expr(s)
+      if (!isLast && s instanceof ast.Ident) {
+        r.diag('warn', `unused expression`, s.pos)
+      } else {
+        r.expr(s)
+      }
 
     } else {
       dlog(`TODO: handle ${s.constructor.name}`)
@@ -420,7 +835,7 @@ export class IRBuilder {
 
     // create "then" block
     thenb.preds = [ifb] // then <- if
-    r.startBlock(thenb)
+    r.startSealedBlock(thenb)
     r.block(s.then)
     thenb = r.endBlock()
 
@@ -432,25 +847,52 @@ export class IRBuilder {
 
       // create "else" block
       elseb.preds = [ifb] // else <- if
-      r.startBlock(elseb)
+      r.startSealedBlock(elseb)
       r.block(s.els_)
       elseb = r.endBlock()
       elseb.succs = [contb]
 
       thenb.succs = [contb] // then -> cont
       contb.preds = [thenb, elseb] // cont <- then, else
-      r.startBlock(contb)
+      r.startSealedBlock(contb)
     } else {
       // if cond then A end
       thenb.succs = [elseb] // then -> else
       elseb.preds = [ifb, thenb] // else <- if, then
       elseb.succs = null
-      r.startBlock(elseb)
+      r.startSealedBlock(elseb)
     }
   }
 
 
-  assignment(s :ast.Assignment) :Id {
+  // assign does left = right.
+  // Right has already been evaluated to ssa, left has not.
+  assign(left :ast.Expr, right :Value) :Value {
+    const s = this
+    let t = left.type as Type; assert(left.type)
+    assert(left instanceof ast.Ident, `${left.constructor.name} not supported`)
+    // Update variable assignment.
+    let name = (left as ast.Ident).value
+    
+    let v = s.b.newValue1(Op.Copy, right.type, right)
+    dlog(`assign "${name}" ${left} <— ${right}`)
+
+    s.writeVariable(name, v)
+
+    return v
+
+    // s.addNamedValue(left, right)
+
+    // let t = rhs.type as BasicType
+    // assert(t instanceof BasicType, "not a basic type")
+    // let op = storeop(t)
+    // v = r.b.newValue1(op, t, src, dst)
+    // return right
+  }
+
+
+  // process an assignment node
+  assignment(s :ast.Assignment) :Value {
     const r = this
 
     if (s.op == token.INC || s.op == token.DEC) {
@@ -459,54 +901,36 @@ export class IRBuilder {
       assert(s.rhs.length == 0)
       let lhs = s.lhs[0]
 
-      // get constant "1" of the same type as lhs
-      assert(lhs.type instanceof ast.BasicType, `${lhs.type} is not BasicType`)
-      let one = constOne.get(lhs.type as ast.BasicType) as Const
-      assert(one)
-
-      // unroll operand
+      assert(lhs.type instanceof BasicType, `${lhs.type} is not BasicType`)
+      let t = lhs.type as BasicType
       let x = r.expr(lhs)
-      assert(x instanceof Id) // TODO: handle field and index
+      let y = r.f.constVal(t, 1)
 
       // generate "x = x op 1"
-      let op = s.op == token.INC ? token.ADD : token.SUB
-      r.b.addTAC(x as Id, op, x, one)
-
-      return x as Id
+      let op = getop(s.op == token.INC ? token.ADD : token.SUB, t)
+      let v = r.b.newValue2(op, t, x, y)
+      return r.assign(lhs, v)
     }
 
-    if (s.op > token.assignop_beg && s.op < token.assignop_end) {
+    if (s.op != token.ASSIGN) {
+      assert(
+        // i.e. not "op="
+        s.op < token.assignop_beg || s.op > token.assignop_end,
+        `invalid assignment operation ${token[s.op]}`
+      )
       // "x += 4", "x *= 2", etc  =>  "x = x + 4", "x = x * 2", etc.
       assert(s.lhs.length == 1)
       assert(s.rhs.length == 1)
 
-      let x = r.expr(s.lhs[0])
-      assert(x instanceof Id) // TODO: handle field and index
+      let lhs = s.lhs[0]
+      let t = lhs.type as BasicType
+      assert(t instanceof BasicType, "increment operation on complex type")
 
-      // convert op= to op; e.g. "+=" => "+"
-      let op :token
-      switch (s.op) {
-        case token.ADD_ASSIGN: op = token.ADD; break  // +
-        case token.SUB_ASSIGN: op = token.SUB; break  // -
-        case token.MUL_ASSIGN: op = token.MUL; break  // *
-        case token.QUO_ASSIGN: op = token.QUO; break  // /
-        case token.REM_ASSIGN: op = token.REM; break  // %
-        case token.AND_ASSIGN: op = token.AND; break  // &
-        case token.OR_ASSIGN:  op = token.OR;  break  // |
-        case token.XOR_ASSIGN: op = token.XOR; break  // ^
-        case token.SHL_ASSIGN: op = token.SHL; break  // <<
-        case token.SHR_ASSIGN: op = token.SHR; break  // >>
-        case token.AND_NOT_ASSIGN: op = token.AND_NOT; break // &^
-        default:
-          op = token.ILLEGAL
-          assert(false, "unexpected token")
-          break
-      }
-
+      let op = getop(s.op, t)
+      let x = r.expr(lhs)
       let y = r.expr(s.rhs[0])
-      r.b.addTAC(x as Id, op, x, y)
-
-      return x as Id
+      let v = r.b.newValue2(op, t, x, y)
+      return r.assign(lhs, v)
     }
 
     // if we get here, we're dealing with a regular assignment, e.g. "x = y"
@@ -514,7 +938,7 @@ export class IRBuilder {
     // break up "x, y = a, b" assignments into simple "x = a", "y = b"
     //
     let z = s.lhs.length
-    let preloadRhs :(Id|undefined)[]|null = null  // "holey" array
+    let preloadRhs :(Value|undefined)[]|null = null  // "holey" array
 
     if (z > 1) {
       // potentially rewrite RHS with preloads and temps when an identifier
@@ -522,10 +946,10 @@ export class IRBuilder {
       //
       // e.g. "x, y, z = y, x, 2" causes x and y to be preloaded into
       // temporaries:
-      //   t0 = x
-      //   t1 = y
-      //   x = t1
-      //   y = t0
+      //   t0 = load x
+      //   t1 = load y
+      //   store t1 x
+      //   store t0 y
       //   z = 2
       //
       let leftnames = new Map<ByteStr,int>() // name => position
@@ -543,76 +967,61 @@ export class IRBuilder {
             // e.g. "x, y = x, 2"
             r.diag('warn', `${x} assigned to itself`, x.pos)
           } else if (Li !== undefined) {
-            // appears on the left
+            // appears on the left -- preload
             if (!preloadRhs) {
-              preloadRhs = new Array<Id|undefined>(s.rhs.length)
+              preloadRhs = new Array<Value|undefined>(s.rhs.length)
             }
-            let dst = r.temp(x.type as ast.Type)
-            let val = r.expr(x)
-            r.b.addTAC(dst, token.ASSIGN, val, null)
-            preloadRhs[i] = dst
+            preloadRhs[i] = r.expr(x)
           }
         }
       }
     }
 
-    let sym :Id|null = null
+    let v :Value|null = null
 
     for (let i = 0; i < z; i++) {
-      let dst = r.expr(s.lhs[i]) as Id
-      assert(dst instanceof Id) // TODO support field and index
-
-      let x :Value
-      let y :Value|null = null
-      let op :token = token.ASSIGN
-      let k :Id|undefined
-
+      let left = s.lhs[i]
+      let k :Value|undefined
       if (preloadRhs && (k = preloadRhs[i])) {
-        x = k
+        v = k
       } else {
-        let rhs = s.rhs[i]
-        if (
-          rhs instanceof ast.Operation &&
-          rhs.op != token.OROR &&
-          rhs.op != token.ANDAND
-          // TODO: check for other operations that need intermediates
-        ) {
-          // basic operation
-          op = rhs.op
-          x = r.expr(rhs.x)
-          y = rhs.y ? r.expr(rhs.y) : null
-        } else {
-          // higher-level operation
-          // unroll
-          x = r.expr(rhs)
-        }
+        v = r.expr(s.rhs[i])
       }
-
-      r.b.addTAC(dst as Id, op, x, y)
-      sym = dst
+      v = r.assign(left, v)
     }
 
-    return sym as Id
+    return v as Value
   }
 
 
   expr(s :ast.Expr) :Value {
     const r = this
-    // dlog(`>> ${s.constructor.name}`)
-
     assert(s.type, `type not resolved for ${s}`)
-      // [?] may legitimately need to resolve
 
     if (s instanceof ast.BasicLit) {
       if (s.op != token.ILLEGAL) {
+        // e.g. negation
         dlog(`TODO handle BasicLit.op`)
       }
-      return new Const(s.type as ast.BasicType, s.value)
-
+      let t = s.type //as BasicType
+      let c :number = 0
+      if (s.isInt()) {
+        c = s.isSignedInt() ? s.parseSInt() : s.parseUInt()
+      } else {
+        c = s.parseFloat()
+      }
+      return r.f.constVal(t, c)
     }
 
     if (s instanceof ast.Ident) {
-      return new Id(s.type as ast.Type, s.value)
+      let v = r.readVariable(s.value, s.type as Type)
+      // if (v.b !== r.b) {
+      //   // defined in a different block -- copy
+      //   let v1 = v // for dlog
+      //   v = r.b.newValue1(Op.Copy, v.type, v)
+      //   dlog(`issue Copy ${s} ${v1} -> ${v}`)
+      // }
+      return v
     }
 
     if (s instanceof ast.Assignment) {
@@ -621,10 +1030,9 @@ export class IRBuilder {
 
     if (s instanceof ast.Operation) {
       // "x op y" => "tmp = x op y" -> tmp
-      let x = r.expr(s.x)
-      let t0 = r.temp(s.type as ast.Type)
 
       if (s.op == token.OROR || s.op == token.ANDAND) {
+        // high-level "&&" or "||" operation, lowered to branching.
         //
         // We implement "||" and "&&" via a temporary var and "if" branch.
         // E.g. source code
@@ -674,135 +1082,222 @@ export class IRBuilder {
         //
         assert(s.y != null)
 
-        let right = r.f.newBlock(BlockKind.Plain)  // y
-        let result = r.f.newBlock(BlockKind.Plain) // t
+        let tmpname = asciiByteStr('tmp') // TODO: use `s` (just need a ref)
 
-        r.b.addTAC(t0, token.ASSIGN, x, null)
+        let left = r.expr(s.x)
+        // r.vars.set(tmpname, left)
+        r.writeVariable(tmpname, left)
+        // let t0 = r.b.newValue1(Op.Copy, t, x)  // t = x
+
+        let t = left.type
+
+        let rightb = r.f.newBlock(BlockKind.Plain)  // y
+        let contb = r.f.newBlock(BlockKind.Plain) // t
 
         // end entry "if" block
         let ifb = r.endBlock()
         ifb.kind = BlockKind.If
-        ifb.control = t0
+        ifb.control = left
 
         if (s.op == token.OROR) {
           // flip branches; equivalent to "ifFalse"/"ifz"
-          ifb.succs = [result, right] // if -> result, right
+          ifb.succs = [contb, rightb] // if -> contb, rightb
         } else {
-          ifb.succs = [right, result] // if -> right, result
+          ifb.succs = [rightb, contb] // if -> rightb, contb
         }
 
         // gen "right" block
-        right.preds = [ifb] // right <- if
-        r.startBlock(right)
-        let y = r.expr(s.y as ast.Expr)
-        right.addTAC(t0, token.ASSIGN, y, null)
-        right = r.endBlock()
-        right.succs = [result] // right -> result
+        rightb.preds = [ifb] // rightb <- if
+        r.startSealedBlock(rightb)
+        let right = r.expr(s.y as ast.Expr)
+        let tmpv = r.b.newValue1(Op.Copy, right.type, right)
+        r.writeVariable(tmpname, tmpv)
+        rightb = r.endBlock()
+        rightb.succs = [contb] // rightb -> contb
+
+        assert(t.equals(right.type), "operands have different types")
 
         // start continuation block
-        result.preds = [ifb, right] // result <- ifb, right
-        r.startBlock(result)
+        contb.preds = [ifb, rightb] // contb <- ifb, rightb
+        r.startSealedBlock(contb)
+
+        return r.readVariable(tmpname, ast.u_t_bool)
 
       } else {
         // Basic operation
-        let y = s.y ? r.expr(s.y) : null
-        r.b.addTAC(t0, s.op, x, y)
+        let left = r.expr(s.x)
+        let t = s.type as BasicType; assert(t instanceof BasicType)
+        let op = getop(s.op, t)
+        if (s.y) {
+          // Basic binary operation
+          let right = r.expr(s.y)
+          return r.b.newValue2(op, t, left, right)
+        } else {
+          // Basic unary operation
+          return r.b.newValue1(op, t, left)
+        }
       }
-
-      // return sym that identifies the value of the expression
-      return t0
     }
 
     dlog(`TODO: handle ${s.constructor.name}`)
-    // unroll to temporary storage
-    // let t = r.temp(s.type as ast.Type)
-    // r.tac(f, b, s, t)
-    // return t
-    return r.temp(s.type as ast.Type)
+    return r.b.newValue0(Op.None, ast.u_t_nil)
   }
 
-
-  // generate temporary id
-  temp(t :ast.Type) :Id {
-    return new Id(t, asciiByteStr('%' + this._tempid++))
-  }
-  private _tempid = 0
-
-
-  // store(f :Fun, b :Block, s :ast.Stmt, id :ast.Ident) {
-  // }
-
-  // ------------------------------------------------------------
-  // SSA support functions
-
-  /*writeVariable(variable, block, value) {
-    const b = this
-    currentDef[variable][block] = value
-  }
-  
-  readVariable(variable, block) {
-    const b = this
-    if (currentDef[variable] contains block) {
-      // local value numbering
-      return currentDef[variable][block]
-    }
-    // global value numbering
-    return b.readVariableRecursive(variable, block)
-  }
-
-  readVariableRecursive(variable, block) {
-    const b = this
-    if (block not in sealedBlocks) {
-      // Incomplete CFG
-      val = new Phi(block)
-      incompletePhis[block][variable] = val
-    } else if (|block.preds| == 1) {
-      // Optimize the common case of one predecessor: No phi needed
-      val = b.readVariable(variable, block.preds[0])
+  readVariable(name :ByteStr, t :Type, b? :Block) :Value {
+    const s = this
+    dlog(`${name} ${b || s.b}`)
+    if (!b || b === s.b) {
+      let v = s.vars.get(name)
+      if (v) {
+        return v
+      }
+      b = s.b
     } else {
-      // Break potential cycles with operandless phi
-      val = new Phi(block)
-      b.writeVariable(variable, block, val)
-      val = b.addPhiOperands(variable, val)
+      let m = s.defvars[b.id]
+      if (m) {
+        let v = m.get(name)
+        if (v) {
+          return v
+        }
+      }
     }
-    b.writeVariable(variable, block, val)
+
+    dlog(`${name} not local; readVariableRecursive`)
+
+    // let v = s.fwdVars.get(name)
+    // if (!v) {
+    //   // return v
+    //   v = b.newValue0(Op.FwdRef, t, name)
+    //   s.fwdVars.set(name, v)
+    // }
+
+    // global value numbering
+    let v = s.readVariableRecursive(name, t, b)
+    // dlog(`--> v = ${v}`)
+    // if (!(v instanceof Phi)) {
+    //   v = b.newValue1(Op.Copy, t, v)
+    // }
+    return v
+  }
+
+  writeVariable(name :ByteStr, v :Value, b? :Block) {
+    const s = this
+    dlog(`${name} ${b || s.b} ${Op[v.op]} ${v}`)
+    if (!b || b === s.b) {
+      s.vars.set(name, v)
+    } else {
+      assert(s.defvars.length >= b.id)
+      let m = s.defvars[b.id]
+      if (m) {
+        m.set(name, v)
+      } else {
+        s.defvars[b.id] = new Map<ByteStr,Value>([[name, v]])
+      }
+    }
+  }
+
+  readVariableRecursive(name :ByteStr, t :Type, b :Block) :Value {
+    const s = this
+    let val :Value
+    if (!b.sealed) {
+      // incomplete CFG
+      dlog(`${b} not yet sealed`)
+      val = b.newPhi(t)
+      // register as pending
+      let names = s.pendphis ? s.pendphis.get(b) : null
+      if (!names) {
+        names = new Map<ByteStr,Phi>()
+        if (!s.pendphis) {
+          s.pendphis = new Map<Block,Map<ByteStr,Phi>>()
+        }
+        s.pendphis.set(b, names)
+      }
+      names.set(name, val as Phi)
+    } else if (b.preds.length == 1) {
+      dlog(`${name} ${b} common case: single predecessor`)
+      // Optimize the common case of one predecessor: No phi needed
+      val = s.readVariable(name, t, b.preds[0])
+    } else {
+      dlog(`${name} ${b} uncommon case: multiple predecessors`)
+      // Break potential cycles with operandless phi
+      val = b.newPhi(t)
+      s.writeVariable(name, val, b)
+      val = s.addPhiOperands(name, val as Phi)
+    }
+    s.writeVariable(name, val, b)
     return val
   }
 
-  addPhiOperands(variable, phi) {
-    const b = this
+  addPhiOperands(name :ByteStr, phi :Phi) :Value {
+    const s = this
     // Determine operands from predecessors
-    for (let pred of phi.block.preds) {
-      phi.appendOperand(b.readVariable(variable, pred))
-      return b.tryRemoveTrivialPhi(phi)
+    let trivialValue :Value|null = null
+    for (let pred of phi.b.preds) {
+      let v = s.readVariable(name, phi.type, pred)
+      dlog(`v ${v} ${v.constructor.name} ${Op[v.op]}`)
+      if (phi.args && phi.args.length == 1 && phi.args[0] === v) {
+        trivialValue = v
+      } else {
+        phi.appendOperand(v)
+        trivialValue = null
+      }
     }
+    if (trivialValue) {
+      dlog(`isTrivial!`)
+      
+      // phi.replaceBy(trivialValue)
+
+      // remove Phi
+      // TODO wrap up into function on Value
+      let i = phi.b.values.indexOf(phi)
+      assert(i != -1, "not in parent block but still references block")
+      phi.b.values.splice(i, 1)
+      trivialValue.uses++
+      return trivialValue
+    }
+    // return s.tryRemoveTrivialPhi(phi)
+    return phi
   }
 
-  tryRemoveTrivialPhi(phi) {
-    const b = this
-    let same = null
-    for (let op of phi.operands) {
-      if (op == same || op == phi) {
+  tryRemoveTrivialPhi(phi :Phi) :Value {
+    const s = this
+    let same :Value|null = null
+    dlog(`${phi}`)
+
+    assert(phi.args != null, "phi without operands")
+    for (let operand of phi.args as Value[]) {
+      if (operand === same || operand === phi) {
         continue // Unique value or self−reference
       }
       if (same != null) {
+        dlog(`${phi} not trivial (keep)`)
         return phi // The phi merges at least two values: not trivial
       }
-      same = op
+      same = operand
     }
+
+    dlog(`${phi} is trivial (remove)`)
+
     if (same == null) {
-      same = new Undef() // The phi is unreachable or in the start block
+      dlog(`${phi} unreachable or in the start block`)
+      same = new Value(0, Op.None, ast.u_t_nil, phi.b, null) // dummy
+      // same = new Undef() // The phi is unreachable or in the start block
     }
-    users = phi.users.remove(phi) // Remember all users except the phi itself
+
+    phi.users.delete(phi) // Remember all users except the phi itself
+    let users = phi.users
     phi.replaceBy(same) // Reroute all uses of phi to same and remove phi
+    dlog(`replace ${phi} with ${same}`, same.aux)
+
     // Try to recursively remove all phi users, which might have become trivial
     for (let use of users) {
-      if (use is-a Phi) {
-        b.tryRemoveTrivialPhi(use)
+      if (use instanceof Phi) {
+        s.tryRemoveTrivialPhi(use)
       }
     }
+
     return same
-  }*/
+  }
 
 
   // diag reports a diagnostic message, or an error if k is ERROR

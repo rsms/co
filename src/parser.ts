@@ -1172,9 +1172,28 @@ export class Parser extends scanner.Scanner {
 
     if (token.assignop_beg < p.tok && p.tok < token.assignop_end) {
       // lhs op= rhs;  e.g. "x += 2"
-      const op = p.tok
+      let op = p.tok
       p.next() // consume operator
       p.checkBasicTypeMutation(lhs[0], t)
+
+      // map assign ops to regular ops.
+      // e.g. "(assign += x 2)" => "(assign + x 2)"
+      switch (op) {
+        case token.ADD_ASSIGN:     op = token.ADD; break  // +
+        case token.SUB_ASSIGN:     op = token.SUB; break  // -
+        case token.MUL_ASSIGN:     op = token.MUL; break  // *
+        case token.QUO_ASSIGN:     op = token.QUO; break  // /
+        case token.REM_ASSIGN:     op = token.REM; break  // %
+        case token.AND_ASSIGN:     op = token.AND; break  // &
+        case token.OR_ASSIGN:      op = token.OR;  break  // |
+        case token.XOR_ASSIGN:     op = token.XOR; break  // ^
+        case token.SHL_ASSIGN:     op = token.SHL; break  // <<
+        case token.SHR_ASSIGN:     op = token.SHR; break  // >>
+        case token.AND_NOT_ASSIGN: op = token.AND_NOT; break // &^
+        default:
+          assert(false, `unexpected operator token ${token[op]}`)
+      }
+
       const s = new Assignment(pos, p.scope, op, lhs, [])
       s.rhs = p.exprList(/*ctx=*/s)
       p.types.resolve(s)

@@ -1,8 +1,9 @@
 // fun isqrt(x int) -> return x
 
-fun dist(x int, y int) int {
+fun dist(x, y int) int {
   // a = x + y
   // b = 1 + a * (a / (5 - 8))
+  // b || y
   // a += 5
   // b++
   // a - b // warn: unused operation
@@ -14,17 +15,34 @@ fun dist(x int, y int) int {
   // a = x + y
   // a, x, y = x, y, a
 
-  // b = x || y || 3
-  // b = x && y
+  // b = x < 0 || y < 0
+  // b = x || y
+  b = x && y
   // b
+  // if x > 3 {
+  //   y = 3
+  // }
+  // y
 
-  if x > 0 || x < 0 {
-    x = x * 2
-  }
+  // x = y + 2
+
+  // if x > 3 {
+  //   x = 3
+  // } else if x > 2 {
+  //   x = 2
+  // } else if x > 1 {
+  //   x = 1
+  // } else {
+  //   x = 0
+  // }
+
+  // if x > 0 || x < 0 {
+  //   x = x * 2
+  // }
   // if y > 0 {
   //   y = y - 3
   // }
-  y
+  // y
 
   // x = x * x
   // y = y * y
@@ -37,3 +55,10 @@ fun dist(x int, y int) int {
   // x * y
   // isqrt(x + y)
 }
+
+/* TODO *
+
+- convert all variable access to load and stores
+- use value numbering instead of locals (change Value)
+
+*/
