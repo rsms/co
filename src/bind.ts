@@ -3,11 +3,12 @@ import { SrcFileSet, Pos } from './pos'
 import { ErrorCode, ErrorHandler, ErrorReporter } from './error'
 import * as utf8 from './utf8'
 import { TypeResolver } from './resolve'
-// import { debuglog } from './util'
+import { debuglog as dlog } from './util'
 import {
   File,
   Package,
   Ent,
+  Ident,
 
   FunSig,
   ImportDecl,
@@ -37,6 +38,7 @@ class pkgBinder extends ErrorReporter {
   errorCount = 0
   // package-global mapping of imported package ids to package entities
   imports = new Map<string,Ent>()
+  undef :Set<Ident>|null = null // track undefined so we don't report twice
 
   constructor(
     public pkg      :Package,
@@ -134,10 +136,14 @@ class pkgBinder extends ErrorReporter {
 
       if (!ent) { // truly undefined
         b.error(`${id} undefined`, id.pos)
+        if (!b.undef) {
+          b.undef = new Set<Ident>()
+        }
+        b.undef.add(id)
         continue
       }
 
-      // debuglog(
+      // dlog(
       //   `${id} (${ent.value && ent.value.constructor.name})`+
       //   ` at ${b.fset.position(id.pos)}`
       // )
@@ -174,6 +180,10 @@ class pkgBinder extends ErrorReporter {
         // was probably resolved during step 2
         continue
       }
+
+      if (b.undef && ut.expr instanceof Ident && b.undef.has(ut.expr)) {
+        continue
+      }
   
       // attempt to resolve the type now that we can see the entire package
       ut.expr.type = null // clear so resolve can progress
@@ -181,7 +191,11 @@ class pkgBinder extends ErrorReporter {
 
       if (!restyp) {
         ut.expr.type = t // restore original which might have refs
-        b.error(`cannot resolve type of ${ut.expr}`, ut.expr.pos)
+        // Note: This normally happens when the expression contains something
+        // that itself failed to resolve, like an undefined variable.
+        dlog(
+          `cannot resolve type of ${ut.expr} ${b.fset.position(ut.expr.pos)}`
+        )
         continue
       }
 

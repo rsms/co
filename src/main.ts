@@ -10,20 +10,64 @@ import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 import { IRBuilder } from './ir'
+import * as ir from './ir'
+import { printir, fmtir } from './ir-repr'
 
-import * as fs from 'fs'
+
+// fs
+type SyncFileReader = (fn :string, options? :{[k:string]:any}) => Uint8Array
+let readFileSync :SyncFileReader
+let isNodeJsLikeEnv = false
+try {
+  const _readFileSync = require('fs').readFileSync
+  readFileSync = _readFileSync as SyncFileReader
+  isNodeJsLikeEnv = true
+} catch(_) {
+  // Hack to support the playground.
+  // TODO: export a nice API instead of this mess.
+  let global_readFileSync = global['readFileSync']
+  if (global_readFileSync && typeof global_readFileSync == 'function') {
+    readFileSync = global_readFileSync as SyncFileReader
+  } else {
+    readFileSync = (fn :string, options? :{[k:string]:any}) => {
+      // FIXME
+      return new Uint8Array(0)
+    }
+  }
+}
 
 
 const reprOptions = {colors:stdoutSupportsStyle}
 
+// TODO FIXME this collects errors and diagnostics for the web playground.
+// replace this with a better API.
+interface diaginfo {
+  type: string  // info | warn | error
+  errcode?: string // available when type=="error"
+  message: string
+  pos: Position
+}
+let diagnostics :diaginfo[]
 
-function errh(p :Position, msg :string, typ :string) {
-  console.error(stdoutStyle.red(`${p}: ${msg} (${typ})`))
+function errh(pos :Position, msg :string, errcode :string) {
+  let message = `${pos}: ${msg} (${errcode})`
+  if (isNodeJsLikeEnv) {
+    console.error(stdoutStyle.red(message))
+  }
+  diagnostics.push({ type: 'error', errcode, message, pos })
 }
 
-function diagh(p :Position, msg :string, typ :string) {
-  const m = `[diag] ${p}: ${typ}: ${msg}`
-  console.log(typ == "info" ? stdoutStyle.cyan(m) : stdoutStyle.lightyellow(m))
+function diagh(pos :Position, msg :string, type :string) {
+  const message = `${pos}: ${type}: ${msg}`
+  if (isNodeJsLikeEnv) {
+    console.log(
+      '[diag] ' +
+      ( type == "info" ? stdoutStyle.cyan(message) :
+        stdoutStyle.lightyellow(message)
+      )
+    )
+  }
+  diagnostics.push({ type, message, pos })
 }
 
 interface ParseResults {
@@ -45,9 +89,11 @@ function parsePkg(
   typeres.init(fset, universe, errh)
 
   for (let filename of sources) {
-    banner(`parse ${filename}`)
+    if (isNodeJsLikeEnv) {
+      banner(`parse ${filename}`)
+    }
 
-    const sdata = fs.readFileSync(filename, {flag:'r'}) as Uint8Array
+    const sdata = readFileSync(filename, {flag:'r'}) as Uint8Array
     const sfile = fset.addFile(filename, sdata.length)
 
     parser.initParser(
@@ -64,23 +110,26 @@ function parsePkg(
     const file = parser.parseFile()
     pkg.files.push(file)
 
-    if (file.imports) {
-      console.log(`${file.imports.length} imports`)
-      for (let imp of file.imports) {
-        console.log(astRepr(imp, reprOptions))
+    if (isNodeJsLikeEnv) {
+      if (file.imports) {
+        console.log(`${file.imports.length} imports`)
+        for (let imp of file.imports) {
+          console.log(astRepr(imp, reprOptions))
+        }
       }
-    }
 
-    if (file.unresolved) {
-      console.log(`${file.unresolved.size} unresolved references`)
-      for (let ident of file.unresolved) {
-        console.log(' - ' + astRepr(ident, reprOptions))
+      if (file.unresolved) {
+        console.log(`${file.unresolved.size} unresolved references`)
+        for (let ident of file.unresolved) {
+          console.log(' - ' + astRepr(ident, reprOptions))
+        }
       }
-    }
 
-    console.log(`${file.decls.length} declarations`)
-    for (let decl of file.decls) {
-      console.log(astRepr(decl, reprOptions))
+      console.log(`${file.decls.length} declarations`)
+      // for (let decl of file.decls) {
+      //   console.log(astRepr(decl, reprOptions))
+      // }
+      console.log(astRepr(file, reprOptions))
     }
   }
 
@@ -89,7 +138,9 @@ function parsePkg(
   }
 
   // bind and assemble package
-  banner(`bind & assemble ${pkg}`)
+  if (isNodeJsLikeEnv) {
+    banner(`bind & assemble ${pkg}`)
+  }
   function importer(_imports :Map<string,Ent>, _path :string) :Promise<Ent> {
     return Promise.reject(new Error(`not found`))
   }
@@ -98,19 +149,29 @@ function parsePkg(
     .then(hasErrors => ( { pkg, success: !hasErrors } ))
 }
 
+interface MainResult {
+  success     :bool
+  diagnostics :diaginfo[]
+  ast?        :Package
+  ir?         :ir.Pkg
+}
 
-function main() {
+function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   const strSet = new ByteStrSet()
   const typeSet = new TypeSet()
   const universe = new Universe(strSet, typeSet)
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  const sources = ['example/ssa1.xl']
+  const _sources = sources || ['example/ssa1.xl']
+  diagnostics = []
 
-  parsePkg("example", sources, universe, parser, typeres).then(r => {
+  let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
     if (!r.success) {
-      return
+      return { success: false, diagnostics }
+    }
+    if (noIR) {
+      return { success: true, diagnostics, ast: r.pkg }
     }
 
     const irb = new IRBuilder()
@@ -118,24 +179,41 @@ function main() {
 
     // print AST & build IR
     for (const file of r.pkg.files) {
-      banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
 
-      for (let decl of file.decls) {
-        console.log(astRepr(decl, reprOptions))
+      if (isNodeJsLikeEnv) {
+        banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
+        console.log(astRepr(r.pkg, reprOptions))
+        // for (let decl of file.decls) {
+        //   console.log(astRepr(decl, reprOptions))
+        // }
+        banner(`ssa-ir ${file.sfile.name}`)
       }
 
-      // build SSA IR
-      banner(`ssa-ir ${file.sfile.name}`)
+      // build IR
       let sfile = file.sfile
       for (let d of file.decls) {
-        irb.addTopLevel(sfile, d)
+        let n = irb.addTopLevel(sfile, d)
+        if (isNodeJsLikeEnv) {
+          if (n) {
+            console.log(`\n-----------------------\n`)
+            printir(n)
+          }
+        }
       }
     }
 
-  }).catch(err => {
-    console.error(err.stack || ''+err)
-    process.exit(1)
+    return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg }
   })
+
+  if (!sources && isNodeJsLikeEnv) {
+    return p.catch(err => {
+      console.error(err.stack || ''+err)
+      process.exit(1)
+      return { success: false, diagnostics }
+    })
+  }
+
+  return p
 }
 
 
@@ -160,4 +238,13 @@ function banner(message :string) {
 }
 
 
-main()
+if (isNodeJsLikeEnv) {
+  main()
+} else {
+  global['colang'] = {
+    main,
+    fmtast: astRepr,
+    fmtir,
+    printir,
+  }
+}

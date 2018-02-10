@@ -5,7 +5,6 @@ import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
 import { Type, FunType, BasicType, IntType, RegType } from './ast'
-import { irrepr } from './ir-repr'
 
 
 const byteStr__ = asciiByteStr("_")
@@ -15,7 +14,7 @@ const byteStr_anonfun = asciiByteStr('anonfun')
 export enum Op {
   // special
   None = 0, // nothing (invalid)
-  FwdRef,   // forward reference (SSA)
+  // FwdRef,   // forward reference (SSA)
   Param,    // function parameter
   Copy,
   Phi,
@@ -322,18 +321,11 @@ export class Value {
   toString() {
     return 'v' + this.id
   }
-}
 
-// Phi
-export class Phi extends Value {
-  // users = new Set<Value>()
-
-  constructor(id :int, type :Type, b :Block) {
-    super(id, Op.Phi, type, b, null)
-  }
-
-  appendOperand(v :Value) {
-    dlog(`${v}`)
+  appendArg(v :Value) {
+    // Note: Only used for Phi values. Assertion here to make sure we are
+    // intenational about use.
+    assert(this.op == Op.Phi, "appendArg on non-phi value")
     if (!this.args) {
       this.args = [v]
     } else {
@@ -342,7 +334,7 @@ export class Phi extends Value {
     v.uses++ ; v.users.add(this)
   }
 
-  // replaceBy replaces all uses of this Phi with v
+  // replaceBy replaces all uses of this value with v
   //
   replaceBy(v :Value) {
     // FIXME link values using a doubly-linked list
@@ -352,10 +344,6 @@ export class Phi extends Value {
     assert(this.users.size == 0, "TODO users")
     // for (let user of this.users) {
     // }
-
-    // this.op = Op.Copy
-    // this.args = [v]
-    // v.uses++
 
     let i = this.b.values.indexOf(this)
     assert(i != -1, "not in parent block but still references block")
@@ -402,8 +390,8 @@ export class Block {
     this.f = f
   }
 
-  newPhi(t :Type) :Phi {
-    let v = this.f.newPhi(t, this)
+  newPhi(t :Type) :Value {
+    let v = this.f.newValue(Op.Phi, t, this, null)
     this.values.push(v)
     return v
   }
@@ -458,7 +446,9 @@ export class Fun {
     // Op and Type
 
   constructor(type :FunType, name :ByteStr) {
-    this.blocks = [new Block(BlockKind.Plain, 0, this)]
+    this.blocks = [
+      new Block(BlockKind.Plain, 0, this)
+    ]
     this.type = type
     this.name = name
   }
@@ -476,10 +466,10 @@ export class Fun {
     return new Value(++this.vid, op, t, b, aux)
   }
 
-  newPhi(t :Type, b :Block) :Phi {
-    assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
-    return new Phi(++this.vid, t, b)
-  }
+  // newPhi(t :Type, b :Block) :Phi {
+  //   assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
+  //   return new Phi(++this.vid, t, b)
+  // }
 
   // constVal returns a constant value for c
   // c must be smaller than Number.MAX_SAFE_INTEGER
@@ -510,7 +500,8 @@ export class Fun {
         }
       }
     }
-    // create new const value
+
+    // create new const value in function's entry block
     let v = f.blocks[0].newValue0(op, t, c)
 
     // put into cache
@@ -539,25 +530,6 @@ export class Pkg {
 }
 
 
-const oneBuf = new Uint8Array([0x31])
-
-// TODO: remove this
-const constOne = new Map<BasicType, Uint8Array>([
-  [ast.u_t_uint, oneBuf],
-  [ast.u_t_int,  oneBuf],
-  [ast.u_t_i8,   oneBuf],
-  [ast.u_t_i16,  oneBuf],
-  [ast.u_t_i32,  oneBuf],
-  [ast.u_t_i64,  oneBuf],
-  [ast.u_t_u8,   oneBuf],
-  [ast.u_t_u16,  oneBuf],
-  [ast.u_t_u32,  oneBuf],
-  [ast.u_t_u64,  oneBuf],
-  [ast.u_t_f32,  oneBuf],
-  [ast.u_t_f64,  oneBuf],
-])
-
-
 export class IRBuilder {
   pkg   :Pkg
   sfile :SrcFile|null = null
@@ -568,7 +540,7 @@ export class IRBuilder {
   vars :Map<ByteStr,Value>
     // variable assignments in the current block (map from variable symbol
     // to ssa value)
-  fwdVars :Map<ByteStr,Value>
+  // fwdVars :Map<ByteStr,Value>
     // Op.FwdRef which records a value that's live on block input.
     // Used for phi resolution.
 
@@ -576,7 +548,7 @@ export class IRBuilder {
     // all defined variables at the end of each block. Indexed by block id.
     // null indicates there are no variables in that block.
 
-  pendphis :Map<Block,Map<ByteStr,Phi>>|null
+  pendphis :Map<Block,Map<ByteStr,Value>>|null
     // tracks pending, incomplete phis that are completed by sealBlock for
     // blocks that are sealed after they have started. This happens when preds
     // are not known at the time a block starts, but is known and registered
@@ -588,7 +560,7 @@ export class IRBuilder {
     r.sfile = null
     r.diagh = diagh
     r.vars = new Map<ByteStr,Value>()
-    r.fwdVars = new Map<ByteStr,Value>()
+    // r.fwdVars = new Map<ByteStr,Value>()
     r.defvars = []
     r.pendphis = null
   }
@@ -642,7 +614,7 @@ export class IRBuilder {
     }
     r.defvars[b.id] = r.vars
     r.vars = new Map<ByteStr,Value>()
-    r.fwdVars.clear()
+    // r.fwdVars.clear()
     ;(r as any).b = null
     if (!b.sealed) {
       r.sealBlock(b)
@@ -662,10 +634,19 @@ export class IRBuilder {
     ;(r as any).f = null
   }
 
+  // nilValue returns a placeholder value.
+  // This is meant to be used only during development and should be removed
+  // when the IR builder is complete.
+  //
+  nilValue() :Value {
+    assert(this.b, "no current block")
+    return this.b.newValue0(Op.None, ast.u_t_nil)
+  }
+
   // ------------------------------------------------------------
   // primary interface to builder
 
-  addTopLevel(sfile :SrcFile, d :ast.Decl|ast.FunExpr) {
+  addTopLevel(sfile :SrcFile, d :ast.Decl|ast.FunExpr) :Fun|null {
     // Note: d must not contain unresolved references (including types).
     // If there are unresolved references, behavior is undefined.
     //
@@ -685,14 +666,18 @@ export class IRBuilder {
         assert(d.sig.result === ast.u_t_nil, 'init fun with result')
         assert(d.body, 'missing body')
         r.initCode(d.body as ast.Expr)
+      } else if (d.body) {
+        // regular function with an implementation (d.body)
+        return r.fun(d)
       } else {
-        r.fun(d)
+        dlog(`skipping pure function declaration ${d}`)
       }
     } else if (d instanceof ast.ImportDecl) {
       dlog(`TODO ImportDecl`)
     } else if (d instanceof ast.TypeDecl) {
       dlog(`TODO TypeDecl`)
     }
+    return null // TODO: return other top-level things
   }
 
   global(v :ast.VarDecl) {
@@ -706,7 +691,7 @@ export class IRBuilder {
     // console.log(`\n-----------------------\n${f}`)
   }
 
-  fun(x :ast.FunExpr) {
+  fun(x :ast.FunExpr) :Fun {
     const r = this
     assert(x.body, `unresolved function ${x}`)
     assert(x.type, "unresolved function type")
@@ -729,18 +714,34 @@ export class IRBuilder {
     r.startFun(f)
     r.startSealedBlock(entryb)
 
-    r.block(x.body as ast.Expr)
+    let bodyval = r.block(x.body as ast.Expr)
+
+    if (r.b as any) {
+      // end last block if not already ended
+      r.b.kind = BlockKind.Ret
+      if (!(x.body instanceof ast.Block)) {
+        // body is a single expression -- control value is that expression
+        // assert(!(x.body instanceof ast.ReturnStmt),
+        //   "'return' as function expression body should have called "+
+        //   "ret() to close block")
+        r.b.control = bodyval
+      }
+      // when body is a block and it didn't end, it was empty and thus
+      // the return type is nil (no control value.)
+      r.endBlock()
+    }
 
     assert((r as any).b == null, "function exit block not ended")
+    assert(f.blocks[f.blocks.length - 1].kind == BlockKind.Ret,
+      "last block in function is not BlockKind.Ret")
     r.endFun()
 
     r.pkg.funs.push(f)
-    console.log(`\n-----------------------\n`)
-    irrepr(f)
+    return f
   }
 
 
-  block(x :ast.Expr) {
+  block(x :ast.Expr) :Value|null {
     const r = this
     if (x instanceof ast.Block) {
       let end = x.list.length
@@ -753,8 +754,10 @@ export class IRBuilder {
         }
         r.stmt(x.list[i], i == lasti)
       }
+      return null
     } else {
-      r.stmt(x as ast.Expr, /*isLast=*/true)
+      return r.expr(x)
+      // r.stmt(x, /*isLast=*/true)
     }
   }
 
@@ -768,7 +771,7 @@ export class IRBuilder {
     if (s instanceof ast.IfExpr) {
       r.if_(s)
 
-    } else if (s instanceof ast.ReturnExpr) {
+    } else if (s instanceof ast.ReturnStmt) {
       r.ret(r.expr(s.result))
 
     } else if (s instanceof ast.Expr) {
@@ -1140,7 +1143,7 @@ export class IRBuilder {
     }
 
     dlog(`TODO: handle ${s.constructor.name}`)
-    return r.b.newValue0(Op.None, ast.u_t_nil)
+    return r.nilValue()
   }
 
   readVariable(name :ByteStr, t :Type, b? :Block) :Value {
@@ -1206,13 +1209,13 @@ export class IRBuilder {
       // register as pending
       let names = s.pendphis ? s.pendphis.get(b) : null
       if (!names) {
-        names = new Map<ByteStr,Phi>()
+        names = new Map<ByteStr,Value>()
         if (!s.pendphis) {
-          s.pendphis = new Map<Block,Map<ByteStr,Phi>>()
+          s.pendphis = new Map<Block,Map<ByteStr,Value>>()
         }
         s.pendphis.set(b, names)
       }
-      names.set(name, val as Phi)
+      names.set(name, val)
     } else if (b.preds.length == 1) {
       dlog(`${name} ${b} common case: single predecessor`)
       // Optimize the common case of one predecessor: No phi needed
@@ -1222,14 +1225,15 @@ export class IRBuilder {
       // Break potential cycles with operandless phi
       val = b.newPhi(t)
       s.writeVariable(name, val, b)
-      val = s.addPhiOperands(name, val as Phi)
+      val = s.addPhiOperands(name, val)
     }
     s.writeVariable(name, val, b)
     return val
   }
 
-  addPhiOperands(name :ByteStr, phi :Phi) :Value {
+  addPhiOperands(name :ByteStr, phi :Value) :Value {
     const s = this
+    assert(phi.op == Op.Phi)
     // Determine operands from predecessors
     let trivialValue :Value|null = null
     for (let pred of phi.b.preds) {
@@ -1238,7 +1242,7 @@ export class IRBuilder {
       if (phi.args && phi.args.length == 1 && phi.args[0] === v) {
         trivialValue = v
       } else {
-        phi.appendOperand(v)
+        phi.appendArg(v)
         trivialValue = null
       }
     }
@@ -1255,12 +1259,13 @@ export class IRBuilder {
       trivialValue.uses++
       return trivialValue
     }
-    // return s.tryRemoveTrivialPhi(phi)
-    return phi
+    return s.tryRemoveTrivialPhi(phi)
+    // return phi
   }
 
-  tryRemoveTrivialPhi(phi :Phi) :Value {
+  tryRemoveTrivialPhi(phi :Value) :Value {
     const s = this
+    assert(phi.op == Op.Phi)
     let same :Value|null = null
     dlog(`${phi}`)
 
@@ -1291,7 +1296,7 @@ export class IRBuilder {
 
     // Try to recursively remove all phi users, which might have become trivial
     for (let use of users) {
-      if (use instanceof Phi) {
+      if (use.op == Op.Phi) {
         s.tryRemoveTrivialPhi(use)
       }
     }

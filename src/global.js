@@ -1,3 +1,9 @@
+var global = (
+  typeof global != 'undefined' ? global :
+  typeof window != 'undefined' ? window :
+  this
+)
+
 try {
   typeof require != 'undefined' && require("source-map-support").install()
 } catch(_) {}
@@ -35,10 +41,16 @@ function assert() {
       , msg = arguments[1]
       , cons = arguments[2] || assert
     if (!cond) {
-      var e, stack = _stackTrace(cons)
-      console.error('assertion failure:', msg || cond)
-      console.error(_stackTrace(cons))
-      exit(3)
+      if (typeof process != 'undefined') {
+        var e, stack = _stackTrace(cons)
+        console.error('assertion failure:', msg || cond)
+        console.error(_stackTrace(cons))
+        exit(3)
+      } else {
+        var e = new Error('assertion failure: ' + (msg || cond))
+        e.name = 'AssertionError'
+        throw e
+      }
     }
   }
 }

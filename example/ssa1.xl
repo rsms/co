@@ -1,3 +1,8 @@
+// fun a -> 4
+// fun b
+// fun c {}
+// fun d { 4 }
+
 // fun isqrt(x int) -> return x
 
 fun dist(x, y int) int {
@@ -17,12 +22,12 @@ fun dist(x, y int) int {
 
   // b = x < 0 || y < 0
   // b = x || y
-  b = x && y
+  // b = x && y
   // b
-  // if x > 3 {
-  //   y = 3
-  // }
-  // y
+  if x > 3 {
+    y++
+  }
+  x + y
 
   // x = y + 2
 

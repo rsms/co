@@ -6,6 +6,7 @@ import { token } from './token'
 import {
   Scope,
   Ent,
+  ReturnStmt,
 
   Expr,
   Ident,
@@ -21,7 +22,6 @@ import {
   Assignment,
   CallExpr,
   Operation,
-  ReturnExpr,
   IfExpr,
   IndexExpr,
   // SliceExpr,
@@ -138,7 +138,7 @@ export class TypeResolver extends ErrorReporter {
   // Returns null if the type can't be resolved or inferred.
   // May mutate n.type and may call ErrorHandler.
   //
-  maybeResolve(n :Expr) :Type|null {
+  maybeResolve(n :Expr|ReturnStmt) :Type|null {
     const r = this
 
     if (n instanceof Type) {
@@ -263,7 +263,7 @@ export class TypeResolver extends ErrorReporter {
       return r.maybeResolveTupleType(n.pos, n.scope, n.lhs)
     }
 
-    if (n instanceof ReturnExpr) {
+    if (n instanceof ReturnStmt) {
       // return expressions always represents type of its results, if any
       return n.result ? r.resolve(n.result) : u_t_nil //u_t_void
     }

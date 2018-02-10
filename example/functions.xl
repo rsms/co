@@ -44,6 +44,7 @@ fun fx3 -> 4
 // fun fx4(b) int -> ; // error: missing function body
 // fun fx5(b) -> ; // error: missing function body
 // fun fx6 -> ; // error: missing function body
+// fun fx7 -> return 3 // error: unexpected return, expecting expression
 
 // used as an expression
 fe0 = fun foo0(int) { 4 }

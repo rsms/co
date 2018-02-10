@@ -1,4 +1,4 @@
-import { Fun, Block, BlockKind, Value, Op } from './ir'
+import { Pkg, Fun, Block, BlockKind, Value, Op } from './ir'
 import { tokstr } from './token'
 import { Style, stdoutStyle, style, noStyle } from './termstyle'
 import { asciistr } from './util'
@@ -94,10 +94,9 @@ function printblock(f :IRFmt, b :Block, indent :string) {
     case BlockKind.Ret: {
       // check successors
       assert(b.succs == null, "can't have successor to return block")
-      assert(b.control, "missing control (return) value")
       f.println(
         indent +
-        f.style.cyan('ret ') + b.control
+        f.style.cyan('ret') + (b.control ? ' ' + b.control : '')
       )
       break
     }
@@ -125,6 +124,19 @@ function printfun(f :IRFmt, fn :Fun) {
 }
 
 
+function printpkg(f :IRFmt, pkg :Pkg) {
+  // data :Uint8Array      // data  TODO wrap into some simple linear allocator
+  // funs :Fun[] = []      // functions
+  // init :Fun|null = null // init functions (merged into one)
+  for (let i = 0; i < pkg.funs.length; i++) {
+    printfun(f, pkg.funs[i])
+    if (i+1 < pkg.funs.length) {
+      f.println('')
+    }
+  }
+}
+
+
 export interface Options {
   noTypes?  :bool  // include type annotations
   colors? :bool
@@ -133,7 +145,7 @@ export interface Options {
     // undefined: generate ANSI-styled output if stdout is a TTY
 }
 
-export function irrepr(v :Fun|Block|Value, w? :LineWriter, o? :Options) {
+export function printir(v :Fun|Block|Value, w? :LineWriter, o? :Options) {
   let f = new IRFmt(
     /*types*/ !(o && o.noTypes),
     /*style*/ (
@@ -143,15 +155,21 @@ export function irrepr(v :Fun|Block|Value, w? :LineWriter, o? :Options) {
     ),
     /*println*/ w || console.log.bind(console) as LineWriter,
   )
-  if (v instanceof Fun) {        printfun(f, v) }
+  if      (v instanceof Pkg) {   printpkg(f, v) }
+  else if (v instanceof Fun) {   printfun(f, v) }
   else if (v instanceof Block) { printblock(f, v, /*indent=*/'') }
   else if (v instanceof Value) { printval(f, v, /*indent=*/'') }
-  else { assert(false, `unexpected value ${v}`) }
+  else {
+    let o = v as any
+    assert(false,
+      `unexpected value ${o && typeof o == 'object' ? o.constructor.name : o}`
+    )
+  }
 }
 
-export function irreprstr(v :Fun|Block|Value, options? :Options) :string {
+export function fmtir(v :Fun|Block|Value, options? :Options) :string {
   let str = ''
-  let w = (s :string) => { str += s }
-  irrepr(v, w, options)
+  let w = (s :string) => { str += s + '\n' }
+  printir(v, w, options)
   return str
 }

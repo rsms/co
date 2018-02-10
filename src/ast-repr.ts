@@ -4,11 +4,14 @@
 import * as utf8 from './utf8'
 import { tokstr, token } from './token'
 import { termColorSupport, style, noStyle } from './termstyle'
-import {  
+import {
+  Package,
+  File,
   Group,
   Node,
 
   Field,
+  ReturnStmt,
 
   // Decl,
   ImportDecl,
@@ -25,7 +28,6 @@ import {
   FunSig,
   NoOpStmt,
   Block,
-  ReturnExpr,
   IfExpr,
   Assignment,
   Operation,
@@ -68,12 +70,15 @@ class ReprCtx {
 }
 
 
+const defaultCtx = new ReprCtx()
+
+
 export interface ReprOptions {
   colors?: bool
 }
 
 
-export function astRepr(n :Node, options? :ReprOptions) :string {
+export function astRepr(n :Package|File|Node, options? :ReprOptions) :string {
   let ctx = defaultCtx
   if (options) {
     ctx = new ReprCtx()
@@ -81,11 +86,40 @@ export function astRepr(n :Node, options? :ReprOptions) :string {
       ctx.style = options.colors ? style : noStyle
     }
   }
-  return repr1(n, '\n', ctx).trim()
+  if (n instanceof Package) {
+    return reprpkg(n, ctx)
+  } if (n instanceof File) {
+    return reprfile(n, '\n', ctx)
+  } else {
+    return repr1(n, '\n', ctx).trim()
+  }
 }
 
 
-const defaultCtx = new ReprCtx()
+function reprpkg(n :Package, c :ReprCtx) :string {
+  let s = `(pkg "${n.name.replace(/"/g,'\\"')}"`
+  if (n.files.length) {
+    let nl = '\n  '
+    for (let f of n.files) {
+      s += nl + reprfile(f, nl, c)
+    }
+    s = s.trimRight() + '\n'
+  }
+  return s + ')'
+}
+
+
+function reprfile(n :File, nl :string, c :ReprCtx) :string {
+  let s = `(file "${n.sfile.name.replace(/"/g,'\\"')}"`
+  if (n.decls.length) {
+    let nl2 = nl + '  '
+    for (let d of n.decls) {
+      s += nl2 + repr1(d, nl2, c)
+    }
+    s = s.trimRight() + nl
+  }
+  return s + ')'
+}
 
 
 function _reprt(t :Type, nl :string, c :ReprCtx) :string {
@@ -164,8 +198,8 @@ function subscriptnum(n :int) :string {
 
 function reprid(id :Ident, c :ReprCtx) :string {
   return (
-    utf8.decodeToString(id.value.bytes) +
-    c.style.pink(subscriptnum(id.ver))
+    utf8.decodeToString(id.value.bytes)
+    // + c.style.pink(subscriptnum(id.ver))
   )
 }
 
@@ -223,7 +257,7 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     )
   }
 
-  if (n instanceof ReturnExpr) {
+  if (n instanceof ReturnStmt) {
     if (n.result) {
       return newline + `(${reprcons(n, c)} ${repr1(n.result, nl2, c)})`
     }
@@ -300,6 +334,15 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     )
   }
 
+  if (n instanceof Operation) {
+    let ts = c.typedepth ? '' : reprt(n.type, newline, c)
+    let s = '(' + ts + c.style.orange(token[n.op]) + ' ' + repr1(n.x, nl2, c)
+    if (n.y) {
+      s += ' ' + repr1(n.y, nl2, c)
+    }
+    return s + ')'
+  }
+
 
   // --------
 
@@ -345,14 +388,6 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
       s += ' ='
     }
     return s + ' ' + repr1(n.type, nl2, c) + ')'
-  }
-
-  if (n instanceof Operation) {
-    s += ' ' + c.style.orange(tokstr(n.op)) + ' ' + repr1(n.x, nl2, c)
-    if (n.y) {
-      s += ' ' + repr1(n.y, nl2, c)
-    }
-    return s + ')'
   }
 
   if (n instanceof CallExpr) {

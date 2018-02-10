@@ -18,11 +18,11 @@ import { strtou } from './strtou'
 //        ImportDecl
 //        VarDecl
 //        TypeDecl
+//      ReturnStmt
 //      Expr
 //        Block
 //        Ident
 //        IfExpr
-//        ReturnExpr
 //        LiteralExpr
 //        FunExpr
 //        Assignment
@@ -232,6 +232,16 @@ export class Stmt extends Node {}
 export class NoOpStmt extends Stmt {}
 
 
+export class ReturnStmt extends Stmt {
+  constructor(pos :Pos, scope :Scope,
+  public result :Expr, // u_t_nil means no explicit return values
+  public type :Type,  // effective type. null until resolved.
+  ) {
+    super(pos, scope)
+  }
+}
+
+
 // ——————————————————————————————————————————————————————————————————
 // Declarations
 
@@ -345,14 +355,6 @@ export class IfExpr extends Expr {
   public cond :Expr,
   public then :Expr,
   public els_ :Expr|null,
-  ) {
-    super(pos, scope)
-  }
-}
-
-export class ReturnExpr extends Expr {
-  constructor(pos :Pos, scope :Scope,
-  public result :Expr, // u_t_nil means no explicit return values
   ) {
     super(pos, scope)
   }
@@ -566,6 +568,10 @@ export class Operation extends Expr {
   public y  :Expr|null = null, // nil means unary expression
   ) {
     super(pos, scope)
+  }
+
+  toString() {
+    return `(${token[this.op]} ${this.x}${this.y ? ' ' + this.y : ''})`
   }
 }
 

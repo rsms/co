@@ -18,6 +18,7 @@ import {
 
   Field,
   Stmt,
+  ReturnStmt,
   
   Decl,
   ImportDecl,
@@ -34,7 +35,6 @@ import {
   BasicLit,
   StringLit,
   Block,
-  ReturnExpr,
   IfExpr,
   Assignment,
   Operation,
@@ -655,16 +655,17 @@ export class Parser extends scanner.Scanner {
       if (f.body instanceof Block) {
         let lastindex = f.body.list.length - 1
         let result = f.body.list[lastindex]
-        if (result instanceof Expr && !(result instanceof ReturnExpr)) {
-          let ret = new ReturnExpr(
-            result.pos,
-            result.scope,
-            result,
-          )
-          ret.type = p.types.resolve(result)
+        if (result instanceof Expr) {
+          let rettype = p.types.resolve(result)
+          let ret = new ReturnStmt(result.pos, result.scope, result, rettype)
           f.body.list[lastindex] = ret
         }
       }
+      // else if (!(f.body instanceof ReturnExpr)) {
+      //   let ret = new ReturnExpr(f.body.pos, f.body.scope, f.body)
+      //   ret.type = p.types.resolve(f.body)
+      //   f.body = ret
+      // }
 
       if (sig.result === u_t_auto) {
         // inferred result type
@@ -1023,10 +1024,18 @@ export class Parser extends scanner.Scanner {
   ) {
     const p = this
 
+    // TODO refactor this and move this function (that has a closure)
     function maybeConvRVal(typ :Type, rval :Expr, index :int) {
-      if (!(typ instanceof UnresolvedType)) {
+      if (
+        !(rval.type instanceof UnresolvedType) &&
+        !(typ instanceof UnresolvedType)
+      ) {
         const convx = p.types.convert(typ, rval)
         if (!convx) {
+          if (rval.type instanceof UnresolvedType) {
+            // unresolved
+            return 
+          }
           p.error(
             (rval.type instanceof UnresolvedType ?
               `cannot convert "${rval}" to type ${typ}` :
@@ -1239,7 +1248,7 @@ export class Parser extends scanner.Scanner {
   maybeStmt() :Stmt|null {
     // Statement =
     //   Declaration | LabeledStmt | simpleStmt |
-    //   GoStmt | ReturnExpr | BreakStmt | ContinueStmt | GotoStmt |
+    //   GoStmt | ReturnStmt | BreakStmt | ContinueStmt | GotoStmt |
     //   FallthroughStmt | Block | IfExpr | SwitchStmt | SelectStmt | ForStmt |
     //   DeferStmt .
     const p = this
@@ -1316,7 +1325,7 @@ export class Parser extends scanner.Scanner {
       //   return s
 
       case token.RETURN:
-        return p.returnExpr(/*ctx=*/null)
+        return p.returnStmt()
 
       // case token.SEMI:
       //   s := new(EmptyStmt)
@@ -1394,18 +1403,18 @@ export class Parser extends scanner.Scanner {
     return s
   }
 
-  returnExpr(ctx :exprCtx) :ReturnExpr {
+  returnStmt() :ReturnStmt {
     const p = this
     const pos = p.pos
 
     p.want(token.RETURN)
 
-    const n = new ReturnExpr(pos, p.scope, u_t_nil)
-
     // expected return type (may be u_t_auto; u_t_nil/u_t_void for init)
     const fi = p.currFun()
     const frtype = fi.f.sig.result as Type  // ok; already resolved
     assert(frtype instanceof Type, "currFun sig.result type not resolved")
+
+    const n = new ReturnStmt(pos, p.scope, u_t_nil, frtype)
 
     if (p.tok == token.SEMICOLON || p.tok == token.RBRACE) {
       // no result; just "return"
@@ -1415,7 +1424,9 @@ export class Parser extends scanner.Scanner {
           // some type and nothing, which is invalid.
           fi.f.sig.result = u_t_nil //u_t_void
         } else {
-          p.syntaxError(`missing return value; expecting ${fi.autort || frtype}`)
+          p.syntaxError(
+            `missing return value; expecting ${fi.autort || frtype}`
+          )
         }
       }
       return n
@@ -1423,7 +1434,7 @@ export class Parser extends scanner.Scanner {
 
     // expecting one or more results to follow
     
-    const xs = p.exprList(ctx) // ?: maybe pass TupleExpr?
+    const xs = p.exprList(/*ctx=*/null) // ?: maybe pass TupleExpr?
     
     let rval = (
       xs.length == 1 ? xs[0] :
@@ -1497,6 +1508,8 @@ export class Parser extends scanner.Scanner {
       x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx))
     }
 
+    p.types.resolve(x)
+
     return x
   }
 
@@ -1517,14 +1530,18 @@ export class Parser extends scanner.Scanner {
           // common case of negated literal, e.g. "-3", "+0.0"
           return p.basicLit(ctx, t)
         }
-        return new Operation(pos, p.scope, t, p.unaryExpr(ctx))
+        let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx))
+        p.types.resolve(x)
+        return x
       }
 
       case token.AND: {
         p.next()
         // unaryExpr may have returned a parenthesized composite literal
         // (see comment in operand)
-        return new Operation(pos, p.scope, t, p.unaryExpr(ctx))
+        let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx))
+        p.types.resolve(x)
+        return x
         // legacy: unparen(p.unaryExpr(ctx)) to unwrap ParenExpr.
       }
 
@@ -1635,9 +1652,6 @@ export class Parser extends scanner.Scanner {
         p.popScope()
         return b
 
-      case token.RETURN:
-        return p.returnExpr(ctx)
-
       case token.IF:
         return p.ifExpr(ctx)
 
@@ -1654,7 +1668,7 @@ export class Parser extends scanner.Scanner {
 
         const x = p.bad()
         p.syntaxError("expecting expression")
-        p.next()
+        // p.next()
         return x
       }
     }
@@ -2144,7 +2158,11 @@ export class Parser extends scanner.Scanner {
       return
     }
 
-    p.errorAt("unexpected " + tokstr(p.tok) + msg, position)
+    let cond = (
+      p.tok == token.EOF ? 'unexpected end of input' :
+      `unexpected ${tokstr(p.tok)}`
+    )
+    p.errorAt(cond + msg, position)
     if (DEBUG) {
       // print token state when compiled in debug mode
       console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
