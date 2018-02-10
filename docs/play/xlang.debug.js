@@ -3,6 +3,12 @@
 'use strict';
 
 var VERSION = "1.0.0-debug", DEBUG = true;
+var global=
+void 0!==global?global:
+"undefined"!=typeof window?window:
+this;
+
+
 try{
 "undefined"!=typeof require&&require("source-map-support").install()}
 catch(_){}
@@ -40,10 +46,16 @@ var cond=arguments[0],
 msg=arguments[1],
 cons=arguments[2]||assert;
 if(!cond){
-_stackTrace(cons);
-console.error("assertion failure:",msg||cond),
-console.error(_stackTrace(cons)),
-exit(3)}}
+if("undefined"==typeof process)
+
+
+
+
+{
+
+
+throw(e=new Error("assertion failure: "+(msg||cond))).name="AssertionError",e}var e;_stackTrace(cons);console.error("assertion failure:",msg||cond),console.error(_stackTrace(cons)),exit(3)}}
+
 
 
 
@@ -87,8 +99,6 @@ process.nextTick(runAllTests):
 
 setTimeout(runAllTests,0);
 
-var fs = require('fs');
-
 class BTree {
     constructor(root) {
         this.root = root;
@@ -129,6 +139,7 @@ function bufcmp(a, b) {
         bL < aL ? 1 :
             0);
 }
+//# sourceMappingURL=btree.js.map
 
 function tokstr(t) {
     return tokenStrings.get(t) || token[t].toLowerCase();
@@ -136,8 +147,8 @@ function tokstr(t) {
 var prec;
 (function (prec) {
     prec[prec["LOWEST"] = 0] = "LOWEST";
-    prec[prec["OR"] = 1] = "OR";
-    prec[prec["AND"] = 2] = "AND";
+    prec[prec["OROR"] = 1] = "OROR";
+    prec[prec["ANDAND"] = 2] = "ANDAND";
     prec[prec["CMP"] = 3] = "CMP";
     prec[prec["ADD"] = 4] = "ADD";
     prec[prec["MUL"] = 5] = "MUL";
@@ -150,93 +161,100 @@ var token;
     token[token["literal_beg"] = 3] = "literal_beg";
     token[token["NAME"] = 4] = "NAME";
     token[token["NAMEAT"] = 5] = "NAMEAT";
-    token[token["INT"] = 6] = "INT";
-    token[token["INT_BIN"] = 7] = "INT_BIN";
-    token[token["INT_OCT"] = 8] = "INT_OCT";
-    token[token["INT_HEX"] = 9] = "INT_HEX";
-    token[token["FLOAT"] = 10] = "FLOAT";
-    token[token["RATIO"] = 11] = "RATIO";
-    token[token["CHAR"] = 12] = "CHAR";
-    token[token["STRING"] = 13] = "STRING";
-    token[token["STRING_MULTI"] = 14] = "STRING_MULTI";
-    token[token["STRING_PIECE"] = 15] = "STRING_PIECE";
-    token[token["literal_end"] = 16] = "literal_end";
-    token[token["delim_beg"] = 17] = "delim_beg";
-    token[token["LPAREN"] = 18] = "LPAREN";
-    token[token["LBRACK"] = 19] = "LBRACK";
-    token[token["LBRACE"] = 20] = "LBRACE";
-    token[token["COMMA"] = 21] = "COMMA";
-    token[token["DOT"] = 22] = "DOT";
-    token[token["PERIODS"] = 23] = "PERIODS";
-    token[token["ELLIPSIS"] = 24] = "ELLIPSIS";
-    token[token["RPAREN"] = 25] = "RPAREN";
-    token[token["RBRACK"] = 26] = "RBRACK";
-    token[token["RBRACE"] = 27] = "RBRACE";
-    token[token["SEMICOLON"] = 28] = "SEMICOLON";
-    token[token["COLON"] = 29] = "COLON";
-    token[token["delim_end"] = 30] = "delim_end";
-    token[token["operator_beg"] = 31] = "operator_beg";
-    token[token["ASSIGN"] = 32] = "ASSIGN";
-    token[token["assignop_beg"] = 33] = "assignop_beg";
-    token[token["ADD_ASSIGN"] = 34] = "ADD_ASSIGN";
-    token[token["SUB_ASSIGN"] = 35] = "SUB_ASSIGN";
-    token[token["MUL_ASSIGN"] = 36] = "MUL_ASSIGN";
-    token[token["QUO_ASSIGN"] = 37] = "QUO_ASSIGN";
-    token[token["REM_ASSIGN"] = 38] = "REM_ASSIGN";
-    token[token["AND_ASSIGN"] = 39] = "AND_ASSIGN";
-    token[token["OR_ASSIGN"] = 40] = "OR_ASSIGN";
-    token[token["XOR_ASSIGN"] = 41] = "XOR_ASSIGN";
-    token[token["SHL_ASSIGN"] = 42] = "SHL_ASSIGN";
-    token[token["SHR_ASSIGN"] = 43] = "SHR_ASSIGN";
-    token[token["AND_NOT_ASSIGN"] = 44] = "AND_NOT_ASSIGN";
-    token[token["assignop_end"] = 45] = "assignop_end";
-    token[token["INC"] = 46] = "INC";
-    token[token["DEC"] = 47] = "DEC";
-    token[token["SET_ASSIGN"] = 48] = "SET_ASSIGN";
-    token[token["NOT"] = 49] = "NOT";
-    token[token["ARROWL"] = 50] = "ARROWL";
-    token[token["ARROWR"] = 51] = "ARROWR";
-    token[token["LOR"] = 52] = "LOR";
-    token[token["LAND"] = 53] = "LAND";
-    token[token["EQL"] = 54] = "EQL";
-    token[token["NEQ"] = 55] = "NEQ";
-    token[token["LSS"] = 56] = "LSS";
-    token[token["LEQ"] = 57] = "LEQ";
-    token[token["GTR"] = 58] = "GTR";
-    token[token["GEQ"] = 59] = "GEQ";
-    token[token["ADD"] = 60] = "ADD";
-    token[token["SUB"] = 61] = "SUB";
-    token[token["OR"] = 62] = "OR";
-    token[token["XOR"] = 63] = "XOR";
-    token[token["MUL"] = 64] = "MUL";
-    token[token["QUO"] = 65] = "QUO";
-    token[token["REM"] = 66] = "REM";
-    token[token["AND"] = 67] = "AND";
-    token[token["AND_NOT"] = 68] = "AND_NOT";
-    token[token["SHL"] = 69] = "SHL";
-    token[token["SHR"] = 70] = "SHR";
-    token[token["operator_end"] = 71] = "operator_end";
-    token[token["keyword_beg"] = 72] = "keyword_beg";
-    token[token["BREAK"] = 73] = "BREAK";
-    token[token["CONTINUE"] = 74] = "CONTINUE";
-    token[token["DEFAULT"] = 75] = "DEFAULT";
-    token[token["DEFER"] = 76] = "DEFER";
-    token[token["ELSE"] = 77] = "ELSE";
-    token[token["ENUM"] = 78] = "ENUM";
-    token[token["FALLTHROUGH"] = 79] = "FALLTHROUGH";
-    token[token["FOR"] = 80] = "FOR";
-    token[token["FUN"] = 81] = "FUN";
-    token[token["GO"] = 82] = "GO";
-    token[token["IF"] = 83] = "IF";
-    token[token["IMPORT"] = 84] = "IMPORT";
-    token[token["INTERFACE"] = 85] = "INTERFACE";
-    token[token["IN"] = 86] = "IN";
-    token[token["RETURN"] = 87] = "RETURN";
-    token[token["SELECT"] = 88] = "SELECT";
-    token[token["SWITCH"] = 89] = "SWITCH";
-    token[token["SYMBOL"] = 90] = "SYMBOL";
-    token[token["TYPE"] = 91] = "TYPE";
-    token[token["keyword_end"] = 92] = "keyword_end";
+    token[token["literal_int_beg"] = 6] = "literal_int_beg";
+    token[token["INT"] = 7] = "INT";
+    token[token["INT_BIN"] = 8] = "INT_BIN";
+    token[token["INT_OCT"] = 9] = "INT_OCT";
+    token[token["INT_HEX"] = 10] = "INT_HEX";
+    token[token["literal_int_end"] = 11] = "literal_int_end";
+    token[token["FLOAT"] = 12] = "FLOAT";
+    token[token["RATIO"] = 13] = "RATIO";
+    token[token["CHAR"] = 14] = "CHAR";
+    token[token["STRING"] = 15] = "STRING";
+    token[token["STRING_MULTI"] = 16] = "STRING_MULTI";
+    token[token["STRING_PIECE"] = 17] = "STRING_PIECE";
+    token[token["literal_end"] = 18] = "literal_end";
+    token[token["delim_beg"] = 19] = "delim_beg";
+    token[token["LPAREN"] = 20] = "LPAREN";
+    token[token["LBRACKET"] = 21] = "LBRACKET";
+    token[token["LBRACE"] = 22] = "LBRACE";
+    token[token["COMMA"] = 23] = "COMMA";
+    token[token["DOT"] = 24] = "DOT";
+    token[token["PERIODS"] = 25] = "PERIODS";
+    token[token["ELLIPSIS"] = 26] = "ELLIPSIS";
+    token[token["RPAREN"] = 27] = "RPAREN";
+    token[token["RBRACKET"] = 28] = "RBRACKET";
+    token[token["RBRACE"] = 29] = "RBRACE";
+    token[token["SEMICOLON"] = 30] = "SEMICOLON";
+    token[token["COLON"] = 31] = "COLON";
+    token[token["delim_end"] = 32] = "delim_end";
+    token[token["operator_beg"] = 33] = "operator_beg";
+    token[token["ASSIGN"] = 34] = "ASSIGN";
+    token[token["assignop_beg"] = 35] = "assignop_beg";
+    token[token["ADD_ASSIGN"] = 36] = "ADD_ASSIGN";
+    token[token["SUB_ASSIGN"] = 37] = "SUB_ASSIGN";
+    token[token["MUL_ASSIGN"] = 38] = "MUL_ASSIGN";
+    token[token["QUO_ASSIGN"] = 39] = "QUO_ASSIGN";
+    token[token["REM_ASSIGN"] = 40] = "REM_ASSIGN";
+    token[token["AND_ASSIGN"] = 41] = "AND_ASSIGN";
+    token[token["OR_ASSIGN"] = 42] = "OR_ASSIGN";
+    token[token["XOR_ASSIGN"] = 43] = "XOR_ASSIGN";
+    token[token["SHL_ASSIGN"] = 44] = "SHL_ASSIGN";
+    token[token["SHR_ASSIGN"] = 45] = "SHR_ASSIGN";
+    token[token["AND_NOT_ASSIGN"] = 46] = "AND_NOT_ASSIGN";
+    token[token["assignop_end"] = 47] = "assignop_end";
+    token[token["INC"] = 48] = "INC";
+    token[token["DEC"] = 49] = "DEC";
+    token[token["SET_ASSIGN"] = 50] = "SET_ASSIGN";
+    token[token["NOT"] = 51] = "NOT";
+    token[token["ARROWL"] = 52] = "ARROWL";
+    token[token["ARROWR"] = 53] = "ARROWR";
+    token[token["cmpop_beg"] = 54] = "cmpop_beg";
+    token[token["OROR"] = 55] = "OROR";
+    token[token["ANDAND"] = 56] = "ANDAND";
+    token[token["EQL"] = 57] = "EQL";
+    token[token["NEQ"] = 58] = "NEQ";
+    token[token["LSS"] = 59] = "LSS";
+    token[token["LEQ"] = 60] = "LEQ";
+    token[token["GTR"] = 61] = "GTR";
+    token[token["GEQ"] = 62] = "GEQ";
+    token[token["cmpop_end"] = 63] = "cmpop_end";
+    token[token["ADD"] = 64] = "ADD";
+    token[token["SUB"] = 65] = "SUB";
+    token[token["OR"] = 66] = "OR";
+    token[token["XOR"] = 67] = "XOR";
+    token[token["MUL"] = 68] = "MUL";
+    token[token["QUO"] = 69] = "QUO";
+    token[token["REM"] = 70] = "REM";
+    token[token["AND"] = 71] = "AND";
+    token[token["AND_NOT"] = 72] = "AND_NOT";
+    token[token["SHL"] = 73] = "SHL";
+    token[token["SHR"] = 74] = "SHR";
+    token[token["operator_end"] = 75] = "operator_end";
+    token[token["keyword_beg"] = 76] = "keyword_beg";
+    token[token["BREAK"] = 77] = "BREAK";
+    token[token["CONTINUE"] = 78] = "CONTINUE";
+    token[token["DEFAULT"] = 79] = "DEFAULT";
+    token[token["DEFER"] = 80] = "DEFER";
+    token[token["ELSE"] = 81] = "ELSE";
+    token[token["ENUM"] = 82] = "ENUM";
+    token[token["FALLTHROUGH"] = 83] = "FALLTHROUGH";
+    token[token["FOR"] = 84] = "FOR";
+    token[token["FUN"] = 85] = "FUN";
+    token[token["GO"] = 86] = "GO";
+    token[token["IF"] = 87] = "IF";
+    token[token["IMPORT"] = 88] = "IMPORT";
+    token[token["INTERFACE"] = 89] = "INTERFACE";
+    token[token["IN"] = 90] = "IN";
+    token[token["RETURN"] = 91] = "RETURN";
+    token[token["SELECT"] = 92] = "SELECT";
+    token[token["SWITCH"] = 93] = "SWITCH";
+    token[token["SYMBOL"] = 94] = "SYMBOL";
+    token[token["TYPE"] = 95] = "TYPE";
+    token[token["keyword_end"] = 96] = "keyword_end";
+    token[token["LOAD"] = 97] = "LOAD";
+    token[token["STORE"] = 98] = "STORE";
+    token[token["COPY"] = 99] = "COPY";
 })(token || (token = {}));
 const tokenStrings = new Map([
     [token.NAMEAT, "@"],
@@ -262,8 +280,8 @@ const tokenStrings = new Map([
     [token.SHL_ASSIGN, "<<="],
     [token.SHR_ASSIGN, ">>="],
     [token.AND_NOT_ASSIGN, "&^="],
-    [token.LAND, "&&"],
-    [token.LOR, "||"],
+    [token.ANDAND, "&&"],
+    [token.OROR, "||"],
     [token.ARROWL, "<-"],
     [token.ARROWR, "->"],
     [token.INC, "++"],
@@ -280,15 +298,18 @@ const tokenStrings = new Map([
     [token.ELLIPSIS, "..."],
     [token.PERIODS, ".."],
     [token.LPAREN, "("],
-    [token.LBRACK, "["],
+    [token.LBRACKET, "["],
     [token.LBRACE, "{"],
     [token.COMMA, ","],
     [token.DOT, "."],
     [token.RPAREN, ")"],
-    [token.RBRACK, "]"],
+    [token.RBRACKET, "]"],
     [token.RBRACE, "}"],
     [token.SEMICOLON, ";"],
     [token.COLON, ":"],
+    [token.LOAD, "load"],
+    [token.STORE, "store"],
+    [token.COPY, "copy"],
 ]);
 for (let i = token.keyword_beg + 1; i < token.keyword_end; ++i) {
     const t = token[i];
@@ -324,6 +345,116 @@ const keywords = new BTree({ k: cdat.subarray(0, 3), v: token.FUN,
 function lookupKeyword(ident) {
     return keywords.get(ident) || token.NAME;
 }
+//# sourceMappingURL=token.js.map
+
+function search(n, f) {
+    let i = 0, j = n;
+    while (i < j) {
+        const mid = i + (((j - i) / 2) >> 0);
+        if (!f(mid)) {
+            i = mid + 1;
+        }
+        else {
+            j = mid;
+        }
+    }
+    return i;
+}
+function bufcopy(bytes, addlSize) {
+    const size = bytes.length + addlSize;
+    const b2 = new Uint8Array(size);
+    b2.set(bytes, 0);
+    return b2;
+}
+function asciibuf(s) {
+    return Uint8Array.from(s, (v, k) => s.charCodeAt(k));
+}
+
+function bufcmp$1(a, b, aStart = 0, aEnd = a.length, bStart = 0, bEnd = b.length) {
+    if (a === b) {
+        return 0;
+    }
+    var ai = aStart, bi = bStart;
+    for (; ai != aEnd && bi != bEnd; ++ai, ++bi) {
+        if (a[ai] < b[bi]) {
+            return -1;
+        }
+        if (b[bi] < a[ai]) {
+            return 1;
+        }
+    }
+    var aL = aEnd - aStart, bL = bEnd - bStart;
+    return (aL < bL ? -1 :
+        bL < aL ? 1 :
+            0);
+}
+
+class AppendBuffer {
+    constructor(size) {
+        this.length = 0;
+        this.buffer = new Uint8Array(size);
+    }
+    reset() {
+        this.length = 0;
+    }
+    reserve(addlSize) {
+        if (this.length + addlSize >= this.buffer.length) {
+            this._grow(addlSize);
+        }
+    }
+    subarray() {
+        return this.buffer.subarray(0, this.length);
+    }
+    append(b) {
+        if (this.length >= this.buffer.length) {
+            this._grow();
+        }
+        this.buffer[this.length++] = b;
+    }
+    appendRange(src, srcStart, srcEnd) {
+        const end = (srcEnd === undefined) ? src.length : srcEnd;
+        const size = end - srcStart;
+        if (this.length + size >= this.buffer.length) {
+            this._grow(size);
+        }
+        this.buffer.set(src.subarray(srcStart, srcEnd), this.length);
+        this.length += size;
+    }
+    _grow(minAddlSize = 8) {
+        this.buffer = bufcopy(this.buffer, Math.min(minAddlSize, this.buffer.length));
+    }
+}
+const debuglog = DEBUG ? function (...v) {
+    let e = new Error();
+    let prefix = '';
+    if (e.stack) {
+        let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(e.stack.split(/\n/, 3)[2]);
+        if (m) {
+            const fun = m[1];
+            const origin = m[2];
+            if (origin) {
+                const filename = origin.split('.ts:', 1)[0];
+                const trmsg = String(v[0]);
+                if (trmsg.indexOf('TODO:') == 0 || trmsg.indexOf('TODO ') == 0) {
+                    prefix = 'TODO src/' + origin + ' ' + fun + '>';
+                    v[0] = trmsg.substr(5).replace(/^\s*/, '');
+                }
+                else {
+                    prefix = filename + '/' + fun + '>';
+                }
+            }
+            else {
+                prefix = fun + '>';
+            }
+        }
+        else {
+            prefix = 'DEBUG>';
+        }
+    }
+    v.splice(0, 0, prefix);
+    console.log.apply(console, v);
+} : function (...v) { };
+//# sourceMappingURL=util.js.map
 
 const UniError = 0xFFFD;
 const UniSelf = 0x80;
@@ -440,116 +571,7 @@ function encodeAsString(cp) {
     cp -= 0x10000;
     return String.fromCharCode((cp >> 10) + surrogateMin, (cp % rune2Max) + 0xDC00);
 }
-
-function search(n, f) {
-    let i = 0, j = n;
-    while (i < j) {
-        const mid = i + (((j - i) / 2) >> 0);
-        if (!f(mid)) {
-            i = mid + 1;
-        }
-        else {
-            j = mid;
-        }
-    }
-    return i;
-}
-function bufcopy(bytes, addlSize) {
-    const size = bytes.length + addlSize;
-    const b2 = new Uint8Array(size);
-    b2.set(bytes, 0);
-    return b2;
-}
-function asciibuf(s) {
-    return Uint8Array.from(s, (v, k) => s.charCodeAt(k));
-}
-function buf8str(b) {
-    return decodeToString(b);
-}
-function bufcmp$1(a, b, aStart = 0, aEnd = a.length, bStart = 0, bEnd = b.length) {
-    if (a === b) {
-        return 0;
-    }
-    var ai = aStart, bi = bStart;
-    for (; ai != aEnd && bi != bEnd; ++ai, ++bi) {
-        if (a[ai] < b[bi]) {
-            return -1;
-        }
-        if (b[bi] < a[ai]) {
-            return 1;
-        }
-    }
-    var aL = aEnd - aStart, bL = bEnd - bStart;
-    return (aL < bL ? -1 :
-        bL < aL ? 1 :
-            0);
-}
-
-class AppendBuffer {
-    constructor(size) {
-        this.length = 0;
-        this.buffer = new Uint8Array(size);
-    }
-    reset() {
-        this.length = 0;
-    }
-    reserve(addlSize) {
-        if (this.length + addlSize >= this.buffer.length) {
-            this._grow(addlSize);
-        }
-    }
-    subarray() {
-        return this.buffer.subarray(0, this.length);
-    }
-    append(b) {
-        if (this.length >= this.buffer.length) {
-            this._grow();
-        }
-        this.buffer[this.length++] = b;
-    }
-    appendRange(src, srcStart, srcEnd) {
-        const end = (srcEnd === undefined) ? src.length : srcEnd;
-        const size = end - srcStart;
-        if (this.length + size >= this.buffer.length) {
-            this._grow(size);
-        }
-        this.buffer.set(src.subarray(srcStart, srcEnd), this.length);
-        this.length += size;
-    }
-    _grow(minAddlSize = 8) {
-        this.buffer = bufcopy(this.buffer, Math.min(minAddlSize, this.buffer.length));
-    }
-}
-const debuglog = DEBUG ? function (...v) {
-    let e = new Error();
-    let prefix = '';
-    if (e.stack) {
-        let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(e.stack.split(/\n/, 3)[2]);
-        if (m) {
-            const fun = m[1];
-            const origin = m[2];
-            if (origin) {
-                const filename = origin.split('.ts:', 1)[0];
-                const trmsg = String(v[0]);
-                if (trmsg.indexOf('TODO:') == 0 || trmsg.indexOf('TODO ') == 0) {
-                    prefix = 'TODO src/' + origin + ' ' + fun + '>';
-                    v[0] = trmsg.substr(5).replace(/^\s*/, '');
-                }
-                else {
-                    prefix = filename + '/' + fun + '>';
-                }
-            }
-            else {
-                prefix = fun + '>';
-            }
-        }
-        else {
-            prefix = 'DEBUG>';
-        }
-    }
-    v.splice(0, 0, prefix);
-    console.log.apply(console, v);
-} : function (...v) { };
+//# sourceMappingURL=utf8.js.map
 
 const MaxRune = 0x10FFFF;
 const InvalidChar = 0xFFFD;
@@ -905,6 +927,85 @@ function isEmojiModifierBase(c) {
 function isEmojiModifier(c) {
     return ((0x1F3FB <= c && c <= 0x1F3FF));
 }
+//# sourceMappingURL=unicode.js.map
+
+const TERM = typeof process != 'undefined' && process.env.TERM || '';
+function sfn(open, close) {
+    open = '\x1b[' + open + 'm';
+    close = '\x1b[' + close + 'm';
+    return (s) => open + s + close;
+}
+const termColorSupport = (TERM && ['xterm', 'screen', 'vt100'].some(s => TERM.indexOf(s) != -1) ? (TERM.indexOf('256color') != -1 ? 256 :
+    16) : 0);
+const passThrough = ((s) => s);
+const noStyle = {
+    'clear': "",
+    'bold': passThrough,
+    'italic': passThrough,
+    'underline': passThrough,
+    'inverse': passThrough,
+    'white': passThrough,
+    'grey': passThrough,
+    'black': passThrough,
+    'blue': passThrough,
+    'cyan': passThrough,
+    'green': passThrough,
+    'magenta': passThrough,
+    'purple': passThrough,
+    'pink': passThrough,
+    'red': passThrough,
+    'yellow': passThrough,
+    'lightyellow': passThrough,
+    'orange': passThrough,
+};
+const style = (termColorSupport == 0 ? noStyle :
+    termColorSupport < 256 ? {
+        'clear': "\e[0m",
+        'bold': sfn('1', '22'),
+        'italic': sfn('3', '23'),
+        'underline': sfn('4', '24'),
+        'inverse': sfn('7', '27'),
+        'white': sfn('37', '39'),
+        'grey': sfn('90', '39'),
+        'black': sfn('30', '39'),
+        'blue': sfn('34', '39'),
+        'cyan': sfn('36', '39'),
+        'green': sfn('32', '39'),
+        'magenta': sfn('35', '39'),
+        'purple': sfn('35', '39'),
+        'pink': sfn('35', '39'),
+        'red': sfn('31', '39'),
+        'yellow': sfn('33', '39'),
+        'lightyellow': sfn('93', '39'),
+        'orange': sfn('33', '39'),
+    } : {
+        'clear': "\e[0m",
+        'bold': sfn('1', '22'),
+        'italic': sfn('3', '23'),
+        'underline': sfn('4', '24'),
+        'inverse': sfn('7', '27'),
+        'white': sfn('38;2;255;255;255', '39'),
+        'grey': sfn('38;5;244', '39'),
+        'black': sfn('38;5;16', '39'),
+        'blue': sfn('38;5;75', '39'),
+        'cyan': sfn('38;5;87', '39'),
+        'green': sfn('38;5;84', '39'),
+        'magenta': sfn('38;5;213', '39'),
+        'purple': sfn('38;5;141', '39'),
+        'pink': sfn('38;5;211', '39'),
+        'red': sfn('38;2;255;110;80', '39'),
+        'yellow': sfn('38;5;227', '39'),
+        'lightyellow': sfn('38;5;229', '39'),
+        'orange': sfn('38;5;215', '39'),
+    });
+function streamStyle(w) {
+    return termColorSupport && w.isTTY ? style : noStyle;
+}
+const stdoutStyle = (typeof process != 'undefined' && streamStyle(process.stdout) || noStyle);
+const stderrStyle = (typeof process != 'undefined' && streamStyle(process.stderr) || noStyle);
+const stdoutSupportsStyle = stdoutStyle !== noStyle;
+
+//# sourceMappingURL=termstyle.js.map
 
 class ErrorReporter {
     constructor(defaultErrCode, errh = null) {
@@ -917,8 +1018,33 @@ class ErrorReporter {
             this.errh(position, msg, code || this.defaultErrCode);
         }
         this.errorCount++;
+        if (DEBUG) {
+            let e = new Error();
+            let maxlen = 0, SP = '                              ';
+            const S = termColorSupport ? style : noStyle;
+            let v = (e.stack || '').split('\n').slice(2).map(s => {
+                let m = /\s+at\s+([^\s]+)\s+\((.+)\)/.exec(s);
+                if (!m) {
+                    return [s, null];
+                }
+                let p = m[2].lastIndexOf('/src/');
+                if (p != -1) {
+                    m[2] = m[2].substr(p + 1);
+                }
+                maxlen = Math.max(m[1].length, maxlen);
+                return [m[1], m[2]];
+            });
+            console.error(v.map(s => {
+                if (!s[1]) {
+                    return S.italic(String(s[0]));
+                }
+                let f = s[0];
+                return S.grey('  ' + f + SP.substr(0, maxlen - f.length) + '  ' + s[1]);
+            }).join('\n'));
+        }
     }
 }
+//# sourceMappingURL=error.js.map
 
 const SL = 0x2F;
 const DOT = 0x2E;
@@ -1076,6 +1202,7 @@ TEST("path.join", () => {
     t(["a", ""], "a");
     t(["", "a"], "a");
 });
+//# sourceMappingURL=path.js.map
 
 var Mode;
 (function (Mode) {
@@ -1135,7 +1262,14 @@ class Scanner extends ErrorReporter {
         s.lineOffset = 0;
         s.insertSemi = false;
         s.errorCount = 0;
+        s.parenL = 0;
+        s.interpStrL = 0;
+        s.byteval = null;
         s.readchar();
+    }
+    setOffset(offs) {
+        const s = this;
+        s.offset = s.rdOffset = offs;
     }
     readchar() {
         const s = this;
@@ -1273,7 +1407,10 @@ class Scanner extends ErrorReporter {
                     }
                     break;
                 case 0x2e: {
-                    if (isDigit(s.ch)) {
+                    if (isDigit(s.ch) &&
+                        s.tok != token.NAME &&
+                        s.tok != token.RPAREN &&
+                        s.tok != token.RBRACKET) {
                         s.scanFloatNumber(true);
                         insertSemi = true;
                     }
@@ -1334,10 +1471,10 @@ class Scanner extends ErrorReporter {
                     }
                     break;
                 case 0x5b:
-                    s.tok = token.LBRACK;
+                    s.tok = token.LBRACKET;
                     break;
                 case 0x5d:
-                    s.tok = token.RBRACK;
+                    s.tok = token.RBRACKET;
                     insertSemi = true;
                     break;
                 case 0x7b:
@@ -1527,8 +1664,8 @@ class Scanner extends ErrorReporter {
                         s.prec = prec.LOWEST;
                     }
                     else if (s.gotchar(ch)) {
-                        s.tok = token.LAND;
-                        s.prec = prec.AND;
+                        s.tok = token.ANDAND;
+                        s.prec = prec.ANDAND;
                     }
                     else {
                         s.tok = token.AND;
@@ -1542,8 +1679,8 @@ class Scanner extends ErrorReporter {
                         s.prec = prec.LOWEST;
                     }
                     else if (s.gotchar(ch)) {
-                        s.tok = token.LOR;
-                        s.prec = prec.OR;
+                        s.tok = token.OROR;
+                        s.prec = prec.OROR;
                     }
                     else {
                         s.tok = token.OR;
@@ -2264,6 +2401,71 @@ const asciiFeats = new Uint8Array([
     0,
     0,
 ]);
+//# sourceMappingURL=scanner.js.map
+
+function strtou(b, base, offs = 0) {
+    assert(base >= 2);
+    assert(base <= 36);
+    var end = b.length;
+    var acc = 0;
+    var any = 0;
+    var cutoff = Math.floor(Number.MAX_SAFE_INTEGER / base);
+    var cutlim = Number.MAX_SAFE_INTEGER % base;
+    var i = offs, c = 0;
+    while (i < end) {
+        c = b[i];
+        if (c >= 0x30 && c <= 0x39) {
+            c -= 0x30;
+        }
+        else if (c >= 0x41 && c <= 0x5A) {
+            c -= 0x41 - 10;
+        }
+        else if (c >= 0x61 && c <= 0x7A) {
+            c -= 0x61 - 10;
+        }
+        else {
+            return -1;
+        }
+        if (c >= base) {
+            return -1;
+        }
+        if (any < 0 || acc > cutoff || (acc == cutoff && c > cutlim)) {
+            any = -1;
+        }
+        else {
+            any = 1;
+            acc = (acc * base) + c;
+        }
+        i++;
+    }
+    return ((any < 0 ||
+        any == 0) ? -1 :
+        acc);
+}
+TEST("strtou", () => {
+    function t(input, base, expect) {
+        let buf = Uint8Array.from(input, (v, k) => input.charCodeAt(k));
+        let output = strtou(buf, base);
+        assert(output === expect, `strtou32("${input}", ${base}) => ${output}; expected ${expect}`);
+    }
+    t("0", 10, 0);
+    t("000000000000", 10, 0);
+    t("1", 10, 1);
+    t("00000000000000000000000000000000000000000000000001", 10, 1);
+    t("123", 10, 123);
+    t("4294967295", 10, 4294967295);
+    t(Number.MAX_SAFE_INTEGER.toString(10), 10, Number.MAX_SAFE_INTEGER);
+    t((Number.MAX_SAFE_INTEGER + 1).toString(10), 10, -1);
+    t("0", 16, 0x0);
+    t("FF", 16, 0xFF);
+    t("DEADBEEF", 16, 0xDEADBEEF);
+    t("deadbeef", 16, 0xdeadbeef);
+    t("dEaDbEef", 16, 0xdeadbeef);
+    t("0000DEADBEEF", 16, 0xDEADBEEF);
+    t("x123", 10, -1);
+    t("-123", 10, -1);
+});
+//# sourceMappingURL=strtou.js.map
 
 let nextgid = 0;
 class Group {
@@ -2287,20 +2489,27 @@ class Node {
     }
 }
 class Field extends Node {
-    constructor(pos, scope, type, ident) {
+    constructor(pos, scope, type, name) {
         super(pos, scope);
         this.type = type;
-        this.ident = ident;
+        this.name = name;
     }
 }
 class Ent {
-    constructor(name, decl, value, data = null) {
+    constructor(name, decl, value, data = null, type = null) {
         this.name = name;
         this.decl = decl;
         this.value = value;
         this.data = data;
+        this.type = type;
         this.writes = 0;
-        this.reads = new Set();
+        this.nreads = 0;
+    }
+    getTypeExpr() {
+        return ((this.decl && (this.decl instanceof Field ||
+            this.decl instanceof VarDecl) && this.decl.type) ||
+            (this.value && this.value.type) ||
+            this.value);
     }
     get isConstant() {
         return this.writes == 0;
@@ -2374,7 +2583,24 @@ class Scope {
     }
 }
 const nilScope = new Scope(null);
-class Decl extends Node {
+class Stmt extends Node {
+}
+class NoOpStmt extends Stmt {
+}
+class ReturnStmt extends Stmt {
+    constructor(pos, scope, result, type) {
+        super(pos, scope);
+        this.result = result;
+        this.type = type;
+    }
+}
+class Decl extends Stmt {
+}
+class MultiDecl extends Decl {
+    constructor(pos, scope, decls) {
+        super(pos, scope);
+        this.decls = decls;
+    }
 }
 class ImportDecl extends Decl {
     constructor(pos, scope, path, localIdent) {
@@ -2401,49 +2627,55 @@ class TypeDecl extends Decl {
         this.group = group;
     }
 }
-class Stmt extends Node {
-}
-class BlockStmt extends Stmt {
-    constructor(pos, scope, list) {
-        super(pos, scope);
-        this.list = list;
-    }
-}
-class SimpleStmt extends Stmt {
-}
-class ExprStmt extends SimpleStmt {
-    constructor(pos, scope, expr) {
-        super(pos, scope);
-        this.expr = expr;
-    }
-}
-class ReturnStmt extends Stmt {
-    constructor(pos, scope, result) {
-        super(pos, scope);
-        this.result = result;
-    }
-}
-class AssignStmt extends SimpleStmt {
-    constructor(pos, scope, op, lhs, rhs) {
-        super(pos, scope);
-        this.op = op;
-        this.lhs = lhs;
-        this.rhs = rhs;
-    }
-}
-class DeclStmt extends SimpleStmt {
-    constructor(pos, scope, decls) {
-        super(pos, scope);
-        this.decls = decls;
-    }
-}
-class Expr extends Node {
+class Expr extends Stmt {
     constructor() {
         super(...arguments);
         this.type = null;
     }
 }
 class BadExpr extends Expr {
+}
+class Ident extends Expr {
+    constructor(pos, scope, value, ver = 0) {
+        super(pos, scope);
+        this.value = value;
+        this.ver = ver;
+        this.ent = null;
+    }
+    toString() { return String(this.value); }
+    incrWrite() {
+        assert(this.ent != null);
+        let ent = this.ent;
+        ent.writes++;
+        this.ver = ent.writes;
+    }
+    refEnt(ent) {
+        assert(this !== ent.decl, "ref declaration");
+        ent.nreads++;
+        this.ent = ent;
+        this.ver = ent.writes;
+    }
+    unrefEnt() {
+        assert(this.ent, "null ent");
+        const ent = this.ent;
+        ent.nreads--;
+        this.ent = null;
+        this.ver = 0;
+    }
+}
+class Block extends Expr {
+    constructor(pos, scope, list) {
+        super(pos, scope);
+        this.list = list;
+    }
+}
+class IfExpr extends Expr {
+    constructor(pos, scope, cond, then, els_) {
+        super(pos, scope);
+        this.cond = cond;
+        this.then = then;
+        this.els_ = els_;
+    }
 }
 class TupleExpr extends Expr {
     constructor(pos, scope, exprs) {
@@ -2464,24 +2696,26 @@ class SelectorExpr extends Expr {
         return `${this.lhs}.${this.rhs}`;
     }
 }
-class Ident extends Expr {
-    constructor(pos, scope, value) {
+class IndexExpr extends Expr {
+    constructor(pos, scope, operand, index) {
         super(pos, scope);
-        this.value = value;
-        this.ent = null;
+        this.operand = operand;
+        this.index = index;
+        this.indexv = -1;
     }
-    toString() { return String(this.value); }
-    refEnt(ent) {
-        assert(this !== ent.decl, "ref declaration");
-        ent.reads.add(this);
-        this.ent = ent;
+    toString() {
+        return `${this.operand}[${this.index}]`;
     }
-    unrefEnt() {
-        assert(this.ent, "null ent");
-        const ent = this.ent;
-        const _ok = ent.reads.delete(this);
-        assert(_ok, "ent not referenced");
-        this.ent = null;
+}
+class SliceExpr extends Expr {
+    constructor(pos, scope, operand, start, end) {
+        super(pos, scope);
+        this.operand = operand;
+        this.start = start;
+        this.end = end;
+    }
+    toString() {
+        return `${this.operand}[${this.start || ''}:${this.end || ''}]`;
     }
 }
 class RestExpr extends Expr {
@@ -2493,13 +2727,87 @@ class RestExpr extends Expr {
 class LiteralExpr extends Expr {
 }
 class BasicLit extends LiteralExpr {
-    constructor(pos, scope, tok, value) {
+    constructor(pos, scope, kind, value, op = token.ILLEGAL) {
         super(pos, scope);
-        this.tok = tok;
+        this.kind = kind;
         this.value = value;
+        this.op = op;
     }
     toString() {
-        return decodeToString(this.value);
+        return ((this.op != token.ILLEGAL ? tokstr(this.op) : '') +
+            decodeToString(this.value));
+    }
+    isInt() {
+        return (token.literal_int_beg < this.kind &&
+            this.kind < token.literal_int_end);
+    }
+    isFloat() {
+        return this.kind == token.FLOAT;
+    }
+    isSignedInt() {
+        assert(this.isInt(), "called isSignedInt on non-integer");
+        return (this.type instanceof IntType ? this.type.signed :
+            this.op == token.SUB);
+    }
+    parseSInt() {
+        let base = 0, b = this.value;
+        switch (this.kind) {
+            case token.INT_BIN:
+                base = 2;
+                b = b.subarray(2);
+                break;
+            case token.INT_OCT:
+                base = 8;
+                b = b.subarray(2);
+                break;
+            case token.INT:
+                base = 10;
+                break;
+            case token.INT_HEX:
+                base = 16;
+                b = b.subarray(2);
+                break;
+            default: return -1;
+        }
+        var v = parseInt(String.fromCharCode.apply(null, b), base);
+        return (v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER ? NaN :
+            v);
+    }
+    parseUInt() {
+        assert(this.isInt(), "calling parseUInt on a non-integer");
+        if (this.op == token.SUB) {
+            return -1;
+        }
+        let base = 0, offs = 0;
+        switch (this.kind) {
+            case token.INT_BIN:
+                base = 2;
+                offs = 2;
+                break;
+            case token.INT_OCT:
+                base = 8;
+                offs = 2;
+                break;
+            case token.INT:
+                base = 10;
+                break;
+            case token.INT_HEX:
+                base = 16;
+                offs = 2;
+                break;
+            default: return -1;
+        }
+        return strtou(this.value, base, offs);
+    }
+    parseFloat() {
+        assert(this.isFloat(), "called parseFloat on non-float");
+        let str = String.fromCharCode.apply(null, this.value);
+        let c = parseFloat(str);
+        assert(!isNaN(c), `failed to parse "${str}"`);
+        if (!isNaN(c) && this.op == token.SUB) {
+            c = -c;
+        }
+        return c;
     }
 }
 class StringLit extends LiteralExpr {
@@ -2511,12 +2819,26 @@ class StringLit extends LiteralExpr {
         return JSON.stringify(decodeToString(this.value));
     }
 }
+class Assignment extends Expr {
+    constructor(pos, scope, op, lhs, rhs) {
+        super(pos, scope);
+        this.op = op;
+        this.lhs = lhs;
+        this.rhs = rhs;
+    }
+    toString() {
+        return `${this.lhs.join(', ')} ${tokstr(this.op)} ${this.rhs.join(', ')}`;
+    }
+}
 class Operation extends Expr {
     constructor(pos, scope, op, x, y = null) {
         super(pos, scope);
         this.op = op;
         this.x = x;
         this.y = y;
+    }
+    toString() {
+        return `(${token[this.op]} ${this.x}${this.y ? ' ' + this.y : ''})`;
     }
 }
 class CallExpr extends Expr {
@@ -2527,23 +2849,13 @@ class CallExpr extends Expr {
         this.hasDots = hasDots;
     }
 }
-class ParenExpr extends Expr {
-    constructor(pos, scope, x) {
-        super(pos, scope);
-        this.x = x;
-    }
-}
-class FunDecl extends Expr {
+class FunExpr extends Expr {
     constructor(pos, scope, name, sig, isInit = false) {
         super(pos, scope);
         this.name = name;
         this.sig = sig;
         this.isInit = isInit;
         this.body = null;
-        this.nlocali32 = 0;
-        this.nlocali64 = 0;
-        this.nlocalf32 = 0;
-        this.nlocalf64 = 0;
         scope.fun = this;
     }
 }
@@ -2574,6 +2886,9 @@ class Type extends Expr {
         this.ent = null;
         this.type = this;
     }
+    accepts(other) {
+        return this.equals(other);
+    }
     equals(other) {
         return this === other;
     }
@@ -2585,49 +2900,77 @@ class UnresolvedType extends Type {
         this.refs = null;
     }
     addRef(x) {
+        assert(x !== this.expr);
         if (!this.refs) {
-            this.refs = [x];
+            this.refs = new Set([x]);
         }
         else {
-            this.refs.push(x);
+            this.refs.add(x);
         }
     }
     toString() {
-        return this.expr.toString();
+        return '~' + this.expr.toString();
     }
 }
-class IntrinsicType extends Type {
-    constructor(bitsize, name) {
+var RegType;
+(function (RegType) {
+    RegType[RegType["i32"] = 0] = "i32";
+    RegType[RegType["i64"] = 1] = "i64";
+    RegType[RegType["f32"] = 2] = "f32";
+    RegType[RegType["f64"] = 3] = "f64";
+})(RegType || (RegType = {}));
+class BasicType extends Type {
+    constructor(bitsize, regtype, name) {
         super(0, nilScope);
         this.bitsize = bitsize;
+        this.regtype = regtype;
         this.name = name;
     }
     toString() {
         return this.name;
     }
     equals(other) {
-        return (this === other ||
-            (other instanceof ConstStringType && this.name == 'string'));
+        return this === other;
     }
 }
-class ConstStringType extends IntrinsicType {
-    constructor(bitsize, length) {
-        super(bitsize, 'str');
-        this.bitsize = bitsize;
+class IntType extends BasicType {
+    constructor(bitsize, regtype, name, signed) {
+        super(bitsize, regtype, name);
+        this.signed = signed;
+    }
+}
+const uintz = 32;
+const uintregtype = uintz <= 32 ? RegType.i32 : RegType.i64;
+const u_t_auto = new BasicType(0, RegType.i32, 'auto');
+const u_t_nil = new BasicType(0, RegType.i32, 'nil');
+const u_t_bool = new BasicType(1, RegType.i32, 'bool');
+const u_t_u8 = new IntType(8, RegType.i32, 'u8', false);
+const u_t_i8 = new IntType(7, RegType.i32, 'i8', true);
+const u_t_u16 = new IntType(16, RegType.i32, 'u16', false);
+const u_t_i16 = new IntType(15, RegType.i32, 'i16', true);
+const u_t_u32 = new IntType(32, RegType.i32, 'u32', false);
+const u_t_i32 = new IntType(31, RegType.i32, 'i32', true);
+const u_t_u64 = new IntType(64, RegType.i64, 'u64', false);
+const u_t_i64 = new IntType(63, RegType.i64, 'i64', true);
+const u_t_f32 = new BasicType(32, RegType.f32, 'f32');
+const u_t_f64 = new BasicType(64, RegType.f64, 'f64');
+const u_t_uint = new IntType(uintz, uintregtype, 'uint', false);
+const u_t_int = new IntType(uintz - 1, uintregtype, 'int', true);
+class StrType extends Type {
+    constructor(length) {
+        super(0, nilScope);
         this.length = length;
     }
     toString() {
-        return `str[${this.length}]`;
+        return this.length > -1 ? `str<${this.length}>` : 'str';
     }
     equals(other) {
         return (this === other ||
-            (other instanceof ConstStringType &&
-                this.bitsize == other.bitsize &&
-                this.length == other.length) ||
-            (other instanceof IntrinsicType &&
-                other.name == 'string'));
+            (other instanceof StrType &&
+                this.length == other.length));
     }
 }
+const u_t_str = new StrType(-1);
 class RestType extends Type {
     constructor(pos, scope, type) {
         super(pos, scope);
@@ -2639,7 +2982,8 @@ class RestType extends Type {
     }
     equals(other) {
         return (this === other ||
-            other instanceof RestType && this.type.equals(other.type));
+            (other instanceof RestType &&
+                this.type.equals(other.type)));
     }
 }
 class TupleType extends Type {
@@ -2658,19 +3002,93 @@ class TupleType extends Type {
     }
 }
 class FunType extends Type {
-    constructor(pos, scope, inputs, output) {
+    constructor(pos, scope, inputs, result) {
         super(pos, scope);
         this.inputs = inputs;
-        this.output = output;
+        this.result = result;
     }
     equals(other) {
         return (this === other ||
             (other instanceof FunType &&
-                this.output.equals(other.output) &&
                 this.inputs.length == other.inputs.length &&
+                this.result.equals(other.result) &&
                 this.inputs.every((t, i) => t.equals(other.inputs[i]))));
     }
 }
+class UnionType extends Type {
+    constructor(types) {
+        super(0, nilScope);
+        this.types = types;
+    }
+    add(t) {
+        assert(!(t instanceof UnionType));
+        this.types.add(t);
+    }
+    toString() {
+        let s = '(U ', first = true;
+        for (let t of this.types) {
+            if (first) {
+                first = false;
+            }
+            else {
+                s += '|';
+            }
+            s += t.toString();
+        }
+        return s + ')';
+    }
+    equals(other) {
+        if (this === other) {
+            return true;
+        }
+        if (!(other instanceof UnionType) || other.types.size != this.types.size) {
+            return false;
+        }
+        for (let t of this.types) {
+            if (!other.types.has(t)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    accepts(other) {
+        if (this === other) {
+            return true;
+        }
+        if (!(other instanceof UnionType)) {
+            return false;
+        }
+        for (let t of other.types) {
+            if (!this.types.has(t)) {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+class OptionalType extends Type {
+    constructor(type) {
+        super(0, nilScope);
+        this.type = type;
+        assert(!(type instanceof OptionalType));
+        assert(!(type instanceof UnionType));
+        assert(!(type instanceof BasicType));
+    }
+    toString() {
+        return this.type.toString() + '?';
+    }
+    equals(other) {
+        return (this === other ||
+            (other instanceof OptionalType &&
+                this.type.equals(other.type)));
+    }
+    accepts(other) {
+        return (this.equals(other) ||
+            this.type.equals(other) ||
+            other === u_t_nil);
+    }
+}
+const u_t_optstr = new OptionalType(u_t_str);
 class File {
     constructor(sfile, scope, imports, decls, unresolved) {
         this.sfile = sfile;
@@ -2678,6 +3096,10 @@ class File {
         this.imports = imports;
         this.decls = decls;
         this.unresolved = unresolved;
+    }
+    toString() {
+        return (`File("${this.sfile.name}"; ${this.decls.length} decls` +
+            (this.imports ? `; ${this.imports.length} imports)` : ''));
     }
 }
 class Package {
@@ -2690,633 +3112,27 @@ class Package {
         return `Package(${this.name})`;
     }
 }
+//# sourceMappingURL=ast.js.map
 
-const universeTypes = new Map();
-const universeValues = new Map();
-function ityp(bitsize, name) {
-    const x = new IntrinsicType(bitsize, name);
-    assert(!universeTypes.has(name));
-    universeTypes.set(name, x);
-    return x;
-}
-function ival(name, typ) {
-    const x = new IntrinsicVal(name, typ);
-    assert(!universeValues.has(name));
-    universeValues.set(name, x);
-    return x;
-}
-const uintz = 32;
-const u_t_void = new IntrinsicType(0, 'void');
-const u_t_auto = new IntrinsicType(0, 'auto');
-const u_t_nil = new IntrinsicType(0, '?');
-const u_t_bool = ityp(1, 'bool');
-const u_t_uint = ityp(uintz, 'uint');
-const u_t_int = ityp(uintz - 1, 'int');
-const u_t_i8 = ityp(7, 'i8');
-const u_t_i16 = ityp(15, 'i16');
-const u_t_i32 = ityp(31, 'i32');
-const u_t_i64 = ityp(63, 'i64');
-const u_t_u8 = ityp(8, 'u8');
-const u_t_u16 = ityp(16, 'u16');
-const u_t_u32 = ityp(32, 'u32');
-const u_t_u64 = ityp(64, 'u64');
-const u_t_f32 = ityp(32, 'f32');
-const u_t_f64 = ityp(64, 'f64');
-const u_t_string = ityp(uintz, 'string');
-const universeTypeAliases = new Map([
-    ['byte', 'u8'],
-    ['char', 'u32'],
-]);
-var TypeCompat;
-(function (TypeCompat) {
-    TypeCompat[TypeCompat["NO"] = 0] = "NO";
-    TypeCompat[TypeCompat["LOSSY"] = 1] = "LOSSY";
-    TypeCompat[TypeCompat["LOSSLESS"] = 2] = "LOSSLESS";
-})(TypeCompat || (TypeCompat = {}));
-const typeCompatMap = new Map([
-    [u_t_u64, new Map([
-            [u_t_uint, TypeCompat.LOSSLESS],
-            [u_t_int, TypeCompat.LOSSLESS],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSLESS],
-            [u_t_i64, TypeCompat.LOSSLESS],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, TypeCompat.LOSSLESS],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_i64, new Map([
-            [u_t_uint, uintz <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_int, TypeCompat.LOSSLESS],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSLESS],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, TypeCompat.LOSSLESS],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_u32, new Map([
-            [u_t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_int, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSLESS],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_i32, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_int, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_uint, new Map([
-            [u_t_int, TypeCompat.LOSSLESS],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSLESS],
-            [u_t_i64, uintz >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, uintz >= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_u64, uintz >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_int, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSLESS],
-            [u_t_i64, uintz >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, uintz >= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_u16, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_int, TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSY],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u32, TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_i16, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_int, TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSY],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSY],
-            [u_t_u32, TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_u8, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_int, TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSY],
-            [u_t_i32, TypeCompat.LOSSY],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u16, TypeCompat.LOSSY],
-            [u_t_u32, TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_i8, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_int, TypeCompat.LOSSY],
-            [u_t_i16, TypeCompat.LOSSY],
-            [u_t_i32, TypeCompat.LOSSY],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSY],
-            [u_t_u16, TypeCompat.LOSSY],
-            [u_t_u32, TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_f32, new Map([
-            [u_t_uint, TypeCompat.LOSSY],
-            [u_t_int, TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSY],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, TypeCompat.LOSSY],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f64, TypeCompat.LOSSY],
-        ])],
-    [u_t_f64, new Map([
-            [u_t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_int, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
-            [u_t_i8, TypeCompat.LOSSLESS],
-            [u_t_i16, TypeCompat.LOSSLESS],
-            [u_t_i32, TypeCompat.LOSSLESS],
-            [u_t_i64, TypeCompat.LOSSY],
-            [u_t_u8, TypeCompat.LOSSLESS],
-            [u_t_u16, TypeCompat.LOSSLESS],
-            [u_t_u32, TypeCompat.LOSSLESS],
-            [u_t_u64, TypeCompat.LOSSY],
-            [u_t_f32, TypeCompat.LOSSLESS],
-        ])],
-]);
-function basicTypeCompat(dst, src) {
-    assert(dst !== src, "same type is always compatible");
-    let s = typeCompatMap.get(dst);
-    return s && s.get(src) || TypeCompat.NO;
-}
-TEST("basicTypeCompat", () => {
-    function assertTypeCompat(dst, src, expect, cons) {
-        const r = basicTypeCompat(dst, src);
-        assert(r === expect, `${dst}(${src}) == ${TypeCompat[r]} (expected ${TypeCompat[expect]})`, cons);
-    }
-    function assert_LOSSLESS(dst, src) {
-        assertTypeCompat(dst, src, TypeCompat.LOSSLESS, assert_LOSSLESS);
-    }
-    function assert_LOSSY(dst, src) {
-        assertTypeCompat(dst, src, TypeCompat.LOSSY, assert_LOSSY);
-    }
-    assert_LOSSLESS(u_t_u64, u_t_uint);
-    assert_LOSSLESS(u_t_u64, u_t_int);
-    assert_LOSSLESS(u_t_u64, u_t_i64);
-    assert_LOSSLESS(u_t_u64, u_t_u32);
-    assert_LOSSLESS(u_t_u64, u_t_i32);
-    assert_LOSSLESS(u_t_u64, u_t_u16);
-    assert_LOSSLESS(u_t_u64, u_t_i16);
-    assert_LOSSLESS(u_t_u64, u_t_u8);
-    assert_LOSSLESS(u_t_u64, u_t_i8);
-    assert_LOSSY(u_t_u64, u_t_f32);
-    assert_LOSSY(u_t_u64, u_t_f64);
-    assert_LOSSLESS(u_t_i64, u_t_uint);
-    if (uintz == 64) {
-        assert_LOSSY(u_t_i64, u_t_int);
-    }
-    else {
-        assert_LOSSLESS(u_t_i64, u_t_int);
-    }
-    assert_LOSSY(u_t_i64, u_t_u64);
-    assert_LOSSLESS(u_t_i64, u_t_u32);
-    assert_LOSSLESS(u_t_i64, u_t_i32);
-    assert_LOSSLESS(u_t_i64, u_t_u16);
-    assert_LOSSLESS(u_t_i64, u_t_i16);
-    assert_LOSSLESS(u_t_i64, u_t_u8);
-    assert_LOSSLESS(u_t_i64, u_t_i8);
-    assert_LOSSY(u_t_i64, u_t_f32);
-    assert_LOSSY(u_t_i64, u_t_f64);
-    if (uintz == 64) {
-        assert_LOSSY(u_t_u32, u_t_uint);
-        assert_LOSSY(u_t_u32, u_t_int);
-    }
-    else {
-        assert_LOSSLESS(u_t_u32, u_t_uint);
-        assert_LOSSLESS(u_t_u32, u_t_int);
-    }
-    assert_LOSSY(u_t_u32, u_t_u64);
-    assert_LOSSY(u_t_u32, u_t_i64);
-    assert_LOSSLESS(u_t_u32, u_t_i32);
-    assert_LOSSLESS(u_t_u32, u_t_u16);
-    assert_LOSSLESS(u_t_u32, u_t_i16);
-    assert_LOSSLESS(u_t_u32, u_t_u8);
-    assert_LOSSLESS(u_t_u32, u_t_i8);
-    assert_LOSSY(u_t_u32, u_t_f32);
-    assert_LOSSY(u_t_u32, u_t_f64);
-    assert_LOSSY(u_t_i32, u_t_uint);
-    if (uintz == 64) {
-        assert_LOSSY(u_t_i32, u_t_int);
-    }
-    else {
-        assert_LOSSLESS(u_t_i32, u_t_int);
-    }
-    assert_LOSSY(u_t_i32, u_t_u64);
-    assert_LOSSY(u_t_i32, u_t_i64);
-    assert_LOSSY(u_t_i32, u_t_u32);
-    assert_LOSSLESS(u_t_i32, u_t_u16);
-    assert_LOSSLESS(u_t_i32, u_t_i16);
-    assert_LOSSLESS(u_t_i32, u_t_u8);
-    assert_LOSSLESS(u_t_i32, u_t_i8);
-    assert_LOSSY(u_t_i32, u_t_f32);
-    assert_LOSSY(u_t_i32, u_t_f64);
-    assert_LOSSY(u_t_u16, u_t_uint);
-    assert_LOSSY(u_t_u16, u_t_int);
-    assert_LOSSY(u_t_u16, u_t_u64);
-    assert_LOSSY(u_t_u16, u_t_i64);
-    assert_LOSSY(u_t_u16, u_t_u32);
-    assert_LOSSY(u_t_u16, u_t_i32);
-    assert_LOSSLESS(u_t_u16, u_t_i16);
-    assert_LOSSLESS(u_t_u16, u_t_u8);
-    assert_LOSSLESS(u_t_u16, u_t_i8);
-    assert_LOSSY(u_t_u16, u_t_f32);
-    assert_LOSSY(u_t_u16, u_t_f64);
-    assert_LOSSY(u_t_i16, u_t_uint);
-    assert_LOSSY(u_t_i16, u_t_int);
-    assert_LOSSY(u_t_i16, u_t_u64);
-    assert_LOSSY(u_t_i16, u_t_i64);
-    assert_LOSSY(u_t_i16, u_t_u32);
-    assert_LOSSY(u_t_i16, u_t_i32);
-    assert_LOSSY(u_t_i16, u_t_u16);
-    assert_LOSSLESS(u_t_i16, u_t_u8);
-    assert_LOSSLESS(u_t_i16, u_t_i8);
-    assert_LOSSY(u_t_i16, u_t_f32);
-    assert_LOSSY(u_t_i16, u_t_f64);
-    assert_LOSSY(u_t_u8, u_t_uint);
-    assert_LOSSY(u_t_u8, u_t_int);
-    assert_LOSSY(u_t_u8, u_t_u64);
-    assert_LOSSY(u_t_u8, u_t_i64);
-    assert_LOSSY(u_t_u8, u_t_u32);
-    assert_LOSSY(u_t_u8, u_t_i32);
-    assert_LOSSY(u_t_u8, u_t_u16);
-    assert_LOSSY(u_t_u8, u_t_i16);
-    assert_LOSSLESS(u_t_u8, u_t_i8);
-    assert_LOSSY(u_t_u8, u_t_f32);
-    assert_LOSSY(u_t_u8, u_t_f64);
-    assert_LOSSY(u_t_i8, u_t_uint);
-    assert_LOSSY(u_t_i8, u_t_int);
-    assert_LOSSY(u_t_i8, u_t_u64);
-    assert_LOSSY(u_t_i8, u_t_i64);
-    assert_LOSSY(u_t_i8, u_t_u32);
-    assert_LOSSY(u_t_i8, u_t_i32);
-    assert_LOSSY(u_t_i8, u_t_u16);
-    assert_LOSSY(u_t_i8, u_t_i16);
-    assert_LOSSY(u_t_i8, u_t_u8);
-    assert_LOSSY(u_t_i8, u_t_f32);
-    assert_LOSSY(u_t_i8, u_t_f64);
-    if (uintz <= 32) {
-        assert_LOSSLESS(u_t_f64, u_t_uint);
-        assert_LOSSLESS(u_t_f64, u_t_int);
-    }
-    else {
-        assert_LOSSY(u_t_f64, u_t_uint);
-        assert_LOSSY(u_t_f64, u_t_int);
-    }
-    assert_LOSSY(u_t_f64, u_t_u64);
-    assert_LOSSY(u_t_f64, u_t_i64);
-    assert_LOSSLESS(u_t_f64, u_t_u32);
-    assert_LOSSLESS(u_t_f64, u_t_i32);
-    assert_LOSSLESS(u_t_f64, u_t_u16);
-    assert_LOSSLESS(u_t_f64, u_t_i16);
-    assert_LOSSLESS(u_t_f64, u_t_u8);
-    assert_LOSSLESS(u_t_f64, u_t_i8);
-    assert_LOSSLESS(u_t_f64, u_t_f32);
-    assert_LOSSY(u_t_f32, u_t_uint);
-    assert_LOSSY(u_t_f32, u_t_int);
-    assert_LOSSY(u_t_f32, u_t_u64);
-    assert_LOSSY(u_t_f32, u_t_i64);
-    assert_LOSSY(u_t_f32, u_t_u32);
-    assert_LOSSY(u_t_f32, u_t_i32);
-    assert_LOSSLESS(u_t_f32, u_t_u16);
-    assert_LOSSLESS(u_t_f32, u_t_i16);
-    assert_LOSSLESS(u_t_f32, u_t_u8);
-    assert_LOSSLESS(u_t_f32, u_t_i8);
-    assert_LOSSY(u_t_f32, u_t_f64);
-});
-function intBinBits(v) {
-    let start = 2;
-    while (v[start] == 0x30) {
-        start++;
-    }
-    let n = v.length - start;
-    return n > 64 ? 0 : n || 1;
-}
-TEST("intBinBits", () => {
-    for (let v of [
-        ["0b0", 1],
-        ["0b1111111", 7],
-        ["0b10000000", 8],
-        ["0b11111111", 8],
-        ["0b100000000", 9],
-        ["0b111111111111111", 15],
-        ["0b1000000000000000", 16],
-        ["0b1111111111111111", 16],
-        ["0b10000000000000000", 17],
-        ["0b1111111111111111111111111111111", 31],
-        ["0b10000000000000000000000000000000", 32],
-        ["0b11111111111111111111111111111111", 32],
-        ["0b100000000000000000000000000000000", 33],
-        ["0b11111111111111111111111111111111111111111111111111111", 53],
-        ["0b111111111111111111111111111111111111111111111111111111111111111", 63],
-        ["0b1000000000000000000000000000000000000000000000000000000000000000", 64],
-        ["0b1111111111111111111111111111111111111111111111111111111111111111", 64],
-        ["0b10000000000000000000000000000000000000000000000000000000000000000", 0],
-    ]) {
-        let input = v[0];
-        let expected = v[1];
-        let actual = intBinBits(asciibuf(input));
-        assert(actual == expected, `${JSON.stringify(input)} => ${actual}; expected ${expected}`);
-    }
-});
-function intOctBits(b) {
-    let start = 2;
-    while (b[start] == 0x30) {
-        start++;
-    }
-    let z = b.length - start;
-    return (z < 3 ? 7 :
-        z == 3 ? (b[start] < 0x32 ? 7 :
-            b[start] < 0x34 ? 8 :
-                15) :
-            z < 6 ? 15 :
-                z == 6 && b[start] < 0x32 ? 16 :
-                    z < 11 ? 31 :
-                        z == 11 ? (b[start] < 0x32 ? 31 :
-                            b[start] < 0x34 ? 32 :
-                                63) :
-                            z < 22 ? 63 :
-                                z == 22 && b[start] < 0x32 ? 64 :
-                                    0);
-}
-TEST("intOctBits", () => {
-    for (let v of [
-        ["0o0", 7],
-        ["0o177", 7],
-        ["0o200", 8],
-        ["0o377", 8],
-        ["0o400", 15],
-        ["0o77777", 15],
-        ["0o100000", 16],
-        ["0o177777", 16],
-        ["0o200000", 31],
-        ["0o17777777777", 31],
-        ["0o20000000000", 32],
-        ["0o37777777777", 32],
-        ["0o40000000000", 63],
-        ["0o377777777777777777", 63],
-        ["0o777777777777777777777", 63],
-        ["0o1000000000000000000000", 64],
-        ["0o1777777777777777777777", 64],
-        ["0o2000000000000000000000", 0],
-    ]) {
-        let input = v[0];
-        let expected = v[1];
-        let actual = intOctBits(asciibuf(input));
-        assert(actual === expected, `${JSON.stringify(input)} => ${actual}; expected ${expected}`);
-    }
-});
-const i64maxDecBuf = new Uint8Array([
-    57, 50, 50, 51, 51, 55, 50, 48, 51, 54, 56, 53, 52, 55, 55, 53, 56, 48, 55
-]);
-const u64maxDecBuf = new Uint8Array([
-    49, 56, 52, 52, 54, 55, 52, 52, 48, 55, 51, 55, 48, 57, 53, 53, 49, 54, 49, 53
-]);
-function intDecBits(b) {
-    let v = 0, z = b.length;
-    for (let i = 0; i < z; i++) {
-        v = v * 10 + (b[i] - 0x30);
-    }
-    if (v < 0x1FFFFFFFFFFFFF) {
-        return v < 0x80 ? 7 : Math.floor(Math.log2(v)) + 1;
-    }
-    let start = 0;
-    while (b[start] == 0x30) {
-        start++;
-    }
-    z = b.length - start;
-    return (z < 19 ? 63 :
-        z == 19 ? bufcmp$1(b, i64maxDecBuf, start) <= 0 ? 63 : 64 :
-            z == 20 && bufcmp$1(b, u64maxDecBuf, start) <= 0 ? 64 :
-                0);
-}
-TEST("intDecBits", () => {
-    for (let v of [
-        ["0", 7],
-        ["127", 7],
-        ["128", 8],
-        ["255", 8],
-        ["256", 9],
-        ["32767", 15],
-        ["32768", 16],
-        ["65535", 16],
-        ["65536", 17],
-        ["2147483647", 31],
-        ["2147483648", 32],
-        ["4294967295", 32],
-        ["4294967296", 33],
-        ["9007199254740991", 63],
-        ["9223372036854775807", 63],
-        ["9223372036854775808", 64],
-        ["18446744073709551615", 64],
-        ["18446744073709551616", 0],
-    ]) {
-        let input = v[0];
-        let expected = v[1];
-        let actual = intDecBits(asciibuf(input));
-        assert(actual == expected, `${JSON.stringify(input)} => ${actual}; expected ${expected}`);
-    }
-});
-function intHexBits(b) {
-    let v = 0, z = b.length;
-    for (let n = 0, i = 2; i < z; i++) {
-        n = b[i];
-        n = (n >= 0x30 && n <= 0x39 ? n - 0x30 :
-            n >= 0x41 && n <= 0x46 ? n - 0x41 + 10 :
-                n - 0x61 + 10);
-        v = v * 16 + n;
-    }
-    if (v < 0x1FFFFFFFFFFFFF) {
-        return v < 0x80 ? 7 : Math.floor(Math.log2(v)) + 1;
-    }
-    let start = 2;
-    while (b[start] == 0x30) {
-        start++;
-    }
-    z = b.length - start;
-    return (z < 16 || (z == 16 && b[start] <= 0x37) ? 63 :
-        z == 16 ? 64 :
-            0);
-}
-TEST("intHexBits", () => {
-    for (let v of [
-        ["0x0", 7],
-        ["0x7F", 7],
-        ["0x80", 8],
-        ["0xFF", 8],
-        ["0x100", 9],
-        ["0x7FFF", 15],
-        ["0x8000", 16],
-        ["0xFFFF", 16],
-        ["0x10000", 17],
-        ["0x7FFFFFFF", 31],
-        ["0x80000000", 32],
-        ["0xFFFFFFFF", 32],
-        ["0x100000000", 33],
-        ["0x1FFFFFFFFFFFFF", 63],
-        ["0x7FFFFFFFFFFFFFFF", 63],
-        ["0x8000000000000000", 64],
-        ["0xFFFFFFFFFFFFFFFF", 64],
-        ["0x10000000000000000", 0],
-    ]) {
-        let input = v[0];
-        let expected = v[1];
-        let actual = intHexBits(asciibuf(input));
-        assert(actual == expected, `${JSON.stringify(input)} => ${actual}; expected ${expected}`);
-    }
-});
-function intLitTypeFitter(x, reqt, errh) {
-    let bits = 0;
-    switch (x.tok) {
-        case token.INT_BIN:
-            bits = intBinBits(x.value);
-            break;
-        case token.INT_OCT:
-            bits = intOctBits(x.value);
-            break;
-        case token.INT:
-            bits = intDecBits(x.value);
-            break;
-        case token.INT_HEX:
-            bits = intHexBits(x.value);
-            break;
-    }
-    if (bits == 0) {
-        if (errh) {
-            let t = reqt instanceof IntrinsicType ? reqt : u_t_u64;
-            errh(`constant ${buf8str(x.value)} overflows ${t.name}`, x.pos);
-            bits = 64;
-        }
-    }
-    else if (reqt instanceof IntrinsicType) {
-        if (reqt.bitsize >= bits) {
-            return reqt;
-        }
-        if (errh) {
-            errh(`constant ${buf8str(x.value)} overflows ${reqt.name}`, x.pos);
-            bits = 64;
-        }
-    }
-    return (bits <= 31 ? u_t_int :
-        bits <= 63 ? u_t_i64 :
-            u_t_u64);
-}
-function floatLitTypeFitter(x, reqt, errh) {
-    return u_t_f64;
-}
-function charLitTypeFitter(x, reqt, errh) {
-    return u_t_u32;
-}
-const basicLitTypesFitters = new Map([
-    [token.CHAR, charLitTypeFitter],
-    [token.INT, intLitTypeFitter],
-    [token.INT_BIN, intLitTypeFitter],
-    [token.INT_OCT, intLitTypeFitter],
-    [token.INT_HEX, intLitTypeFitter],
-    [token.FLOAT, floatLitTypeFitter],
-]);
-const u_v_true = ival('true', u_t_bool);
-const u_v_false = ival('false', u_t_bool);
-const u_v_nil = ival('nil', u_t_nil);
-class Universe {
-    constructor(strSet, typeSet) {
-        this.strSet = strSet;
-        this.typeSet = typeSet;
-        const unidecls = new Map();
-        for (let [name, t] of universeTypes) {
-            let n = strSet.emplace(asciibuf(name));
-            unidecls.set(n, new Ent(n, t, t));
-        }
-        for (let [aliasName, canonName] of universeTypeAliases) {
-            let aliasNameBuf = strSet.emplace(asciibuf(aliasName));
-            let canonNameBuf = strSet.emplace(asciibuf(canonName));
-            const obj = unidecls.get(canonNameBuf);
-            assert(obj);
-            unidecls.set(aliasNameBuf, obj);
-        }
-        for (let [name, x] of universeValues) {
-            let n = strSet.emplace(asciibuf(name));
-            unidecls.set(n, new Ent(n, x, x));
-        }
-        this.scope = new Scope(null, unidecls);
-    }
-    basicLitType(x, reqType, errh) {
-        let f = basicLitTypesFitters.get(x.tok);
-        assert(f, `missing type fitter for ${tokstr(x.tok)}`);
-        return f(x, reqType || null, errh);
-    }
-    internType(t) {
-        return this.typeSet.intern(t);
-    }
-}
-
-var DiagKind;
-(function (DiagKind) {
-    DiagKind[DiagKind["INFO"] = 0] = "INFO";
-    DiagKind[DiagKind["WARN"] = 1] = "WARN";
-    DiagKind[DiagKind["ERROR"] = 2] = "ERROR";
-})(DiagKind || (DiagKind = {}));
 const kEmptyByteArray = new Uint8Array(0);
 const kBytes__ = new Uint8Array([0x5f]);
 const kBytes_dot = new Uint8Array([0x2e]);
 const kBytes_init = new Uint8Array([0x69, 0x6e, 0x69, 0x74]);
 const emptyExprList = [];
+class funInfo {
+    constructor(f) {
+        this.f = f;
+        this.autort = null;
+    }
+    addInferredReturnType(t) {
+        if (this.autort == null) {
+            this.autort = new UnionType(new Set([t]));
+        }
+        else {
+            this.autort.add(t);
+        }
+    }
+}
 class Parser extends Scanner {
     constructor() {
         super(...arguments);
@@ -3420,19 +3236,16 @@ class Parser extends Scanner {
             p.next();
         }
     }
-    inFun() {
-        return this.funstack[0] || null;
-    }
     currFun() {
         assert(this.funstack.length > 0, 'access current function at file level');
         return this.funstack[0];
     }
     pushFun(f) {
-        this.funstack.push(f);
+        this.funstack.push(new funInfo(f));
     }
     popFun() {
         assert(this.funstack.length > 0, 'popFun with empty funstack');
-        return this.funstack.pop();
+        this.funstack.pop();
     }
     pushScope(scope = null) {
         const p = this;
@@ -3450,13 +3263,13 @@ class Parser extends Scanner {
         p.scope = p.scope.outer;
         if (s.decls)
             for (let [name, ent] of s.decls) {
-                if (ent.reads.size == 0) {
+                if (ent.nreads == 0) {
                     if (ent.decl instanceof Field) {
-                        p.diag(DiagKind.WARN, `${name} not used`, ent.decl.pos, (ent.decl.scope.isFunScope ? 'E_UNUSED_PARAM' :
+                        p.diag("warn", `${name} not used`, ent.decl.pos, (ent.decl.scope.isFunScope ? 'E_UNUSED_PARAM' :
                             'E_UNUSED_FIELD'));
                     }
                     else {
-                        p.diag(DiagKind.WARN, `${name} declared and not used`, ent.decl.pos, 'E_UNUSED_VAR');
+                        p.diag("warn", `${name} declared and not used`, ent.decl.pos, 'E_UNUSED_VAR');
                     }
                 }
             }
@@ -3467,18 +3280,12 @@ class Parser extends Scanner {
         if (ident.value === p._id__) {
             return;
         }
+        assert(ident.ent == null);
         const ent = new Ent(ident.value, decl, x);
-        if (scope.declareEnt(ent)) {
-            const f = p.inFun();
-            if (f) {
-                f.nlocali32++;
-                debuglog(`${ident} in scope#${scope.level()}; ` +
-                    `nlocali32: ${f.nlocali32}`);
-            }
-        }
-        else {
+        if (!scope.declareEnt(ent)) {
             p.syntaxError(`${ident} redeclared`, ident.pos);
         }
+        ident.ent = ent;
     }
     declarev(scope, idents, decl, xs) {
         const p = this;
@@ -3491,7 +3298,7 @@ class Parser extends Scanner {
         if (!(x instanceof Ident) || x.value === p._id__) {
             return x;
         }
-        assert(x.ent == null, "identifier already declared or resolved");
+        assert(x.ent == null, "already resolved");
         if (x.value === p._id__) {
             return x;
         }
@@ -3500,6 +3307,16 @@ class Parser extends Scanner {
             const ent = s.lookupImm(x.value);
             if (ent) {
                 x.refEnt(ent);
+                if (!x.type) {
+                    const tx = ent.getTypeExpr();
+                    x.type = tx ? p.types.resolve(tx) : null;
+                    if (!x.type) {
+                        x.type = p.types.markUnresolved(x);
+                    }
+                    if (x.type instanceof UnresolvedType) {
+                        x.type.addRef(x);
+                    }
+                }
                 return x;
             }
             s = s.outer;
@@ -3520,7 +3337,7 @@ class Parser extends Scanner {
             if (ctx instanceof VarDecl) {
                 return ctx.type && p.types.maybeResolve(ctx.type) || null;
             }
-            if (ctx instanceof AssignStmt) {
+            if (ctx instanceof Assignment) {
                 return (ctx.lhs && ctx.lhs.length == 1 ? p.types.maybeResolve(ctx.lhs[0]) :
                     null);
             }
@@ -3557,12 +3374,12 @@ class Parser extends Scanner {
                     decls.push(p.varDecl(pos, idents));
                     break;
                 case token.FUN:
-                    decls.push(p.funDecl());
+                    decls.push(p.funExpr(null));
                     break;
                 default: {
                     if (p.tok == token.LBRACE &&
                         decls.length > 0 &&
-                        isEmptyFunDecl(decls[decls.length - 1])) {
+                        isEmptyFunExpr(decls[decls.length - 1])) {
                         p.syntaxError("unexpected semicolon or newline before {");
                     }
                     else {
@@ -3608,89 +3425,92 @@ class Parser extends Scanner {
         if (isError) {
             return d;
         }
-        if (d.type) {
-            const t = p.types.resolve(d.type);
-            d.type = t;
-            d.idents.forEach(ident => { ident.type = t; });
-        }
-        else {
-            assert(d.values, "no type and no vals");
-            let vals = d.values;
-            for (let x of vals) {
-                p.types.resolve(x);
-            }
-            vals.forEach((v, i) => {
-                let ident = d.idents[i];
-                ident.type = v.type;
-            });
-        }
-        p.declarev(d.scope, idents, d, d.values);
+        const reqt = d.type ? p.types.resolve(d.type) : null;
+        p.processAssign(d.idents, d.values, d, reqt, true);
         return d;
     }
-    funDecl() {
+    funExpr(ctx) {
         const p = this;
         const pos = p.pos;
         p.want(token.FUN);
-        const name = p.ident();
-        const isInitFun = p.scope === p.filescope && name.value.equals(p._id_init);
-        const scope = p.scope === p.filescope ? p.pkgscope : p.scope;
+        const isTopLevel = p.scope === p.filescope;
+        let name;
+        let isInitFun = false;
+        if (isTopLevel && !ctx) {
+            name = p.ident();
+            isInitFun = p.scope === p.filescope && name.value.equals(p._id_init);
+        }
+        else {
+            name = p.maybeIdent();
+        }
+        const scope = isTopLevel ? p.pkgscope : p.scope;
         p.pushScope(new Scope(p.scope, null, true));
-        const d = new FunDecl(pos, p.scope, name, p.funSig(u_t_void), isInitFun);
+        const sig = p.funSig(isInitFun ? u_t_nil : u_t_auto);
+        const f = new FunExpr(pos, p.scope, name, sig, isInitFun);
         if (isInitFun) {
-            if (d.sig.params.length > 0) {
-                p.syntaxError(`init function with parameters`, d.sig.pos);
+            if (sig.params.length > 0) {
+                p.syntaxError(`init function with parameters`, sig.pos);
             }
-            if (d.sig.result !== u_t_void) {
-                p.syntaxError(`init function with result`, d.sig.pos);
+            if (sig.result !== u_t_nil) {
+                p.syntaxError(`init function with result`, sig.pos);
             }
         }
         else {
-            p.declare(scope, name, d, d);
+            if (sig.result !== u_t_auto) {
+                p.types.resolve(sig.result);
+            }
+            if (name && !ctx) {
+                p.declare(scope, name, f, f);
+            }
         }
-        if (isInitFun || p.tok != token.SEMICOLON) {
+        if (!isTopLevel || isInitFun || ctx || p.tok != token.SEMICOLON) {
             if (isInitFun) {
                 p.initfnest++;
             }
-            p.pushFun(d);
-            d.body = p.funBody(name);
+            p.pushFun(f);
+            f.body = p.funBody(name);
+            const fi = p.currFun();
             p.popFun();
             if (isInitFun) {
                 p.initfnest--;
             }
+            p.popScope();
+            if (f.body instanceof Block) {
+                let lastindex = f.body.list.length - 1;
+                let result = f.body.list[lastindex];
+                if (result instanceof Expr) {
+                    let rettype = p.types.resolve(result);
+                    let ret = new ReturnStmt(result.pos, result.scope, result, rettype);
+                    f.body.list[lastindex] = ret;
+                }
+            }
+            if (sig.result === u_t_auto) {
+                if (fi.autort == null) {
+                    sig.result = p.types.resolve(f.body);
+                }
+                else if (fi.autort.types.size == 1) {
+                    sig.result = fi.autort.types.values().next().value;
+                }
+                else {
+                    sig.result = fi.autort;
+                }
+            }
         }
-        p.popScope();
-        if (d.sig.result === u_t_void) {
-            d.sig.result = d.body instanceof ExprStmt ? d.body.expr : u_t_void;
+        else {
+            if (sig.result == u_t_auto) {
+                sig.result = u_t_nil;
+            }
+            p.popScope();
         }
-        const funtype = p.types.resolve(d);
-        if (!isInitFun) {
+        if (sig.result instanceof UnresolvedType) {
+            sig.result.addRef(sig);
+        }
+        const funtype = p.types.resolve(f);
+        assert(funtype.constructor === FunType);
+        if (name && name.value !== p._id__ && !isInitFun) {
             name.type = funtype;
         }
-        return d;
-    }
-    funStmt(ctx) {
-        const p = this;
-        const pos = p.pos;
-        p.want(token.FUN);
-        const name = p.maybeIdent();
-        const scope = p.scope;
-        p.pushScope(new Scope(scope, null, true));
-        const d = new FunDecl(pos, scope, name, p.funSig(u_t_void));
-        if (name && !ctx) {
-            p.declare(name.scope, name, d, d);
-        }
-        p.pushFun(d);
-        d.body = p.funBody(name);
-        p.popFun();
-        p.popScope();
-        if (d.sig.result === u_t_void) {
-            d.sig.result = d.body instanceof ExprStmt ? d.body.expr : u_t_void;
-        }
-        const funtype = p.types.resolve(d);
-        if (name) {
-            name.type = funtype;
-        }
-        return d;
+        return f;
     }
     funSig(defaultType) {
         const p = this;
@@ -3702,34 +3522,127 @@ class Parser extends Scanner {
     parameters() {
         const p = this;
         p.want(token.LPAREN);
-        const fields = [];
+        let named = 0;
         let seenRestExpr = false;
+        const paramsPos = p.pos;
+        const fields = [];
+        const scope = p.scope;
         while (p.tok != token.RPAREN) {
-            let f = new Field(p.pos, p.scope, u_t_auto, null);
-            f.ident = p.ident();
-            p.declare(f.ident.scope, f.ident, f, null);
-            if (p.tok == token.ELLIPSIS) {
-                f.type = p.restExpr(u_t_auto);
-                if (seenRestExpr) {
-                    p.syntaxError("can only use ... with final parameter in list");
-                    continue;
+            let pos = p.pos;
+            let typ = u_t_auto;
+            let name = null;
+            if (p.tok == token.NAME) {
+                typ = p.dotident(null, p.ident());
+            }
+            else {
+                const x = p.maybeType();
+                if (x) {
+                    typ = x;
                 }
                 else {
-                    seenRestExpr = true;
+                    typ = p.bad();
+                    p.syntaxError("expecting name or type");
                 }
             }
-            else if (p.tok != token.COMMA &&
+            if (p.tok != token.COMMA &&
                 p.tok != token.SEMICOLON &&
                 p.tok != token.RPAREN) {
-                f.type = p.type();
+                if (typ) {
+                    if (typ instanceof Ident) {
+                        name = typ;
+                        named++;
+                    }
+                    else {
+                        p.syntaxError("illegal parameter name", pos);
+                    }
+                }
+                if (p.got(token.ELLIPSIS)) {
+                    const x = p.maybeType();
+                    if (x) {
+                        typ = new RestExpr(pos, scope, x);
+                    }
+                    else {
+                        typ = p.bad();
+                        p.syntaxError("expecting type after ...");
+                    }
+                    if (seenRestExpr) {
+                        p.syntaxError("can only use ... with final parameter");
+                        continue;
+                    }
+                    else {
+                        seenRestExpr = true;
+                    }
+                }
+                else {
+                    typ = p.type();
+                }
             }
-            f.ident.type = p.types.resolve(f.type);
             if (!p.ocomma(token.RPAREN)) {
                 break;
             }
-            fields.push(f);
+            fields.push(new Field(pos, scope, typ, name));
         }
         p.want(token.RPAREN);
+        if (named == 0) {
+            for (let f of fields) {
+                p.resolve(f.type);
+            }
+        }
+        else {
+            if (named < fields.length) {
+                let ok = true;
+                let typ = null;
+                let t = u_t_auto;
+                for (let i = fields.length - 1; i >= 0; --i) {
+                    const f = fields[i];
+                    if (!f.name) {
+                        if (f.type instanceof Ident) {
+                            f.name = f.type;
+                            if (typ) {
+                                f.type = typ;
+                                f.name.type = t;
+                            }
+                            else {
+                                ok = false;
+                                f.type = p.bad(f.type.pos);
+                            }
+                        }
+                        else {
+                            p.syntaxError("illegal parameter name", f.type.pos);
+                        }
+                    }
+                    else if (f.type) {
+                        p.resolve(f.type);
+                        t = p.types.resolve(f.type);
+                        typ = f.type;
+                        if (typ instanceof RestExpr) {
+                            typ = typ.expr;
+                        }
+                        if (f.name) {
+                            f.name.type = t;
+                        }
+                        else {
+                            ok = false;
+                            f.name = p.fallbackIdent(typ.pos);
+                        }
+                    }
+                    if (!ok) {
+                        p.syntaxError("mixed named and unnamed function parameters", paramsPos);
+                        break;
+                    }
+                    assert(f.name != null);
+                    p.declare(scope, f.name, f, null);
+                }
+            }
+            else {
+                for (let f of fields) {
+                    assert(f.name != null);
+                    p.resolve(f.type);
+                    f.name.type = p.types.resolve(f.type);
+                    p.declare(scope, f.name, f, null);
+                }
+            }
+        }
         return fields;
     }
     funBody(funcname) {
@@ -3737,20 +3650,17 @@ class Parser extends Scanner {
         if (p.tok == token.LBRACE) {
             return p.block();
         }
-        const pos = p.pos;
         if (p.got(token.ARROWR)) {
-            const s = p.maybeStmt();
-            if (s) {
-                return s;
-            }
+            return p.expr(null);
         }
+        const pos = p.pos;
         if (funcname) {
             p.syntaxError(`${funcname} is missing function body`, pos);
         }
         else {
             p.syntaxError("missing function body", pos);
         }
-        return new SimpleStmt(pos, p.scope);
+        return p.bad(pos);
     }
     block() {
         const p = this;
@@ -3758,15 +3668,15 @@ class Parser extends Scanner {
         p.want(token.LBRACE);
         const list = p.stmtList();
         p.want(token.RBRACE);
-        return new BlockStmt(pos, p.scope, list);
+        return new Block(pos, p.scope, list);
     }
-    declStmt(f) {
+    multiDecl(f) {
         const p = this;
         const pos = p.pos;
         p.next();
         const decls = [];
         p.appendGroup(decls, f);
-        return new DeclStmt(pos, p.scope, decls);
+        return new MultiDecl(pos, p.scope, decls);
     }
     stmtList() {
         const p = this;
@@ -3799,44 +3709,69 @@ class Parser extends Scanner {
                         ||
                             ent.scope.funScope() === atScope.funScope())));
     }
-    assignment(lhs) {
+    processAssign(lhs, rhs, decl, reqt, onlyDef) {
         const p = this;
-        p.want(token.ASSIGN);
-        const s = new AssignStmt(lhs[0].pos, p.scope, token.ASSIGN, lhs, []);
-        s.rhs = p.exprList(s);
-        for (let i = 0; i < lhs.length; ++i) {
-            const id = lhs[i];
-            if (id instanceof Ident) {
-                assert(s.rhs[i]);
-                if (id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
-                    id.ent.writes++;
-                    if (id.ent.value && id.ent.value.type) {
-                        id.type = id.ent.value.type;
-                        const val = s.rhs[i];
-                        const typ = id.ent.value.type;
-                        const convertedVal = p.types.convert(typ, val);
-                        if (!convertedVal) {
-                            p.error((val.type instanceof UnresolvedType ?
-                                `cannot convert "${val}" to type ${typ}` :
-                                `cannot convert "${val}" (type ${val.type}) to type ${typ}`), val.pos);
-                        }
-                        else if (convertedVal !== val) {
-                            s.rhs[i] = convertedVal;
-                        }
+        function maybeConvRVal(typ, rval, index) {
+            if (!(rval.type instanceof UnresolvedType) &&
+                !(typ instanceof UnresolvedType)) {
+                const convx = p.types.convert(typ, rval);
+                if (!convx) {
+                    if (rval.type instanceof UnresolvedType) {
+                        return;
                     }
+                    p.error((rval.type instanceof UnresolvedType ?
+                        `cannot convert "${rval}" to type ${typ}` :
+                        `cannot convert "${rval}" (type ${rval.type}) to type ${typ}`), rval.pos);
                 }
-                else {
-                    if (p.unresolved) {
-                        p.unresolved.delete(id);
-                    }
-                    p.declare(id.scope, id, s, s.rhs[i]);
-                    id.type = p.types.resolve(s.rhs[i]);
-                    if (id.type instanceof UnresolvedType) {
-                        id.type.addRef(id);
-                    }
+                else if (convx !== rval) {
+                    assert(rhs != null);
+                    rhs[index] = convx;
                 }
             }
         }
+        for (let i = 0; i < lhs.length; ++i) {
+            const id = lhs[i];
+            if (!(id instanceof Ident)) {
+                debuglog(`TODO LHS is not an id (type is ${id.constructor.name})`);
+                continue;
+            }
+            if (!onlyDef && rhs && id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
+                const rval = rhs[i];
+                id.incrWrite();
+                const typexpr = id.ent.getTypeExpr();
+                assert(typexpr != null);
+                const typ = p.types.resolve(typexpr);
+                id.type = typ;
+                maybeConvRVal(typ, rval, i);
+                continue;
+            }
+            const rval = rhs ? rhs[i] : null;
+            if (reqt) {
+                id.type = reqt;
+                if (rval) {
+                    maybeConvRVal(reqt, rval, i);
+                }
+            }
+            else {
+                assert(rval, "processAssign called with no reqt and no rvals");
+                id.type = p.types.resolve(rval);
+            }
+            if (p.unresolved) {
+                p.unresolved.delete(id);
+            }
+            p.declare(id.scope, id, decl, rval);
+            if (id.type instanceof UnresolvedType) {
+                id.type.addRef(id);
+            }
+        }
+    }
+    assignment(lhs, reqt = null) {
+        const p = this;
+        p.want(token.ASSIGN);
+        const s = new Assignment(lhs[0].pos, p.scope, token.ASSIGN, lhs, []);
+        s.rhs = p.exprList(s);
+        p.processAssign(s.lhs, s.rhs, s, reqt, false);
+        p.types.resolve(s);
         return s;
     }
     simpleStmt(lhs) {
@@ -3844,30 +3779,79 @@ class Parser extends Scanner {
         if (p.tok == token.ASSIGN) {
             return p.assignment(lhs);
         }
+        if (p.tok == token.NAME && lhs.every(x => x instanceof Ident)) {
+            for (let i = 0; i < lhs.length; i++) {
+                let x = lhs[i];
+                if (x.ent) {
+                    x.unrefEnt();
+                }
+                else {
+                    assert(p.unresolved != null);
+                    p.unresolved.delete(x);
+                }
+            }
+            return p.varDecl(lhs[0].pos, lhs);
+        }
         const pos = lhs[0].pos;
         if (lhs.length != 1) {
-            p.syntaxError("expecting := or = or comma");
+            p.syntaxError('expecting "=" or ","');
             p.advanceUntil(token.SEMICOLON, token.RBRACE);
-            return new ExprStmt(lhs[0].pos, p.scope, lhs[0]);
+            return lhs[0];
         }
-        p.types.resolve(lhs[0]);
+        let t = p.types.resolve(lhs[0]);
         if (token.assignop_beg < p.tok && p.tok < token.assignop_end) {
-            const op = p.tok;
+            let op = p.tok;
             p.next();
-            const s = new AssignStmt(pos, p.scope, op, lhs, []);
+            p.checkBasicTypeMutation(lhs[0], t);
+            switch (op) {
+                case token.ADD_ASSIGN:
+                    op = token.ADD;
+                    break;
+                case token.SUB_ASSIGN:
+                    op = token.SUB;
+                    break;
+                case token.MUL_ASSIGN:
+                    op = token.MUL;
+                    break;
+                case token.QUO_ASSIGN:
+                    op = token.QUO;
+                    break;
+                case token.REM_ASSIGN:
+                    op = token.REM;
+                    break;
+                case token.AND_ASSIGN:
+                    op = token.AND;
+                    break;
+                case token.OR_ASSIGN:
+                    op = token.OR;
+                    break;
+                case token.XOR_ASSIGN:
+                    op = token.XOR;
+                    break;
+                case token.SHL_ASSIGN:
+                    op = token.SHL;
+                    break;
+                case token.SHR_ASSIGN:
+                    op = token.SHR;
+                    break;
+                case token.AND_NOT_ASSIGN:
+                    op = token.AND_NOT;
+                    break;
+                default:
+                    assert(false, `unexpected operator token ${token[op]}`);
+            }
+            const s = new Assignment(pos, p.scope, op, lhs, []);
             s.rhs = p.exprList(s);
+            p.types.resolve(s);
             return s;
         }
         if (p.tok == token.INC || p.tok == token.DEC) {
             const op = p.tok;
             p.next();
-            const operand = lhs[0];
-            if (operand instanceof Ident &&
-                operand.ent &&
-                !(operand.ent.decl instanceof VarDecl)) {
-                p.syntaxError(`cannot mutate ${operand}`, operand.pos);
-            }
-            return new AssignStmt(pos, p.scope, op, lhs, emptyExprList);
+            p.checkBasicTypeMutation(lhs[0], t);
+            let s = new Assignment(pos, p.scope, op, lhs, emptyExprList);
+            p.types.resolve(s);
+            return s;
         }
         if (p.tok == token.ARROWL) {
             p.syntaxError("TODO simpleStmt ARROWL");
@@ -3875,7 +3859,14 @@ class Parser extends Scanner {
         if (p.tok == token.ARROWR) {
             p.syntaxError("TODO simpleStmt ARROWR");
         }
-        return new ExprStmt(lhs[0].pos, p.scope, lhs[0]);
+        return lhs[0];
+    }
+    checkBasicTypeMutation(x, t) {
+        if (!(t instanceof IntType) &&
+            t !== u_t_f32 && t !== u_t_f64 &&
+            !(t instanceof UnresolvedType)) {
+            this.syntaxError(`cannot mutate ${x}`, x.pos);
+        }
     }
     maybeStmt() {
         const p = this;
@@ -3889,7 +3880,7 @@ class Parser extends Scanner {
                 p.popScope();
                 return s;
             case token.TYPE:
-                return p.declStmt(p.typeDecl);
+                return p.multiDecl(p.typeDecl);
             case token.ADD:
             case token.SUB:
             case token.MUL:
@@ -3898,9 +3889,11 @@ class Parser extends Scanner {
             case token.XOR:
             case token.FUN:
             case token.LPAREN:
-            case token.LBRACK:
+            case token.LBRACKET:
             case token.INTERFACE:
                 return p.simpleStmt(p.exprList(null));
+            case token.IF:
+                return p.ifExpr(null);
             case token.RETURN:
                 return p.returnStmt();
             default:
@@ -3910,30 +3903,66 @@ class Parser extends Scanner {
         }
         return null;
     }
+    ifExpr(ctx, hasIfScope = false) {
+        const p = this;
+        const pos = p.pos;
+        const scope = p.scope;
+        p.want(token.IF);
+        if (!hasIfScope) {
+            p.pushScope();
+        }
+        const cond = p.expr(ctx);
+        p.types.resolve(cond);
+        p.pushScope();
+        const then = p.expr(ctx);
+        p.popScope();
+        const s = new IfExpr(pos, scope, cond, then, null);
+        if (p.got(token.ELSE)) {
+            if (p.tok == token.IF) {
+                s.els_ = p.ifExpr(ctx, true);
+            }
+            else {
+                p.pushScope();
+                s.els_ = p.expr(ctx);
+                p.popScope();
+            }
+        }
+        if (!hasIfScope) {
+            p.popScope();
+        }
+        return s;
+    }
     returnStmt() {
         const p = this;
         const pos = p.pos;
         p.want(token.RETURN);
-        const n = new ReturnStmt(pos, p.scope, null);
-        const ftype = p.types.resolve(p.currFun());
-        assert(ftype instanceof FunType);
-        const frtype = ftype.output;
+        const fi = p.currFun();
+        const frtype = fi.f.sig.result;
+        assert(frtype instanceof Type, "currFun sig.result type not resolved");
+        const n = new ReturnStmt(pos, p.scope, u_t_nil, frtype);
         if (p.tok == token.SEMICOLON || p.tok == token.RBRACE) {
-            if (frtype !== u_t_void) {
-                p.syntaxError("missing return value", pos);
-                return n;
+            if (frtype !== u_t_nil) {
+                if (frtype === u_t_auto && fi.autort == null) {
+                    fi.f.sig.result = u_t_nil;
+                }
+                else {
+                    p.syntaxError(`missing return value; expecting ${fi.autort || frtype}`);
+                }
             }
             return n;
         }
         const xs = p.exprList(null);
         let rval = (xs.length == 1 ? xs[0] :
             new TupleExpr(xs[0].pos, xs[0].scope, xs));
-        if (frtype === u_t_void) {
+        if (frtype === u_t_nil) {
             p.syntaxError("function does not return a value", rval.pos);
             return n;
         }
         const rtype = p.types.resolve(rval);
-        if (!frtype.equals(rtype)) {
+        if (frtype === u_t_auto) {
+            fi.addInferredReturnType(rtype);
+        }
+        else if (!(rtype instanceof UnresolvedType) && !frtype.equals(rtype)) {
             const convres = p.types.convert(frtype, rval);
             if (convres) {
                 rval = convres;
@@ -3970,6 +3999,7 @@ class Parser extends Scanner {
             p.next();
             x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx));
         }
+        p.types.resolve(x);
         return x;
     }
     unaryExpr(ctx) {
@@ -3977,33 +4007,44 @@ class Parser extends Scanner {
         const t = p.tok;
         const pos = p.pos;
         switch (t) {
-            case token.MUL:
             case token.ADD:
             case token.SUB:
             case token.NOT:
             case token.XOR: {
                 p.next();
-                return new Operation(pos, p.scope, t, p.unaryExpr(ctx));
+                if (token.literal_beg < p.tok && p.tok < token.literal_end) {
+                    return p.basicLit(ctx, t);
+                }
+                let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx));
+                p.types.resolve(x);
+                return x;
             }
             case token.AND: {
                 p.next();
-                return new Operation(pos, p.scope, t, unparen(p.unaryExpr(ctx)));
+                let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx));
+                p.types.resolve(x);
+                return x;
             }
         }
-        return p.primExpr(true, ctx);
+        return p.primExpr(ctx);
     }
-    primExpr(keepParens, ctx) {
+    primExpr(ctx) {
         const p = this;
-        let x = p.operand(keepParens, ctx);
-        loop: while (true) {
+        let x = p.operand(ctx);
+        loop: while (true)
             switch (p.tok) {
                 case token.LPAREN:
                     x = p.call(x, ctx);
                     break;
+                case token.LBRACKET:
+                    x = p.bracketExpr(x, ctx);
+                    break;
+                case token.DOT:
+                    x = p.selectorExpr(x, ctx);
+                    break;
                 default:
                     break loop;
             }
-        }
         return x;
     }
     call(fun, ctx) {
@@ -4022,47 +4063,105 @@ class Parser extends Scanner {
         p.want(token.RPAREN);
         return new CallExpr(pos, p.scope, fun, args, hasDots);
     }
-    operand(keepParens, ctx) {
+    operand(ctx) {
         const p = this;
         switch (p.tok) {
             case token.NAME:
             case token.NAMEAT:
-                return p.dotident(p.resolve(p.ident()));
+                return p.dotident(ctx, p.resolve(p.ident()));
             case token.LPAREN:
-                return p.parenOrTupleExpr(keepParens, ctx);
+                return p.parenExpr(ctx);
             case token.FUN:
-                return p.funStmt(ctx);
+                return p.funExpr(ctx);
+            case token.LBRACE:
+                p.pushScope();
+                const b = p.block();
+                p.popScope();
+                return b;
+            case token.IF:
+                return p.ifExpr(ctx);
             case token.STRING:
                 return p.strlit();
             default: {
                 if (token.literal_beg < p.tok && p.tok < token.literal_end) {
-                    const x = new BasicLit(p.pos, p.scope, p.tok, p.takeByteValue());
-                    x.type = p.universe.basicLitType(x, p.ctxType(ctx), p.basicLitErrH);
-                    p.next();
-                    return x;
+                    return p.basicLit(ctx);
                 }
                 const x = p.bad();
                 p.syntaxError("expecting expression");
-                p.next();
                 return x;
             }
         }
+    }
+    basicLit(ctx, op) {
+        const p = this;
+        assert(token.literal_beg < p.tok && p.tok < token.literal_end);
+        const x = new BasicLit(p.pos, p.scope, p.tok, p.takeByteValue(), op);
+        const reqt = p.ctxType(ctx);
+        x.type = p.universe.basicLitType(x, reqt, p.basicLitErrH, op);
+        p.next();
+        return x;
     }
     strlit() {
         const p = this;
         assert(p.tok == token.STRING);
         const n = new StringLit(p.pos, p.scope, p.takeByteValue());
-        n.type = new ConstStringType(u_t_uint.bitsize, n.value.length);
+        n.type = new StrType(n.value.length);
         p.next();
         return n;
     }
-    parenOrTupleExpr(keepParens, ctx) {
+    selectorExpr(operand, ctx) {
+        const p = this;
+        p.want(token.DOT);
+        const pos = p.pos;
+        let rhs;
+        if (p.tok == token.NAME) {
+            rhs = p.dotident(ctx, p.ident());
+        }
+        else if (p.tok > token.literal_int_beg &&
+            p.tok < token.literal_int_end) {
+            return p.types.resolveIndex(new IndexExpr(pos, p.scope, operand, p.basicLit(ctx)));
+        }
+        else {
+            p.syntaxError('expecting name or integer after "."');
+            rhs = p.bad(pos);
+        }
+        return new SelectorExpr(pos, p.scope, operand, rhs);
+    }
+    dotident(ctx, ident) {
+        const p = this;
+        return p.tok == token.DOT ? p.selectorExpr(ident, ctx) : ident;
+    }
+    bracketExpr(operand, ctx) {
+        const p = this;
+        const pos = p.pos;
+        p.want(token.LBRACKET);
+        let x1 = null;
+        if (p.tok != token.COLON) {
+            x1 = p.expr(ctx);
+        }
+        if (p.got(token.COLON)) {
+            let end = null;
+            if (!p.got(token.RBRACKET)) {
+                end = p.expr(ctx);
+                p.want(token.RBRACKET);
+            }
+            return new SliceExpr(pos, p.scope, operand, x1, end);
+        }
+        p.want(token.RBRACKET);
+        return p.types.resolveIndex(new IndexExpr(pos, p.scope, operand, x1));
+    }
+    parenExpr(ctx) {
         const p = this;
         const pos = p.pos;
         p.want(token.LPAREN);
         const l = [];
         while (true) {
             l.push(p.expr(ctx));
+            if (p.tok == token.ASSIGN) {
+                const x = p.assignment(l);
+                p.want(token.RPAREN);
+                return x;
+            }
             if (!p.ocomma(token.RPAREN)) {
                 break;
             }
@@ -4071,8 +4170,7 @@ class Parser extends Scanner {
             }
         }
         p.want(token.RPAREN);
-        return (l.length == 1 ? (keepParens ? new ParenExpr(pos, p.scope, l[0]) :
-            l[0]) :
+        return (l.length == 1 ? l[0] :
             new TupleExpr(pos, p.scope, l));
     }
     bad(pos) {
@@ -4084,7 +4182,7 @@ class Parser extends Scanner {
         let x = null;
         switch (p.tok) {
             case token.NAME:
-                x = p.dotident(p.resolve(p.ident()));
+                x = p.dotident(null, p.resolve(p.ident()));
                 break;
             case token.LPAREN:
                 const t = p.tupleType();
@@ -4107,14 +4205,6 @@ class Parser extends Scanner {
         }
         return t;
     }
-    restExpr(defaultType) {
-        const p = this;
-        const pos = p.pos;
-        p.want(token.ELLIPSIS);
-        const rt = new RestExpr(pos, p.scope, p.maybeType() || defaultType);
-        p.types.resolve(rt);
-        return rt;
-    }
     tupleType() {
         const p = this;
         p.want(token.LPAREN);
@@ -4136,16 +4226,6 @@ class Parser extends Scanner {
             l.push(p.ident());
         }
         return l;
-    }
-    dotident(ident) {
-        const p = this;
-        if (p.tok == token.DOT) {
-            const pos = p.pos;
-            p.next();
-            const rhs = p.dotident(p.ident());
-            return new SelectorExpr(pos, p.scope, ident, rhs);
-        }
-        return ident;
     }
     ident() {
         const p = this;
@@ -4262,11 +4342,16 @@ class Parser extends Scanner {
             p.errorAt(msg, position);
             return;
         }
-        p.errorAt("unexpected " + tokstr(p.tok) + msg, position);
+        let cond = (p.tok == token.EOF ? 'unexpected end of input' :
+            `unexpected ${tokstr(p.tok)}`);
+        p.errorAt(cond + msg, position);
+        if (DEBUG) {
+            console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`);
+        }
     }
     diag(k, msg, pos = this.pos, code) {
         const p = this;
-        if (k == DiagKind.ERROR) {
+        if (k == "error") {
             p.error(msg, pos, code);
         }
         else if (p.diagh) {
@@ -4274,15 +4359,10 @@ class Parser extends Scanner {
         }
     }
 }
-function unparen(x) {
-    while (x instanceof ParenExpr) {
-        x = x.x;
-    }
-    return x;
+function isEmptyFunExpr(d) {
+    return d instanceof FunExpr && !d.body;
 }
-function isEmptyFunDecl(d) {
-    return d instanceof FunDecl && !d.body;
-}
+//# sourceMappingURL=parser.js.map
 
 class pkgBinder extends ErrorReporter {
     constructor(pkg, fset, importer, types, errh) {
@@ -4293,20 +4373,21 @@ class pkgBinder extends ErrorReporter {
         this.types = types;
         this.errorCount = 0;
         this.imports = new Map();
+        this.undef = null;
     }
     bind() {
         const b = this;
-        return Promise.all(b.pkg.files.map(f => this._bind1(f))).then(() => {
+        return Promise.all(b.pkg.files.map(f => this._resolveImports(f))).then(() => {
             if (b.errorCount > 0) {
                 return;
             }
             for (let f of b.pkg.files) {
-                b._bind2(f);
+                b._resolveIdents(f);
             }
-            b._bind3();
+            b._resolveTypes();
         });
     }
-    _bind1(f) {
+    _resolveImports(f) {
         const b = this;
         if (!f.imports || f.imports.length == 0) {
             return Promise.resolve();
@@ -4334,46 +4415,63 @@ class pkgBinder extends ErrorReporter {
             f.scope.declareEnt(new Ent(name, imp, null, pkg.data));
         }
     }
-    _bind2(f) {
+    _resolveIdents(f) {
         const b = this;
         if (f.unresolved)
             for (let id of f.unresolved) {
                 let ent = f.scope.lookup(id.value);
                 if (!ent) {
                     b.error(`${id} undefined`, id.pos);
+                    if (!b.undef) {
+                        b.undef = new Set();
+                    }
+                    b.undef.add(id);
                     continue;
                 }
-                debuglog(`${id}`, ent.value && ent.value.constructor.name);
                 id.refEnt(ent);
                 let t = id.type;
-                if (t instanceof UnresolvedType && ent.value) {
+                if (t instanceof UnresolvedType) {
+                    assert(ent.value != null);
                     id.type = b.types.resolve(ent.value);
-                    assert(!(id.type instanceof UnresolvedType), 'TODO still unresolved');
+                    assert(!(id.type instanceof UnresolvedType), 'still unresolved');
                     if (t.refs)
                         for (let ref of t.refs) {
-                            ref.type = id.type;
+                            if (ref instanceof FunSig || ref instanceof FunType) {
+                                ref.result = id.type;
+                            }
+                            else {
+                                ref.type = id.type;
+                            }
                         }
                 }
             }
     }
-    _bind3() {
+    _resolveTypes() {
         const b = this;
         for (let ut of b.types.unresolved) {
             const t = ut.expr.type;
             if (!(t instanceof UnresolvedType)) {
                 continue;
             }
-            const restyp = b.types.resolve(ut.expr);
-            if (restyp instanceof UnresolvedType) {
-                b.error(`undefined type ${ut.expr}`, ut.expr.pos);
+            if (b.undef && ut.expr instanceof Ident && b.undef.has(ut.expr)) {
+                continue;
             }
-            else {
-                if (t.refs)
-                    for (let ref of t.refs) {
-                        console.log(`ref[1] ${ref}`);
+            ut.expr.type = null;
+            const restyp = b.types.maybeResolve(ut.expr);
+            if (!restyp) {
+                ut.expr.type = t;
+                debuglog(`cannot resolve type of ${ut.expr} ${b.fset.position(ut.expr.pos)}`);
+                continue;
+            }
+            if (t.refs)
+                for (let ref of t.refs) {
+                    if (ref instanceof FunSig || ref instanceof FunType) {
+                        ref.result = restyp;
+                    }
+                    else {
                         ref.type = restyp;
                     }
-            }
+                }
         }
     }
     error(msg, pos, c) {
@@ -4385,6 +4483,7 @@ function bindpkg(pkg, fset, importer, typeres, errh) {
     const b = new pkgBinder(pkg, fset, importer, typeres, errh);
     return b.bind().then(() => b.errorCount != 0);
 }
+//# sourceMappingURL=bind.js.map
 
 const NoPos = 0;
 
@@ -4551,6 +4650,7 @@ function searchInts(a, x) {
     }
     return i - 1;
 }
+//# sourceMappingURL=pos.js.map
 
 let _nextId = 0;
 class ByteStr {
@@ -4601,6 +4701,11 @@ function hashBytes(buf, offs, length) {
     }
     return h >>> 0;
 }
+function asciiByteStr(s) {
+    let b = asciibuf(s);
+    return new ByteStr(hashBytes(b, 0, b.length), b);
+}
+//# sourceMappingURL=bytestr.js.map
 
 class TypeSet {
     constructor() {
@@ -4611,6 +4716,7 @@ class TypeSet {
         if (s) {
             for (let i of s) {
                 if (i.equals(t)) {
+                    assert(i instanceof t.constructor);
                     return i;
                 }
             }
@@ -4622,82 +4728,7 @@ class TypeSet {
         return t;
     }
 }
-
-const TERM = typeof process != 'undefined' && process.env.TERM || '';
-function sfn(open, close) {
-    open = '\x1b[' + open + 'm';
-    close = '\x1b[' + close + 'm';
-    return (s) => open + s + close;
-}
-const termColorSupport = (TERM && ['xterm', 'screen', 'vt100'].some(s => TERM.indexOf(s) != -1) ? (TERM.indexOf('256color') != -1 ? 256 :
-    16) : 0);
-const passThrough = ((s) => s);
-const noStyle = {
-    'clear': "",
-    'bold': passThrough,
-    'italic': passThrough,
-    'underline': passThrough,
-    'inverse': passThrough,
-    'white': passThrough,
-    'grey': passThrough,
-    'black': passThrough,
-    'blue': passThrough,
-    'cyan': passThrough,
-    'green': passThrough,
-    'magenta': passThrough,
-    'purple': passThrough,
-    'pink': passThrough,
-    'red': passThrough,
-    'yellow': passThrough,
-    'lightyellow': passThrough,
-    'orange': passThrough,
-};
-const style = (termColorSupport == 0 ? noStyle :
-    termColorSupport < 256 ? {
-        'clear': "\e[0m",
-        'bold': sfn('1', '22'),
-        'italic': sfn('3', '23'),
-        'underline': sfn('4', '24'),
-        'inverse': sfn('7', '27'),
-        'white': sfn('37', '39'),
-        'grey': sfn('90', '39'),
-        'black': sfn('30', '39'),
-        'blue': sfn('34', '39'),
-        'cyan': sfn('36', '39'),
-        'green': sfn('32', '39'),
-        'magenta': sfn('35', '39'),
-        'purple': sfn('35', '39'),
-        'pink': sfn('35', '39'),
-        'red': sfn('31', '39'),
-        'yellow': sfn('33', '39'),
-        'lightyellow': sfn('93', '39'),
-        'orange': sfn('33', '39'),
-    } : {
-        'clear': "\e[0m",
-        'bold': sfn('1', '22'),
-        'italic': sfn('3', '23'),
-        'underline': sfn('4', '24'),
-        'inverse': sfn('7', '27'),
-        'white': sfn('38;5;255', '39'),
-        'grey': sfn('38;5;244', '39'),
-        'black': sfn('38;5;16', '39'),
-        'blue': sfn('38;5;75', '39'),
-        'cyan': sfn('38;5;87', '39'),
-        'green': sfn('38;5;84', '39'),
-        'magenta': sfn('38;5;213', '39'),
-        'purple': sfn('38;5;141', '39'),
-        'pink': sfn('38;5;211', '39'),
-        'red': sfn('38;2;255;110;80', '39'),
-        'yellow': sfn('38;5;227', '39'),
-        'lightyellow': sfn('38;5;229', '39'),
-        'orange': sfn('38;5;215', '39'),
-    });
-function streamStyle(w) {
-    return termColorSupport && w.isTTY && style || noStyle;
-}
-const stdoutStyle = (typeof process != 'undefined' && streamStyle(process.stdout) || noStyle);
-const stderrStyle = (typeof process != 'undefined' && streamStyle(process.stderr) || noStyle);
-const stdoutSupportsStyle = stdoutStyle !== noStyle;
+//# sourceMappingURL=typeset.js.map
 
 class ReprCtx {
     constructor() {
@@ -4716,6 +4747,7 @@ class ReprCtx {
         return gid.toString(36);
     }
 }
+const defaultCtx = new ReprCtx();
 function astRepr(n, options) {
     let ctx = defaultCtx;
     if (options) {
@@ -4724,14 +4756,40 @@ function astRepr(n, options) {
             ctx.style = options.colors ? style : noStyle;
         }
     }
-    return repr1(n, '\n', ctx).trim();
-}
-const defaultCtx = new ReprCtx();
-function _reprt(t, nl, c) {
-    if (t instanceof ConstStringType) {
-        return `${t.name}[${t.length}]`;
+    if (n instanceof Package) {
+        return reprpkg(n, ctx);
     }
-    if (t instanceof IntrinsicType) {
+    if (n instanceof File) {
+        return reprfile(n, '\n', ctx);
+    }
+    else {
+        return repr1(n, '\n', ctx).trim();
+    }
+}
+function reprpkg(n, c) {
+    let s = `(pkg "${n.name.replace(/"/g, '\\"')}"`;
+    if (n.files.length) {
+        let nl = '\n  ';
+        for (let f of n.files) {
+            s += nl + reprfile(f, nl, c);
+        }
+        s = s.trimRight() + '\n';
+    }
+    return s + ')';
+}
+function reprfile(n, nl, c) {
+    let s = `(file "${n.sfile.name.replace(/"/g, '\\"')}"`;
+    if (n.decls.length) {
+        let nl2 = nl + '  ';
+        for (let d of n.decls) {
+            s += nl2 + repr1(d, nl2, c);
+        }
+        s = s.trimRight() + nl;
+    }
+    return s + ')';
+}
+function _reprt(t, nl, c) {
+    if (t instanceof BasicType) {
         return c.style.bold(t.name);
     }
     if (t instanceof TupleType) {
@@ -4742,12 +4800,12 @@ function _reprt(t, nl, c) {
     }
     if (t instanceof FunType) {
         return ('(' + t.inputs.map(it => _reprt(it, nl, c)).join(', ') + ')' +
-            '->' + _reprt(t.output, nl, c));
+            '->' + _reprt(t.result, nl, c));
     }
     if (t instanceof UnresolvedType) {
         return '~';
     }
-    return `???${t.constructor.name}`;
+    return t.toString();
 }
 function reprt0(tx, nl, c) {
     if (!tx) {
@@ -4773,13 +4831,14 @@ function reprv(nv, newline, c, delims = '()') {
         (delims[1] || ''));
 }
 function reprid(id, c) {
-    return decodeToString(id.value.bytes);
+    return (decodeToString(id.value.bytes));
 }
 function reprcons(n, c) {
     return c.style.grey(n.constructor.name);
 }
-function repr1(n, newline, c) {
-    if (n instanceof IntrinsicType) {
+function repr1(n, newline, c, flag = 0) {
+    assert(n);
+    if (n instanceof BasicType) {
         return c.style.purple(c.style.bold(n.name));
     }
     if (n instanceof BasicLit || n instanceof StringLit) {
@@ -4801,14 +4860,16 @@ function repr1(n, newline, c) {
     const nl2 = newline + c.ind;
     if (n instanceof Field) {
         let s = repr1(n.type, nl2, c);
-        if (n.ident) {
-            s = '(' + repr1(n.ident, nl2, c) + ' ' + s + ')';
+        if (n.name) {
+            s = '(' + repr1(n.name, nl2, c) + ' ' + s + ')';
         }
         return s;
     }
-    if (n instanceof BlockStmt) {
+    if (n instanceof Block) {
         return (n.list.length ?
-            newline + '{' + reprv(n.list, nl2, c, '') + newline + '}' :
+            newline + '{' +
+                n.list.map(n => nl2 + repr1(n, nl2, c).trim()).join('') +
+                newline + '}' :
             '{}');
     }
     if (n instanceof ReturnStmt) {
@@ -4817,13 +4878,20 @@ function repr1(n, newline, c) {
         }
         return newline + reprcons(n, c);
     }
-    if (n instanceof ExprStmt) {
-        return newline + `(${reprcons(n, c)} ${repr1(n.expr, nl2, c)})`;
+    if (n instanceof IfExpr) {
+        let s = ((flag ? '' :
+            newline + '(' + reprt(n.type, newline, c)) +
+            'if ' + repr1(n.cond, nl2, c) +
+            repr1(n.then, newline, c));
+        if (n.els_) {
+            s += newline + 'else ' + repr1(n.els_, newline, c, 1);
+        }
+        return flag ? s : s + ')';
     }
     if (n instanceof FunSig) {
         return reprv(n.params, nl2, c) + ' -> ' + reprt(n.result, nl2, c);
     }
-    if (n instanceof AssignStmt) {
+    if (n instanceof Assignment) {
         let s = newline + `(${reprcons(n, c)} `;
         s += reprv(n.lhs, nl2, c);
         if (n.op == token.ILLEGAL) {
@@ -4835,13 +4903,34 @@ function repr1(n, newline, c) {
         s += reprv(n.rhs, nl2, c);
         return s + ')';
     }
-    if (n instanceof DeclStmt) {
+    if (n instanceof MultiDecl) {
         return newline + `(${reprcons(n, c)}` + ' ' + reprv(n.decls, nl2, c, '') + ')';
     }
     if (n instanceof SelectorExpr) {
         return ('(SEL ' +
             repr1(n.lhs, newline, c) + '.' +
             repr1(n.rhs, newline, c) + ')');
+    }
+    if (n instanceof IndexExpr) {
+        return (`(${reprt(n.type, newline, c)}index ` +
+            repr1(n.operand, newline, c) + ' ' +
+            repr1(n.index, newline, c) +
+            ')');
+    }
+    if (n instanceof SliceExpr) {
+        return (`(${reprt(n.type, newline, c)}slice ` +
+            repr1(n.operand, newline, c) + ' ' +
+            (n.start ? repr1(n.start, newline, c) : 'nil') + ' ' +
+            (n.end ? repr1(n.end, newline, c) : 'nil') +
+            ')');
+    }
+    if (n instanceof Operation) {
+        let ts = c.typedepth ? '' : reprt(n.type, newline, c);
+        let s = '(' + ts + c.style.orange(token[n.op]) + ' ' + repr1(n.x, nl2, c);
+        if (n.y) {
+            s += ' ' + repr1(n.y, nl2, c);
+        }
+        return s + ')';
     }
     let s = '(';
     if (n instanceof Expr && !c.typedepth) {
@@ -4869,7 +4958,7 @@ function repr1(n, newline, c) {
         if (n.values) {
             s += ' ' + reprv(n.values, nl2, c);
         }
-        return s + ' )';
+        return s + ')';
     }
     if (n instanceof TypeDecl) {
         if (n.group) {
@@ -4881,13 +4970,6 @@ function repr1(n, newline, c) {
         }
         return s + ' ' + repr1(n.type, nl2, c) + ')';
     }
-    if (n instanceof Operation) {
-        s += ' ' + tokstr(n.op) + ' ' + repr1(n.x, nl2, c);
-        if (n.y) {
-            s += ' ' + repr1(n.y, nl2, c);
-        }
-        return s + ')';
-    }
     if (n instanceof CallExpr) {
         s += ' ' + repr1(n.fun, newline, c) + ' (';
         s += reprv(n.args, nl2, c, '');
@@ -4896,13 +4978,10 @@ function repr1(n, newline, c) {
         }
         return s + '))';
     }
-    if (n instanceof ParenExpr) {
-        return s + ' ' + repr1(n.x, newline, c) + ')';
-    }
     if (n instanceof TypeConvExpr) {
         return s + ' ' + repr1(n.expr, newline, c) + ')';
     }
-    if (n instanceof FunDecl) {
+    if (n instanceof FunExpr) {
         s += ' ';
         if (n.isInit) {
             s += 'init ';
@@ -4919,12 +4998,720 @@ function repr1(n, newline, c) {
     if (n instanceof TupleExpr) {
         return s + ' ' + reprv(n.exprs, nl2, c, '') + ')';
     }
-    if (n.constructor === SimpleStmt) {
+    if (n.constructor === NoOpStmt) {
         return 'noop';
     }
     return '(???' + reprcons(n, c) + ' ' + repr(n) + ')';
 }
+//# sourceMappingURL=ast-repr.js.map
 
+const universeTypes = new Map();
+const universeValues = new Map();
+function namedtype(x, name) {
+    assert(!universeTypes.has(name));
+    universeTypes.set(name, x);
+    return x;
+}
+function ival(name, typ) {
+    const x = new IntrinsicVal(name, typ);
+    assert(!universeValues.has(name));
+    universeValues.set(name, x);
+    return x;
+}
+const u_v_true = ival('true', u_t_bool);
+const u_v_false = ival('false', u_t_bool);
+const u_v_nil = ival('nil', u_t_nil);
+const uintz$1 = 32;
+namedtype(u_t_bool, 'bool');
+namedtype(u_t_uint, 'uint');
+namedtype(u_t_int, 'int');
+namedtype(u_t_i8, 'i8');
+namedtype(u_t_i16, 'i16');
+namedtype(u_t_i32, 'i32');
+namedtype(u_t_i64, 'i64');
+namedtype(u_t_u8, 'u8');
+namedtype(u_t_u16, 'u16');
+namedtype(u_t_u32, 'u32');
+namedtype(u_t_u64, 'u64');
+namedtype(u_t_f32, 'f32');
+namedtype(u_t_f64, 'f64');
+namedtype(u_t_str, 'str');
+const universeTypeAliases = new Map([
+    ['byte', 'u8'],
+    ['char', 'u32'],
+]);
+var TypeCompat;
+(function (TypeCompat) {
+    TypeCompat[TypeCompat["NO"] = 0] = "NO";
+    TypeCompat[TypeCompat["LOSSY"] = 1] = "LOSSY";
+    TypeCompat[TypeCompat["LOSSLESS"] = 2] = "LOSSLESS";
+})(TypeCompat || (TypeCompat = {}));
+const typeCompatMap = new Map([
+    [u_t_u64, new Map([
+            [u_t_uint, TypeCompat.LOSSLESS],
+            [u_t_int, TypeCompat.LOSSLESS],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSLESS],
+            [u_t_i64, TypeCompat.LOSSLESS],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, TypeCompat.LOSSLESS],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_i64, new Map([
+            [u_t_uint, uintz$1 <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_int, TypeCompat.LOSSLESS],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSLESS],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, TypeCompat.LOSSLESS],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_u32, new Map([
+            [u_t_uint, uintz$1 <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_int, uintz$1 <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSLESS],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_i32, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_int, uintz$1 <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_uint, new Map([
+            [u_t_int, TypeCompat.LOSSLESS],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSLESS],
+            [u_t_i64, uintz$1 >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, uintz$1 >= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_u64, uintz$1 >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_int, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSLESS],
+            [u_t_i64, uintz$1 >= 64 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, uintz$1 >= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_u16, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_int, TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSY],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u32, TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_i16, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_int, TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSY],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSY],
+            [u_t_u32, TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_u8, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_int, TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSY],
+            [u_t_i32, TypeCompat.LOSSY],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u16, TypeCompat.LOSSY],
+            [u_t_u32, TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_i8, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_int, TypeCompat.LOSSY],
+            [u_t_i16, TypeCompat.LOSSY],
+            [u_t_i32, TypeCompat.LOSSY],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSY],
+            [u_t_u16, TypeCompat.LOSSY],
+            [u_t_u32, TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_f32, new Map([
+            [u_t_uint, TypeCompat.LOSSY],
+            [u_t_int, TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSY],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, TypeCompat.LOSSY],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f64, TypeCompat.LOSSY],
+        ])],
+    [u_t_f64, new Map([
+            [u_t_uint, uintz$1 <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_int, uintz$1 <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [u_t_i8, TypeCompat.LOSSLESS],
+            [u_t_i16, TypeCompat.LOSSLESS],
+            [u_t_i32, TypeCompat.LOSSLESS],
+            [u_t_i64, TypeCompat.LOSSY],
+            [u_t_u8, TypeCompat.LOSSLESS],
+            [u_t_u16, TypeCompat.LOSSLESS],
+            [u_t_u32, TypeCompat.LOSSLESS],
+            [u_t_u64, TypeCompat.LOSSY],
+            [u_t_f32, TypeCompat.LOSSLESS],
+        ])],
+]);
+function basicTypeCompat(dst, src) {
+    assert(dst !== src, "same type is always compatible");
+    let s = typeCompatMap.get(dst);
+    return s && s.get(src) || TypeCompat.NO;
+}
+TEST("basicTypeCompat", () => {
+    function assertTypeCompat(dst, src, expect, cons) {
+        const r = basicTypeCompat(dst, src);
+        assert(r === expect, `${dst}(${src}) == ${TypeCompat[r]} (expected ${TypeCompat[expect]})`, cons);
+    }
+    function assert_LOSSLESS(dst, src) {
+        assertTypeCompat(dst, src, TypeCompat.LOSSLESS, assert_LOSSLESS);
+    }
+    function assert_LOSSY(dst, src) {
+        assertTypeCompat(dst, src, TypeCompat.LOSSY, assert_LOSSY);
+    }
+    assert_LOSSLESS(u_t_u64, u_t_uint);
+    assert_LOSSLESS(u_t_u64, u_t_int);
+    assert_LOSSLESS(u_t_u64, u_t_i64);
+    assert_LOSSLESS(u_t_u64, u_t_u32);
+    assert_LOSSLESS(u_t_u64, u_t_i32);
+    assert_LOSSLESS(u_t_u64, u_t_u16);
+    assert_LOSSLESS(u_t_u64, u_t_i16);
+    assert_LOSSLESS(u_t_u64, u_t_u8);
+    assert_LOSSLESS(u_t_u64, u_t_i8);
+    assert_LOSSY(u_t_u64, u_t_f32);
+    assert_LOSSY(u_t_u64, u_t_f64);
+    assert_LOSSLESS(u_t_i64, u_t_uint);
+    if (uintz$1 == 64) {
+        assert_LOSSY(u_t_i64, u_t_int);
+    }
+    else {
+        assert_LOSSLESS(u_t_i64, u_t_int);
+    }
+    assert_LOSSY(u_t_i64, u_t_u64);
+    assert_LOSSLESS(u_t_i64, u_t_u32);
+    assert_LOSSLESS(u_t_i64, u_t_i32);
+    assert_LOSSLESS(u_t_i64, u_t_u16);
+    assert_LOSSLESS(u_t_i64, u_t_i16);
+    assert_LOSSLESS(u_t_i64, u_t_u8);
+    assert_LOSSLESS(u_t_i64, u_t_i8);
+    assert_LOSSY(u_t_i64, u_t_f32);
+    assert_LOSSY(u_t_i64, u_t_f64);
+    if (uintz$1 == 64) {
+        assert_LOSSY(u_t_u32, u_t_uint);
+        assert_LOSSY(u_t_u32, u_t_int);
+    }
+    else {
+        assert_LOSSLESS(u_t_u32, u_t_uint);
+        assert_LOSSLESS(u_t_u32, u_t_int);
+    }
+    assert_LOSSY(u_t_u32, u_t_u64);
+    assert_LOSSY(u_t_u32, u_t_i64);
+    assert_LOSSLESS(u_t_u32, u_t_i32);
+    assert_LOSSLESS(u_t_u32, u_t_u16);
+    assert_LOSSLESS(u_t_u32, u_t_i16);
+    assert_LOSSLESS(u_t_u32, u_t_u8);
+    assert_LOSSLESS(u_t_u32, u_t_i8);
+    assert_LOSSY(u_t_u32, u_t_f32);
+    assert_LOSSY(u_t_u32, u_t_f64);
+    assert_LOSSY(u_t_i32, u_t_uint);
+    if (uintz$1 == 64) {
+        assert_LOSSY(u_t_i32, u_t_int);
+    }
+    else {
+        assert_LOSSLESS(u_t_i32, u_t_int);
+    }
+    assert_LOSSY(u_t_i32, u_t_u64);
+    assert_LOSSY(u_t_i32, u_t_i64);
+    assert_LOSSY(u_t_i32, u_t_u32);
+    assert_LOSSLESS(u_t_i32, u_t_u16);
+    assert_LOSSLESS(u_t_i32, u_t_i16);
+    assert_LOSSLESS(u_t_i32, u_t_u8);
+    assert_LOSSLESS(u_t_i32, u_t_i8);
+    assert_LOSSY(u_t_i32, u_t_f32);
+    assert_LOSSY(u_t_i32, u_t_f64);
+    assert_LOSSY(u_t_u16, u_t_uint);
+    assert_LOSSY(u_t_u16, u_t_int);
+    assert_LOSSY(u_t_u16, u_t_u64);
+    assert_LOSSY(u_t_u16, u_t_i64);
+    assert_LOSSY(u_t_u16, u_t_u32);
+    assert_LOSSY(u_t_u16, u_t_i32);
+    assert_LOSSLESS(u_t_u16, u_t_i16);
+    assert_LOSSLESS(u_t_u16, u_t_u8);
+    assert_LOSSLESS(u_t_u16, u_t_i8);
+    assert_LOSSY(u_t_u16, u_t_f32);
+    assert_LOSSY(u_t_u16, u_t_f64);
+    assert_LOSSY(u_t_i16, u_t_uint);
+    assert_LOSSY(u_t_i16, u_t_int);
+    assert_LOSSY(u_t_i16, u_t_u64);
+    assert_LOSSY(u_t_i16, u_t_i64);
+    assert_LOSSY(u_t_i16, u_t_u32);
+    assert_LOSSY(u_t_i16, u_t_i32);
+    assert_LOSSY(u_t_i16, u_t_u16);
+    assert_LOSSLESS(u_t_i16, u_t_u8);
+    assert_LOSSLESS(u_t_i16, u_t_i8);
+    assert_LOSSY(u_t_i16, u_t_f32);
+    assert_LOSSY(u_t_i16, u_t_f64);
+    assert_LOSSY(u_t_u8, u_t_uint);
+    assert_LOSSY(u_t_u8, u_t_int);
+    assert_LOSSY(u_t_u8, u_t_u64);
+    assert_LOSSY(u_t_u8, u_t_i64);
+    assert_LOSSY(u_t_u8, u_t_u32);
+    assert_LOSSY(u_t_u8, u_t_i32);
+    assert_LOSSY(u_t_u8, u_t_u16);
+    assert_LOSSY(u_t_u8, u_t_i16);
+    assert_LOSSLESS(u_t_u8, u_t_i8);
+    assert_LOSSY(u_t_u8, u_t_f32);
+    assert_LOSSY(u_t_u8, u_t_f64);
+    assert_LOSSY(u_t_i8, u_t_uint);
+    assert_LOSSY(u_t_i8, u_t_int);
+    assert_LOSSY(u_t_i8, u_t_u64);
+    assert_LOSSY(u_t_i8, u_t_i64);
+    assert_LOSSY(u_t_i8, u_t_u32);
+    assert_LOSSY(u_t_i8, u_t_i32);
+    assert_LOSSY(u_t_i8, u_t_u16);
+    assert_LOSSY(u_t_i8, u_t_i16);
+    assert_LOSSY(u_t_i8, u_t_u8);
+    assert_LOSSY(u_t_i8, u_t_f32);
+    assert_LOSSY(u_t_i8, u_t_f64);
+    if (uintz$1 <= 32) {
+        assert_LOSSLESS(u_t_f64, u_t_uint);
+        assert_LOSSLESS(u_t_f64, u_t_int);
+    }
+    else {
+        assert_LOSSY(u_t_f64, u_t_uint);
+        assert_LOSSY(u_t_f64, u_t_int);
+    }
+    assert_LOSSY(u_t_f64, u_t_u64);
+    assert_LOSSY(u_t_f64, u_t_i64);
+    assert_LOSSLESS(u_t_f64, u_t_u32);
+    assert_LOSSLESS(u_t_f64, u_t_i32);
+    assert_LOSSLESS(u_t_f64, u_t_u16);
+    assert_LOSSLESS(u_t_f64, u_t_i16);
+    assert_LOSSLESS(u_t_f64, u_t_u8);
+    assert_LOSSLESS(u_t_f64, u_t_i8);
+    assert_LOSSLESS(u_t_f64, u_t_f32);
+    assert_LOSSY(u_t_f32, u_t_uint);
+    assert_LOSSY(u_t_f32, u_t_int);
+    assert_LOSSY(u_t_f32, u_t_u64);
+    assert_LOSSY(u_t_f32, u_t_i64);
+    assert_LOSSY(u_t_f32, u_t_u32);
+    assert_LOSSY(u_t_f32, u_t_i32);
+    assert_LOSSLESS(u_t_f32, u_t_u16);
+    assert_LOSSLESS(u_t_f32, u_t_i16);
+    assert_LOSSLESS(u_t_f32, u_t_u8);
+    assert_LOSSLESS(u_t_f32, u_t_i8);
+    assert_LOSSY(u_t_f32, u_t_f64);
+});
+function intBinBits(v, neg) {
+    let start = 2;
+    while (v[start] == 0x30) {
+        start++;
+    }
+    let n = v.length - start;
+    if (n > 64) {
+        return 0;
+    }
+    if (n == 0) {
+        return 1;
+    }
+    if (neg) {
+        if (n == 64) {
+            let i = start;
+            while (v[++i] == 0x30) { }
+            if (i - start == 64) {
+                return 63;
+            }
+            return 0;
+        }
+        if (n > 31) {
+            let i = start;
+            while (v[++i] == 0x30) { }
+            if (i - start == 32) {
+                return 31;
+            }
+            return 63;
+        }
+        n--;
+    }
+    return n;
+}
+function testIntBits(fn, v) {
+    let input = v[0];
+    let expected = v[1];
+    let neg = false;
+    if (input[0] == '-') {
+        neg = true;
+        input = input.substr(1);
+    }
+    let actual = fn(asciibuf(input), neg);
+    assert(actual == expected, JSON.stringify(v[0]) + ` => ${actual}; expected ${expected}`);
+}
+TEST("intBinBits", () => {
+    [
+        ["0b0", 1],
+        ["0b1111111", 7],
+        ["0b10000000", 8],
+        ["0b11111111", 8],
+        ["0b100000000", 9],
+        ["0b111111111111111", 15],
+        ["0b1000000000000000", 16],
+        ["0b1111111111111111", 16],
+        ["0b10000000000000000", 17],
+        ["0b1111111111111111111111111111111", 31],
+        ["0b10000000000000000000000000000000", 32],
+        ["0b11111111111111111111111111111111", 32],
+        ["0b100000000000000000000000000000000", 33],
+        ["0b11111111111111111111111111111111111111111111111111111", 53],
+        ["0b111111111111111111111111111111111111111111111111111111111111111", 63],
+        ["0b1000000000000000000000000000000000000000000000000000000000000000", 64],
+        ["0b1111111111111111111111111111111111111111111111111111111111111111", 64],
+        ["0b10000000000000000000000000000000000000000000000000000000000000000", 0],
+        ["-0b10000000000000000000000000000000", 31],
+        ["-0b10000000000000000000000000000001", 63],
+        ["-0b1000000000000000000000000000000000000000000000000000000000000000", 63],
+        ["-0b1000000000000000000000000000000000000000000000000000000000000001", 0],
+    ].map(v => testIntBits(intBinBits, v));
+});
+const i32minOctBuf = new Uint8Array([
+    50, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
+]);
+const i64minOctBuf = new Uint8Array([
+    49, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
+]);
+function intOctBits(b, neg) {
+    let start = 2;
+    while (b[start] == 0x30) {
+        start++;
+    }
+    let z = b.length - start;
+    return (z < 3 ? 7 :
+        z == 3 ? (b[start] < 0x32 ? 7 :
+            b[start] < 0x34 ? 8 :
+                15) :
+            z < 6 ? 15 :
+                z == 6 && b[start] < 0x32 ? 16 :
+                    z < 11 ? 31 :
+                        z == 11 ? (neg ? (bufcmp$1(b, i32minOctBuf, start) <= 0 ? 31 : 63) :
+                            b[start] < 0x32 ? 31 :
+                                b[start] < 0x34 ? 32 :
+                                    63) :
+                            z < 22 ? 63 :
+                                z == 22 ? (neg ? (bufcmp$1(b, i64minOctBuf, start) <= 0 ? 63 : 0) :
+                                    b[start] < 0x32 ? 64 :
+                                        0) :
+                                    0);
+}
+TEST("intOctBits", () => {
+    [
+        ["0o0", 7],
+        ["0o177", 7],
+        ["0o200", 8],
+        ["0o377", 8],
+        ["0o400", 15],
+        ["0o77777", 15],
+        ["0o100000", 16],
+        ["0o177777", 16],
+        ["0o200000", 31],
+        ["0o17777777777", 31],
+        ["0o20000000000", 32],
+        ["0o37777777777", 32],
+        ["0o40000000000", 63],
+        ["0o377777777777777777", 63],
+        ["0o777777777777777777777", 63],
+        ["0o1000000000000000000000", 64],
+        ["0o1777777777777777777777", 64],
+        ["0o2000000000000000000000", 0],
+        ["-0o20000000000", 31],
+        ["-0o20000000001", 63],
+        ["-0o1000000000000000000000", 63],
+        ["-0o1000000000000000000001", 0],
+    ].map(v => testIntBits(intOctBits, v));
+});
+const i64maxDecBuf = new Uint8Array([
+    57, 50, 50, 51, 51, 55, 50, 48, 51, 54, 56, 53, 52, 55, 55, 53, 56, 48, 55
+]);
+const i64minDecBuf = new Uint8Array([
+    57, 50, 50, 51, 51, 55, 50, 48, 51, 54, 56, 53, 52, 55, 55, 53, 56, 48, 56
+]);
+const u64maxDecBuf = new Uint8Array([
+    49, 56, 52, 52, 54, 55, 52, 52, 48, 55, 51, 55, 48, 57, 53, 53, 49, 54, 49, 53
+]);
+function intDecBits(b, neg) {
+    let v = 0, z = b.length;
+    for (let i = 0; i < z; i++) {
+        v = v * 10 + (b[i] - 0x30);
+    }
+    if (v < 0x80) {
+        return 7;
+    }
+    if (v < 0x1FFFFFFFFFFFFF) {
+        let bits = Math.floor(Math.log2(neg ? v - 1 : v)) + 1;
+        if (neg && bits > 31) {
+            bits = 63;
+        }
+        return bits;
+    }
+    let start = 0;
+    while (b[start] == 0x30) {
+        start++;
+    }
+    z = b.length - start;
+    return (z < 19 ? 63 :
+        z == 19 ?
+            bufcmp$1(b, neg ? i64minDecBuf : i64maxDecBuf, start) <= 0 ? 63 :
+                neg ? 0 : 64 :
+            z == 20 && bufcmp$1(b, u64maxDecBuf, start) <= 0 ? 64 : 0);
+}
+TEST("intDecBits", () => {
+    [
+        ["0", 7],
+        ["127", 7],
+        ["128", 8],
+        ["255", 8],
+        ["256", 9],
+        ["32767", 15],
+        ["32768", 16],
+        ["65535", 16],
+        ["65536", 17],
+        ["2147483647", 31],
+        ["2147483648", 32],
+        ["4294967295", 32],
+        ["4294967296", 33],
+        ["9007199254740991", 63],
+        ["9223372036854775807", 63],
+        ["9223372036854775808", 64],
+        ["18446744073709551615", 64],
+        ["18446744073709551616", 0],
+        ["-2147483648", 31],
+        ["-2147483649", 63],
+        ["-9223372036854775808", 63],
+        ["-9223372036854775809", 0],
+    ].map(v => testIntBits(intDecBits, v));
+});
+const i64minHexBuf = new Uint8Array([
+    56, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48, 48
+]);
+function intHexBits(b, neg) {
+    let v = 0, z = b.length;
+    for (let n = 0, i = 2; i < z; i++) {
+        n = b[i];
+        n = (n >= 0x30 && n <= 0x39 ? n - 0x30 :
+            n >= 0x41 && n <= 0x46 ? n - 0x41 + 10 :
+                n - 0x61 + 10);
+        v = v * 16 + n;
+    }
+    if (v < 0x80) {
+        return 7;
+    }
+    if (v < 0x1FFFFFFFFFFFFF) {
+        let bits = Math.floor(Math.log2(neg ? v - 1 : v)) + 1;
+        if (neg && bits > 31) {
+            bits = 63;
+        }
+        return bits;
+    }
+    let start = 2;
+    while (b[start] == 0x30) {
+        start++;
+    }
+    z = b.length - start;
+    return (z < 16 || (z == 16 && b[start] <= 0x37) ? 63 :
+        z == 16 ?
+            neg ? (bufcmp$1(b, i64minHexBuf, start) <= 0 ? 63 : 0) :
+                64 :
+            0);
+}
+TEST("intHexBits", () => {
+    [
+        ["0x0", 7],
+        ["0x7F", 7],
+        ["0x80", 8],
+        ["0xFF", 8],
+        ["0x100", 9],
+        ["0x7FFF", 15],
+        ["0x8000", 16],
+        ["0xFFFF", 16],
+        ["0x10000", 17],
+        ["0x7FFFFFFF", 31],
+        ["0x80000000", 32],
+        ["0xFFFFFFFF", 32],
+        ["0x100000000", 33],
+        ["0x1FFFFFFFFFFFFF", 63],
+        ["0x7FFFFFFFFFFFFFFF", 63],
+        ["0x8000000000000000", 64],
+        ["0xFFFFFFFFFFFFFFFF", 64],
+        ["0x10000000000000000", 0],
+        ["-0x80000000", 31],
+        ["-0x80000001", 63],
+        ["-0x8000000000000000", 63],
+        ["-0x8000000000000001", 0],
+    ].map(v => testIntBits(intHexBits, v));
+});
+function intBits(x, neg) {
+    switch (x.kind) {
+        case token.INT_BIN: return intBinBits(x.value, neg);
+        case token.INT_OCT: return intOctBits(x.value, neg);
+        case token.INT: return intDecBits(x.value, neg);
+        case token.INT_HEX: return intHexBits(x.value, neg);
+        default: return 0;
+    }
+}
+function intLitTypeFitter(x, reqt, errh, op) {
+    const neg = op == token.SUB;
+    let bits = intBits(x, neg);
+    const maxtype = neg ? u_t_i64 : u_t_u64;
+    if (bits == 0) {
+        if (errh) {
+            let t = reqt instanceof BasicType ? reqt : maxtype;
+            errh(`constant ${x} overflows ${t.name}`, x.pos);
+            bits = 64;
+        }
+    }
+    else if (reqt) {
+        if (reqt instanceof IntType) {
+            if (reqt.bitsize >= bits && (!neg || reqt.signed)) {
+                return reqt;
+            }
+            if (errh) {
+                errh(`constant ${x} overflows ${reqt.name}`, x.pos);
+                bits = 64;
+            }
+        }
+        else if (reqt === u_t_f64 || reqt === u_t_f32) {
+            return reqt;
+        }
+        else if (errh) {
+            errh(`cannot use ${x} as type ${reqt}`, x.pos);
+        }
+    }
+    else if (neg && bits >= 64 && errh) {
+        errh(`constant ${x} overflows i64`, x.pos);
+    }
+    return (bits <= 31 ? u_t_int :
+        bits <= 63 ? u_t_i64 :
+            maxtype);
+}
+function floatLitTypeFitter(x, reqt, errh, op) {
+    if (reqt && reqt !== u_t_f32 && reqt !== u_t_f64) {
+        if (reqt instanceof IntType) {
+            errh && errh(`constant ${x} truncated to ${reqt.name}`, x.pos);
+            return reqt;
+        }
+        else if (errh) {
+            errh(`cannot use ${x} as type ${reqt}`, x.pos);
+        }
+    }
+    return reqt === u_t_f32 ? u_t_f32 : u_t_f64;
+}
+function charLitTypeFitter(x, reqt, errh, op) {
+    if (reqt) {
+        if (reqt instanceof IntType) {
+            return reqt;
+        }
+        errh && errh(`cannot use ${x} as type ${reqt}`, x.pos);
+    }
+    return op == token.SUB ? u_t_i32 : u_t_u32;
+}
+const basicLitTypesFitters = new Map([
+    [token.CHAR, charLitTypeFitter],
+    [token.INT, intLitTypeFitter],
+    [token.INT_BIN, intLitTypeFitter],
+    [token.INT_OCT, intLitTypeFitter],
+    [token.INT_HEX, intLitTypeFitter],
+    [token.FLOAT, floatLitTypeFitter],
+]);
+class Universe {
+    constructor(strSet, typeSet) {
+        this.strSet = strSet;
+        this.typeSet = typeSet;
+        const unidecls = new Map();
+        for (let [name, t] of universeTypes) {
+            let n = strSet.emplace(asciibuf(name));
+            unidecls.set(n, new Ent(n, t, t));
+        }
+        for (let [aliasName, canonName] of universeTypeAliases) {
+            let aliasNameBuf = strSet.emplace(asciibuf(aliasName));
+            let canonNameBuf = strSet.emplace(asciibuf(canonName));
+            const obj = unidecls.get(canonNameBuf);
+            assert(obj);
+            unidecls.set(aliasNameBuf, obj);
+        }
+        for (let [name, x] of universeValues) {
+            let n = strSet.emplace(asciibuf(name));
+            unidecls.set(n, new Ent(n, x, x));
+        }
+        this.scope = new Scope(null, unidecls);
+    }
+    basicLitType(x, reqt, errh, op) {
+        let f = basicLitTypesFitters.get(x.kind);
+        assert(f, `missing type fitter for ${tokstr(x.kind)}`);
+        return f(x, reqt || null, errh, op);
+    }
+    internType(t) {
+        return this.typeSet.intern(t);
+    }
+}
+//# sourceMappingURL=universe.js.map
+
+class EvalConst {
+}
+class IntEvalConst extends EvalConst {
+    constructor(value) {
+        super();
+        this.value = value;
+    }
+}
 class TypeResolver extends ErrorReporter {
     constructor() {
         super('E_RESOLVE');
@@ -4940,19 +5727,19 @@ class TypeResolver extends ErrorReporter {
         const r = this;
         r.errorAt(msg, r.fset.position(pos), typ);
     }
+    syntaxError(msg, pos = NoPos) {
+        this.error(msg, pos, 'E_SYNTAX');
+    }
     resolve(n) {
         if (n instanceof Type) {
             return n;
         }
-        if (n.type instanceof Type && n.type.constructor !== UnresolvedType) {
+        if (n.type instanceof Type) {
             return n.type;
         }
         const r = this;
         let t = r.maybeResolve(n);
         if (!t) {
-            if (n.type) {
-                return n.type;
-            }
             t = r.markUnresolved(n);
             if (n instanceof SelectorExpr &&
                 n.lhs instanceof Ident &&
@@ -4973,33 +5760,38 @@ class TypeResolver extends ErrorReporter {
         }
         if (n instanceof Ident) {
             if (n.ent) {
-                if (n.ent.value) {
-                    return r.maybeResolve(n.ent.value);
-                }
-                if (n.ent.decl instanceof Expr) {
-                    return r.maybeResolve(n.ent.decl);
-                }
+                const tx = n.ent.getTypeExpr();
+                return tx && r.maybeResolve(tx) || null;
             }
             return null;
         }
-        if (n instanceof FunDecl) {
+        if (n instanceof Block) {
+            if (n.list.length == 0) {
+                return u_t_nil;
+            }
+            let s = n.list[n.list.length - 1];
+            if (s instanceof Expr) {
+                return r.resolve(s);
+            }
+            return u_t_nil;
+        }
+        if (n instanceof FunExpr) {
             const s = n.sig;
-            return r.universe.internType(new FunType(s.pos, s.scope, s.params.map(field => r.resolve(field.type)), r.resolve(s.result)));
+            let t = r.universe.internType(new FunType(s.pos, s.scope, s.params.map(field => r.resolve(field.type)), r.resolve(s.result)));
+            if (t.result instanceof UnresolvedType) {
+                t.result.addRef(t);
+            }
+            return t;
         }
         if (n instanceof TupleExpr) {
-            let types = [];
-            for (const x1 of n.exprs) {
-                const t = r.resolve(x1);
-                if (!t) {
-                    return null;
-                }
-                types.push(t);
-            }
-            return r.universe.internType(new TupleType(n.pos, n.scope, types));
+            return r.maybeResolveTupleType(n.pos, n.scope, n.exprs);
         }
         if (n instanceof RestExpr) {
-            let t = n.expr && r.resolve(n.expr) || u_t_auto;
-            return r.universe.internType(new RestType(n.pos, n.scope, t));
+            if (n.expr) {
+                let t = r.resolve(n.expr);
+                return r.universe.internType(new RestType(n.pos, n.scope, t));
+            }
+            return null;
         }
         if (n instanceof CallExpr) {
             const funtype = r.resolve(n.fun);
@@ -5007,16 +5799,326 @@ class TypeResolver extends ErrorReporter {
                 r.resolve(arg);
             }
             if (funtype instanceof FunType) {
-                return funtype.output;
+                return funtype.result;
             }
             return null;
+        }
+        if (n instanceof Operation) {
+            const xt = r.resolve(n.x);
+            if (!n.y) {
+                return xt;
+            }
+            else {
+                const yt = r.resolve(n.y);
+                if (n.op > token.cmpop_beg && n.op < token.cmpop_end) {
+                    return u_t_bool;
+                }
+                if (xt instanceof UnresolvedType || yt instanceof UnresolvedType) {
+                    return null;
+                }
+                if (xt === yt || xt.equals(yt)) {
+                    return xt;
+                }
+                let x = r.convert(xt, n.y);
+                if (x) {
+                    return x === n.y ? yt : r.resolve(x);
+                }
+                r.error(`invalid operation (mismatched types ${xt} and ${yt})`, n.pos);
+            }
+            return null;
+        }
+        if (n instanceof Assignment) {
+            if (n.lhs.length == 1) {
+                return r.resolve(n.lhs[0]);
+            }
+            return r.maybeResolveTupleType(n.pos, n.scope, n.lhs);
+        }
+        if (n instanceof ReturnStmt) {
+            return n.result ? r.resolve(n.result) : u_t_nil;
+        }
+        if (n instanceof IfExpr) {
+            return r.maybeResolveIfExpr(n);
+        }
+        if (n instanceof IndexExpr) {
+            r.resolveIndex(n);
+            return n.type;
         }
         debuglog(`TODO handle ${n.constructor.name}`);
         return null;
     }
+    maybeResolveTupleType(pos, scope, exprs) {
+        const r = this;
+        let types = [];
+        for (const x of exprs) {
+            const t = r.resolve(x);
+            if (!t) {
+                return null;
+            }
+            types.push(t);
+        }
+        return r.universe.internType(new TupleType(pos, scope, types));
+    }
+    joinOptional(pos, opt, t) {
+        const r = this;
+        if (opt.type.equals(t)) {
+            return opt;
+        }
+        if (opt.type instanceof StrType && t instanceof StrType) {
+            assert(opt.type.length != t.length, "str type matches but StrType.equals failed");
+            return u_t_optstr;
+        }
+        if (t instanceof UnionType) {
+            let ut = new UnionType(new Set([opt]));
+            for (let t1 of t.types) {
+                if (!(t1 instanceof OptionalType)) {
+                    if (t1 instanceof BasicType) {
+                        this.error(`mixing optional and ${t1} type`, pos, 'E_CONV');
+                    }
+                    else {
+                        t1 = (t1 instanceof StrType ? u_t_optstr :
+                            r.universe.internType(new OptionalType(t1)));
+                    }
+                }
+                ut.add(t1);
+            }
+            return ut;
+        }
+        if (t instanceof BasicType) {
+            this.error(`mixing optional and ${t} type`, pos, 'E_CONV');
+            return t;
+        }
+        return (t instanceof StrType ? u_t_optstr :
+            r.universe.internType(new OptionalType(t)));
+    }
+    mergeOptionalUnions(a, b) {
+        const r = this;
+        let ut = new UnionType(new Set());
+        for (let t of a.types) {
+            if (!(t instanceof OptionalType)) {
+                t = (t instanceof StrType ? u_t_optstr :
+                    r.universe.internType(new OptionalType(t)));
+            }
+            ut.add(t);
+        }
+        for (let t of b.types) {
+            if (!(t instanceof OptionalType)) {
+                t = (t instanceof StrType ? u_t_optstr :
+                    r.universe.internType(new OptionalType(t)));
+            }
+            ut.add(t);
+        }
+        return r.universe.internType(ut);
+    }
+    mergeUnions(a, b) {
+        const r = this;
+        let ut = new UnionType(new Set());
+        for (let t of a.types) {
+            if (t instanceof OptionalType) {
+                return r.mergeOptionalUnions(a, b);
+            }
+            ut.add(t);
+        }
+        for (let t of b.types) {
+            if (t instanceof OptionalType) {
+                return r.mergeOptionalUnions(a, b);
+            }
+            ut.add(t);
+        }
+        return r.universe.internType(ut);
+    }
+    makeOptionalUnionType2(l, r) {
+        return this.universe.internType(new UnionType(new Set([
+            l.type instanceof StrType && l.type.length != -1 ? u_t_optstr : l,
+            r.type instanceof StrType && r.type.length != -1 ? u_t_optstr : r,
+        ])));
+    }
+    makeUnionType2(l, r) {
+        return this.universe.internType(new UnionType(new Set([
+            l instanceof StrType && l.length != -1 ? u_t_str : l,
+            r instanceof StrType && r.length != -1 ? u_t_str : r,
+        ])));
+    }
+    maybeResolveIfExpr(n) {
+        const r = this;
+        let thentyp = r.resolve(n.then);
+        if (!n.els_) {
+            if (thentyp instanceof StrType && thentyp.length != 0) {
+                return u_t_str;
+            }
+            return thentyp;
+        }
+        let eltyp = r.resolve(n.els_);
+        if (eltyp.equals(thentyp)) {
+            return thentyp;
+        }
+        if (eltyp === u_t_nil) {
+            if (thentyp === u_t_nil) {
+                return u_t_nil;
+            }
+            if (thentyp instanceof BasicType) {
+                r.error(`mixing ${thentyp} and optional type`, n.pos, 'E_CONV');
+            }
+            return (thentyp instanceof OptionalType ? thentyp :
+                thentyp instanceof StrType ? u_t_optstr :
+                    r.universe.internType(new OptionalType(thentyp)));
+        }
+        if (thentyp === u_t_nil) {
+            if (eltyp instanceof BasicType) {
+                r.error(`mixing optional and ${eltyp} type`, n.pos, 'E_CONV');
+            }
+            return (eltyp instanceof OptionalType ? eltyp :
+                eltyp instanceof StrType ? u_t_optstr :
+                    r.universe.internType(new OptionalType(eltyp)));
+        }
+        if (eltyp instanceof OptionalType) {
+            if (thentyp instanceof OptionalType) {
+                if (eltyp.type instanceof StrType &&
+                    thentyp.type instanceof StrType) {
+                    assert(eltyp.type.length != thentyp.type.length, "str type matches but StrType.equals failed");
+                    return u_t_optstr;
+                }
+                return r.makeOptionalUnionType2(thentyp, eltyp);
+            }
+            return r.joinOptional(n.pos, eltyp, thentyp);
+        }
+        if (thentyp instanceof OptionalType) {
+            return r.joinOptional(n.pos, thentyp, eltyp);
+        }
+        if (eltyp instanceof StrType && thentyp instanceof StrType) {
+            return u_t_str;
+        }
+        if (eltyp instanceof UnionType) {
+            if (thentyp instanceof OptionalType) {
+                return r.joinOptional(n.pos, thentyp, eltyp);
+            }
+            if (thentyp instanceof UnionType) {
+                return r.mergeUnions(thentyp, eltyp);
+            }
+            eltyp.add(thentyp);
+            return eltyp;
+        }
+        if (thentyp instanceof UnionType) {
+            thentyp.add(eltyp);
+            return thentyp;
+        }
+        return r.makeUnionType2(thentyp, eltyp);
+    }
+    resolveIndex(x) {
+        const r = this;
+        let opt = r.resolve(x.operand);
+        if (opt instanceof UnresolvedType) {
+            debuglog(`[index type] deferred to bind stage`);
+        }
+        else if (opt instanceof TupleType) {
+            r.resolveTupleIndex(x, opt);
+        }
+        else {
+            debuglog(`TODO [index type] operand is not a tuple; opt = ${opt}`);
+        }
+        return x;
+    }
+    resolveTupleIndex(x, opt) {
+        const r = this;
+        let it = r.resolve(x.index);
+        if (it instanceof UnresolvedType) {
+            debuglog(`index resolution deferred to post-resolve`);
+            x.type = r.markUnresolved(x);
+            return;
+        }
+        const ix = x.index;
+        let index = r.resolveLitConstant(ix, intEvaluator);
+        if (index == null) {
+            r.syntaxError('non-constant tuple index', ix.pos);
+            return;
+        }
+        if (index instanceof EvalConst) {
+            assert(index instanceof IntEvalConst, "there is not other kind");
+            x.indexv = index.value;
+        }
+        else {
+            let index2 = index;
+            assert(index2 instanceof LiteralExpr);
+            if (index2.type && !(index2.type instanceof IntType) ||
+                !(index2 instanceof BasicLit) ||
+                !index2.isInt()) {
+                r.syntaxError(`invalid index type ${index2.type || index2}`, ix.pos);
+                return;
+            }
+            x.indexv = index2.parseUInt();
+            if (x.indexv == -1) {
+                r.syntaxError(`invalid index ${index2}`, ix.pos);
+                return;
+            }
+        }
+        if (x.indexv < 0 || x.indexv >= opt.types.length) {
+            r.syntaxError(`out-of-bounds tuple index ${x.indexv} on type ${opt}`, ix.pos);
+            return;
+        }
+        x.type = opt.types[x.indexv];
+        if (!(x.index instanceof BasicLit)) {
+            const bl = new BasicLit(x.index.pos, x.index.scope, token.INT, asciibuf(x.indexv.toString(10)));
+            bl.type = r.universe.basicLitType(bl);
+            x.index = bl;
+        }
+    }
+    resolveLitConstant(x, evaluator) {
+        const r = this;
+        if (x instanceof LiteralExpr) {
+            return x;
+        }
+        if (x instanceof Ident) {
+            if (x.ent && x.ent.writes == 0 && x.ent.value) {
+                return r.resolveLitConstant(x.ent.value, evaluator);
+            }
+        }
+        else if (x instanceof IndexExpr) {
+            let opt = r.resolve(x.operand);
+            if (opt instanceof TupleType) {
+                let tuple;
+                if (x.operand instanceof Ident) {
+                    assert(x.operand.ent != null);
+                    const ent = x.operand.ent;
+                    assert(ent.value instanceof TupleExpr);
+                    tuple = ent.value;
+                }
+                else {
+                    assert(x.operand instanceof TupleExpr);
+                    tuple = x.operand;
+                }
+                if (x.indexv >= 0) {
+                    assert(x.indexv < tuple.exprs.length);
+                    return r.resolveLitConstant(tuple.exprs[x.indexv], evaluator);
+                }
+                else {
+                    debuglog(`x.indexv < 0 for IndexExpr ${x}`);
+                }
+            }
+            else {
+                debuglog(`TODO ${x.constructor.name} operand ${opt}`);
+            }
+        }
+        else if (x instanceof Operation) {
+            const lval = r.resolveLitConstant(x.x, evaluator);
+            if (lval) {
+                if (!x.y) {
+                    return evaluator(x.op, lval);
+                }
+                else {
+                    const rval = r.resolveLitConstant(x.y, evaluator);
+                    if (rval) {
+                        return evaluator(x.op, lval, rval);
+                    }
+                }
+            }
+        }
+        else {
+            debuglog(`TODO ${x.constructor.name}`);
+        }
+        return null;
+    }
     markUnresolved(expr) {
         const t = new UnresolvedType(expr.pos, expr.scope, expr);
-        debuglog(`expr ${expr}`);
+        debuglog(`expr ${expr} as ${this.fset.position(expr.pos)}`);
         this.unresolved.add(t);
         return t;
     }
@@ -5025,17 +6127,20 @@ class TypeResolver extends ErrorReporter {
             (x instanceof Ident && x.ent != null && x.ent.isConstant));
     }
     convert(t, x) {
-        const xt = this.resolve(x);
-        if (xt.equals(t)) {
+        const r = this;
+        const xt = r.resolve(x);
+        if (xt === t || xt.equals(t)) {
             return x;
         }
-        if (this.isConstant(x) &&
-            t instanceof IntrinsicType &&
-            xt instanceof IntrinsicType) {
+        if (r.isConstant(x) &&
+            t instanceof BasicType &&
+            xt instanceof BasicType) {
             switch (basicTypeCompat(t, xt)) {
-                case TypeCompat.NO: break;
+                case TypeCompat.NO: {
+                    return null;
+                }
                 case TypeCompat.LOSSY: {
-                    this.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV');
+                    r.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV');
                     return new TypeConvExpr(x.pos, x.scope, x, t);
                 }
                 case TypeCompat.LOSSLESS: {
@@ -5043,77 +6148,1289 @@ class TypeResolver extends ErrorReporter {
                 }
             }
         }
+        debuglog(`TODO conversion of ${x} into type ${t}`);
         return null;
     }
 }
+function intEvaluator(op, x, y) {
+    if (!(x instanceof BasicLit) || !x.isInt()) {
+        return null;
+    }
+    const xs = x.isSignedInt();
+    let xv = xs ? x.parseSInt() : x.parseUInt();
+    if ((!xs && xv < 0) || isNaN(xv)) {
+        return null;
+    }
+    if (y) {
+        if (!(y instanceof BasicLit) || !y.isInt()) {
+            return null;
+        }
+        const ys = y.isSignedInt();
+        let yv = ys ? y.parseSInt() : y.parseUInt();
+        if ((!ys && yv < 0) || isNaN(yv)) {
+            return null;
+        }
+        switch (op) {
+            case token.ADD: return new IntEvalConst(xv + yv);
+            case token.SUB: return new IntEvalConst(xv - yv);
+            case token.OR: return new IntEvalConst(xv | yv);
+            case token.XOR: return new IntEvalConst(xv ^ yv);
+            case token.MUL: return new IntEvalConst(Math.round(xv * yv));
+            case token.QUO: return new IntEvalConst(Math.round(xv / yv));
+            case token.REM: return new IntEvalConst(xv % yv);
+            case token.AND: return new IntEvalConst(xv & yv);
+            default:
+                debuglog(`TODO eval binary op (${token[op]} ${x} (${xv}) ${y})`);
+        }
+    }
+    else {
+        switch (op) {
+            case token.ADD: return new IntEvalConst(+xv);
+            case token.SUB: return new IntEvalConst(-xv);
+            case token.INC: return new IntEvalConst(++xv);
+            case token.DEC: return new IntEvalConst(--xv);
+            default:
+                debuglog(`TODO eval unary op (${token[op]} ${x})`);
+        }
+    }
+    return null;
+}
+//# sourceMappingURL=resolve.js.map
 
+const byteStr__ = asciiByteStr("_");
+const byteStr_anonfun = asciiByteStr('anonfun');
+var Op;
+(function (Op) {
+    Op[Op["None"] = 0] = "None";
+    Op[Op["Param"] = 1] = "Param";
+    Op[Op["Copy"] = 2] = "Copy";
+    Op[Op["Phi"] = 3] = "Phi";
+    Op[Op["i32Const"] = 4] = "i32Const";
+    Op[Op["i64Const"] = 5] = "i64Const";
+    Op[Op["f32Const"] = 6] = "f32Const";
+    Op[Op["f64Const"] = 7] = "f64Const";
+    Op[Op["i32Load"] = 8] = "i32Load";
+    Op[Op["i32load8_s"] = 9] = "i32load8_s";
+    Op[Op["i32load8_u"] = 10] = "i32load8_u";
+    Op[Op["i32load16_s"] = 11] = "i32load16_s";
+    Op[Op["i32load16_u"] = 12] = "i32load16_u";
+    Op[Op["i64Load"] = 13] = "i64Load";
+    Op[Op["i64load8_s"] = 14] = "i64load8_s";
+    Op[Op["i64load8_u"] = 15] = "i64load8_u";
+    Op[Op["i64load16_s"] = 16] = "i64load16_s";
+    Op[Op["i64load16_u"] = 17] = "i64load16_u";
+    Op[Op["i64load32_s"] = 18] = "i64load32_s";
+    Op[Op["i64load32_u"] = 19] = "i64load32_u";
+    Op[Op["f32Load"] = 20] = "f32Load";
+    Op[Op["f64Load"] = 21] = "f64Load";
+    Op[Op["i32Store"] = 22] = "i32Store";
+    Op[Op["i32Store8"] = 23] = "i32Store8";
+    Op[Op["i32Store16"] = 24] = "i32Store16";
+    Op[Op["i64Store"] = 25] = "i64Store";
+    Op[Op["i64Store8"] = 26] = "i64Store8";
+    Op[Op["i64Store16"] = 27] = "i64Store16";
+    Op[Op["i64Store32"] = 28] = "i64Store32";
+    Op[Op["f32Store"] = 29] = "f32Store";
+    Op[Op["f64Store"] = 30] = "f64Store";
+    Op[Op["i32Add"] = 31] = "i32Add";
+    Op[Op["i32Sub"] = 32] = "i32Sub";
+    Op[Op["i32Mul"] = 33] = "i32Mul";
+    Op[Op["i32Div_s"] = 34] = "i32Div_s";
+    Op[Op["i32Div_u"] = 35] = "i32Div_u";
+    Op[Op["i32Rem_s"] = 36] = "i32Rem_s";
+    Op[Op["i32Rem_u"] = 37] = "i32Rem_u";
+    Op[Op["i32Neg"] = 38] = "i32Neg";
+    Op[Op["i32And"] = 39] = "i32And";
+    Op[Op["i32Or"] = 40] = "i32Or";
+    Op[Op["i32Xor"] = 41] = "i32Xor";
+    Op[Op["i32Shl"] = 42] = "i32Shl";
+    Op[Op["i32Shr_u"] = 43] = "i32Shr_u";
+    Op[Op["i32Shr_s"] = 44] = "i32Shr_s";
+    Op[Op["i32Rotl"] = 45] = "i32Rotl";
+    Op[Op["i32Rotr"] = 46] = "i32Rotr";
+    Op[Op["i32Eq"] = 47] = "i32Eq";
+    Op[Op["i32Ne"] = 48] = "i32Ne";
+    Op[Op["i32Lt_s"] = 49] = "i32Lt_s";
+    Op[Op["i32Lt_u"] = 50] = "i32Lt_u";
+    Op[Op["i32Le_s"] = 51] = "i32Le_s";
+    Op[Op["i32Le_u"] = 52] = "i32Le_u";
+    Op[Op["i32Gt_s"] = 53] = "i32Gt_s";
+    Op[Op["i32Gt_u"] = 54] = "i32Gt_u";
+    Op[Op["i32Ge_s"] = 55] = "i32Ge_s";
+    Op[Op["i32Ge_u"] = 56] = "i32Ge_u";
+    Op[Op["i32Clz"] = 57] = "i32Clz";
+    Op[Op["i32Ctz"] = 58] = "i32Ctz";
+    Op[Op["i32Popcnt"] = 59] = "i32Popcnt";
+    Op[Op["i32Eqz"] = 60] = "i32Eqz";
+    Op[Op["i64Add"] = 61] = "i64Add";
+    Op[Op["i64Sub"] = 62] = "i64Sub";
+    Op[Op["i64Mul"] = 63] = "i64Mul";
+    Op[Op["i64Div_s"] = 64] = "i64Div_s";
+    Op[Op["i64Div_u"] = 65] = "i64Div_u";
+    Op[Op["i64Rem_s"] = 66] = "i64Rem_s";
+    Op[Op["i64Rem_u"] = 67] = "i64Rem_u";
+    Op[Op["i64And"] = 68] = "i64And";
+    Op[Op["i64Neg"] = 69] = "i64Neg";
+    Op[Op["i64Or"] = 70] = "i64Or";
+    Op[Op["i64Xor"] = 71] = "i64Xor";
+    Op[Op["i64Shl"] = 72] = "i64Shl";
+    Op[Op["i64Shr_u"] = 73] = "i64Shr_u";
+    Op[Op["i64Shr_s"] = 74] = "i64Shr_s";
+    Op[Op["i64Rotl"] = 75] = "i64Rotl";
+    Op[Op["i64Rotr"] = 76] = "i64Rotr";
+    Op[Op["i64Eq"] = 77] = "i64Eq";
+    Op[Op["i64Ne"] = 78] = "i64Ne";
+    Op[Op["i64Lt_s"] = 79] = "i64Lt_s";
+    Op[Op["i64Lt_u"] = 80] = "i64Lt_u";
+    Op[Op["i64Le_s"] = 81] = "i64Le_s";
+    Op[Op["i64Le_u"] = 82] = "i64Le_u";
+    Op[Op["i64Gt_s"] = 83] = "i64Gt_s";
+    Op[Op["i64Gt_u"] = 84] = "i64Gt_u";
+    Op[Op["i64Ge_s"] = 85] = "i64Ge_s";
+    Op[Op["i64Ge_u"] = 86] = "i64Ge_u";
+    Op[Op["i64Clz"] = 87] = "i64Clz";
+    Op[Op["i64Ctz"] = 88] = "i64Ctz";
+    Op[Op["i64Popcnt"] = 89] = "i64Popcnt";
+    Op[Op["i64Eqz"] = 90] = "i64Eqz";
+    Op[Op["f32Add"] = 91] = "f32Add";
+    Op[Op["f32Sub"] = 92] = "f32Sub";
+    Op[Op["f32Mul"] = 93] = "f32Mul";
+    Op[Op["f32Div"] = 94] = "f32Div";
+    Op[Op["f32Abs"] = 95] = "f32Abs";
+    Op[Op["f32Neg"] = 96] = "f32Neg";
+    Op[Op["f32Cps"] = 97] = "f32Cps";
+    Op[Op["f32Ceil"] = 98] = "f32Ceil";
+    Op[Op["f32Floor"] = 99] = "f32Floor";
+    Op[Op["f32Trunc"] = 100] = "f32Trunc";
+    Op[Op["f32Near"] = 101] = "f32Near";
+    Op[Op["f32Eq"] = 102] = "f32Eq";
+    Op[Op["f32Ne"] = 103] = "f32Ne";
+    Op[Op["f32Lt"] = 104] = "f32Lt";
+    Op[Op["f32Le"] = 105] = "f32Le";
+    Op[Op["f32Gt"] = 106] = "f32Gt";
+    Op[Op["f32Ge"] = 107] = "f32Ge";
+    Op[Op["f32Sqrt"] = 108] = "f32Sqrt";
+    Op[Op["f32Min"] = 109] = "f32Min";
+    Op[Op["f32Max"] = 110] = "f32Max";
+    Op[Op["f64Add"] = 111] = "f64Add";
+    Op[Op["f64Sub"] = 112] = "f64Sub";
+    Op[Op["f64Mul"] = 113] = "f64Mul";
+    Op[Op["f64Div"] = 114] = "f64Div";
+    Op[Op["f64Abs"] = 115] = "f64Abs";
+    Op[Op["f64Neg"] = 116] = "f64Neg";
+    Op[Op["f64Cps"] = 117] = "f64Cps";
+    Op[Op["f64Ceil"] = 118] = "f64Ceil";
+    Op[Op["f64Floor"] = 119] = "f64Floor";
+    Op[Op["f64Trunc"] = 120] = "f64Trunc";
+    Op[Op["f64Near"] = 121] = "f64Near";
+    Op[Op["f64Eq"] = 122] = "f64Eq";
+    Op[Op["f64Ne"] = 123] = "f64Ne";
+    Op[Op["f64Lt"] = 124] = "f64Lt";
+    Op[Op["f64Le"] = 125] = "f64Le";
+    Op[Op["f64Gt"] = 126] = "f64Gt";
+    Op[Op["f64Ge"] = 127] = "f64Ge";
+    Op[Op["f64Sqrt"] = 128] = "f64Sqrt";
+    Op[Op["f64Min"] = 129] = "f64Min";
+    Op[Op["f64Max"] = 130] = "f64Max";
+    Op[Op["i32Wrap_i64"] = 131] = "i32Wrap_i64";
+    Op[Op["i32Trunc_s_f32"] = 132] = "i32Trunc_s_f32";
+    Op[Op["i32Trunc_s_f64"] = 133] = "i32Trunc_s_f64";
+    Op[Op["i32Trunc_u_f32"] = 134] = "i32Trunc_u_f32";
+    Op[Op["i32Trunc_u_f64"] = 135] = "i32Trunc_u_f64";
+    Op[Op["i32Rein_f32"] = 136] = "i32Rein_f32";
+    Op[Op["i64Extend_s_i32"] = 137] = "i64Extend_s_i32";
+    Op[Op["i64Extend_u_i32"] = 138] = "i64Extend_u_i32";
+    Op[Op["i64Trunc_s_f32"] = 139] = "i64Trunc_s_f32";
+    Op[Op["i64Trunc_s_f64"] = 140] = "i64Trunc_s_f64";
+    Op[Op["i64Trunc_u_f32"] = 141] = "i64Trunc_u_f32";
+    Op[Op["i64Trunc_u_f64"] = 142] = "i64Trunc_u_f64";
+    Op[Op["i64Rein_f64"] = 143] = "i64Rein_f64";
+    Op[Op["f32Demote_f64"] = 144] = "f32Demote_f64";
+    Op[Op["f32Convert_s_i32"] = 145] = "f32Convert_s_i32";
+    Op[Op["f32Convert_s_i64"] = 146] = "f32Convert_s_i64";
+    Op[Op["f32Convert_u_i32"] = 147] = "f32Convert_u_i32";
+    Op[Op["f32Convert_u_i64"] = 148] = "f32Convert_u_i64";
+    Op[Op["f32Rein_i32"] = 149] = "f32Rein_i32";
+    Op[Op["f64Promote_f32"] = 150] = "f64Promote_f32";
+    Op[Op["f64Convert_s_i32"] = 151] = "f64Convert_s_i32";
+    Op[Op["f64Convert_s_i64"] = 152] = "f64Convert_s_i64";
+    Op[Op["f64Convert_u_i32"] = 153] = "f64Convert_u_i32";
+    Op[Op["f64Convert_u_i64"] = 154] = "f64Convert_u_i64";
+    Op[Op["f64Rein_i64"] = 155] = "f64Rein_i64";
+    Op[Op["Trap"] = 156] = "Trap";
+})(Op || (Op = {}));
+function getop(tok, t) {
+    switch (tok) {
+        case token.EQL:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Eq;
+                case RegType.i64: return Op.i64Eq;
+                case RegType.f32: return Op.f32Eq;
+                case RegType.f64: return Op.f64Eq;
+            }
+            ;
+            break;
+        case token.NEQ:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Ne;
+                case RegType.i64: return Op.i64Ne;
+                case RegType.f32: return Op.f32Ne;
+                case RegType.f64: return Op.f64Ne;
+            }
+            ;
+            break;
+        case token.LSS:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Lt_s : Op.i32Lt_u;
+                case RegType.i64: return t.signed ? Op.i64Lt_s : Op.i64Lt_u;
+                case RegType.f32: return Op.f32Lt;
+                case RegType.f64: return Op.f64Lt;
+            }
+            ;
+            break;
+        case token.LEQ:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Le_s : Op.i32Le_u;
+                case RegType.i64: return t.signed ? Op.i64Le_s : Op.i64Le_u;
+                case RegType.f32: return Op.f32Le;
+                case RegType.f64: return Op.f64Le;
+            }
+            ;
+            break;
+        case token.GTR:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Gt_s : Op.i32Gt_u;
+                case RegType.i64: return t.signed ? Op.i64Gt_s : Op.i64Gt_u;
+                case RegType.f32: return Op.f32Gt;
+                case RegType.f64: return Op.f64Gt;
+            }
+            ;
+            break;
+        case token.GEQ:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Ge_s : Op.i32Ge_u;
+                case RegType.i64: return t.signed ? Op.i64Ge_s : Op.i64Ge_u;
+                case RegType.f32: return Op.f32Ge;
+                case RegType.f64: return Op.f64Ge;
+            }
+            ;
+            break;
+        case token.ADD:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Add;
+                case RegType.i64: return Op.i64Add;
+                case RegType.f32: return Op.f32Add;
+                case RegType.f64: return Op.f64Add;
+            }
+            ;
+            break;
+        case token.SUB:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Sub;
+                case RegType.i64: return Op.i64Sub;
+                case RegType.f32: return Op.f32Sub;
+                case RegType.f64: return Op.f64Sub;
+            }
+            ;
+            break;
+        case token.MUL:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Mul;
+                case RegType.i64: return Op.i64Mul;
+                case RegType.f32: return Op.f32Mul;
+                case RegType.f64: return Op.f64Mul;
+            }
+            ;
+            break;
+        case token.QUO:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Div_s : Op.i32Div_u;
+                case RegType.i64: return t.signed ? Op.i64Div_s : Op.i64Div_u;
+                case RegType.f32: return Op.f32Div;
+                case RegType.f64: return Op.f64Div;
+            }
+            ;
+            break;
+        case token.REM:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Rem_s : Op.i32Rem_u;
+                case RegType.i64: return t.signed ? Op.i64Rem_s : Op.i64Rem_u;
+            }
+            ;
+            break;
+        case token.OR:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Or;
+                case RegType.i64: return Op.i64Or;
+            }
+            ;
+            break;
+        case token.XOR:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Xor;
+                case RegType.i64: return Op.i64Xor;
+            }
+            ;
+            break;
+        case token.AND:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32And;
+                case RegType.i64: return Op.i64And;
+            }
+            ;
+            break;
+        case token.SHL:
+            switch (t.regtype) {
+                case RegType.i32: return Op.i32Shl;
+                case RegType.i64: return Op.i64Shl;
+            }
+            ;
+            break;
+        case token.SHR:
+            switch (t.regtype) {
+                case RegType.i32: return t.signed ? Op.i32Shr_s : Op.i32Shr_u;
+                case RegType.i64: return t.signed ? Op.i64Shr_s : Op.i64Shr_u;
+            }
+            ;
+            break;
+        case token.AND_NOT:
+            assert(false, 'AND_NOT "&^" not yet supported');
+            return Op.None;
+        default:
+            assert(false, `unexpected operator token ${token[tok]}`);
+            return Op.None;
+    }
+    assert(false, `invalid operation for floating-point number`);
+    return Op.None;
+}
+class Value {
+    constructor(id, op, type, b, aux) {
+        this.args = null;
+        this.uses = 0;
+        this.users = new Set();
+        this.id = id;
+        this.op = op;
+        this.type = type;
+        this.b = b;
+        this.aux = aux;
+    }
+    toString() {
+        return 'v' + this.id;
+    }
+    appendArg(v) {
+        assert(this.op == Op.Phi, "appendArg on non-phi value");
+        if (!this.args) {
+            this.args = [v];
+        }
+        else {
+            this.args.push(v);
+        }
+        v.uses++;
+        v.users.add(this);
+    }
+    replaceBy(v) {
+        assert(this.users.size == 0, "TODO users");
+        let i = this.b.values.indexOf(this);
+        assert(i != -1, "not in parent block but still references block");
+        this.b.values[i] = v;
+        v.uses++;
+        if (DEBUG) {
+            
+            this.b = null;
+        }
+    }
+}
+var BlockKind;
+(function (BlockKind) {
+    BlockKind[BlockKind["Invalid"] = 0] = "Invalid";
+    BlockKind[BlockKind["Plain"] = 1] = "Plain";
+    BlockKind[BlockKind["If"] = 2] = "If";
+    BlockKind[BlockKind["Ret"] = 3] = "Ret";
+})(BlockKind || (BlockKind = {}));
+class Block$1 {
+    constructor(kind, id, f) {
+        this.kind = BlockKind.Invalid;
+        this.preds = [];
+        this.control = null;
+        this.values = [];
+        this.sealed = false;
+        this.kind = kind;
+        this.id = id;
+        this.f = f;
+    }
+    newPhi(t) {
+        let v = this.f.newValue(Op.Phi, t, this, null);
+        this.values.push(v);
+        return v;
+    }
+    newValue0(op, t, aux = null) {
+        let v = this.f.newValue(op, t, this, aux);
+        this.values.push(v);
+        return v;
+    }
+    newValue1(op, t, arg0, aux = null) {
+        let v = this.f.newValue(op, t, this, aux);
+        v.args = [arg0];
+        arg0.uses++;
+        arg0.users.add(v);
+        this.values.push(v);
+        return v;
+    }
+    newValue2(op, t, arg0, arg1, aux = null) {
+        let v = this.f.newValue(op, t, this, aux);
+        v.args = [arg0, arg1];
+        arg0.uses++;
+        arg0.users.add(v);
+        arg1.uses++;
+        arg1.users.add(v);
+        this.values.push(v);
+        return v;
+    }
+    toString() {
+        return 'b' + this.id;
+    }
+}
+class Fun {
+    constructor(type, name) {
+        this.bid = 0;
+        this.vid = 0;
+        this.consts = null;
+        this.blocks = [
+            new Block$1(BlockKind.Plain, 0, this)
+        ];
+        this.type = type;
+        this.name = name;
+    }
+    newBlock(k) {
+        assert(this.bid < 0xFFFFFFFF, "too many block IDs generated");
+        let b = new Block$1(k, ++this.bid, this);
+        this.blocks.push(b);
+        return b;
+    }
+    newValue(op, t, b, aux) {
+        assert(this.vid < 0xFFFFFFFF, "too many value IDs generated");
+        return new Value(++this.vid, op, t, b, aux);
+    }
+    constVal(t, c) {
+        let f = this;
+        let vv;
+        let op = Op.None;
+        switch (t.regtype) {
+            case RegType.i32:
+                op = Op.i32Const;
+                break;
+            case RegType.i64:
+                op = Op.i64Const;
+                break;
+            case RegType.f32:
+                op = Op.f32Const;
+                break;
+            case RegType.f64:
+                op = Op.f64Const;
+                break;
+        }
+        assert(op != Op.None);
+        if (!f.consts) {
+            f.consts = new Map();
+        }
+        else {
+            vv = f.consts.get(c);
+            if (vv)
+                for (let v of vv) {
+                    if (v.op == op && v.type.equals(t)) {
+                        assert(v.aux === c, `cached const ${v} should have aux ${c}`);
+                        return v;
+                    }
+                }
+        }
+        let v = f.blocks[0].newValue0(op, t, c);
+        if (!vv) {
+            f.consts.set(c, [v]);
+        }
+        else {
+            vv.push(v);
+        }
+        return v;
+    }
+    toString() {
+        return this.name.toString();
+    }
+}
+class Pkg {
+    constructor() {
+        this.nI32 = 0;
+        this.nI64 = 0;
+        this.nF32 = 0;
+        this.nF64 = 0;
+        this.funs = [];
+        this.init = null;
+    }
+}
+class IRBuilder {
+    constructor() {
+        this.sfile = null;
+        this.diagh = null;
+    }
+    init(diagh = null) {
+        const r = this;
+        r.pkg = new Pkg();
+        r.sfile = null;
+        r.diagh = diagh;
+        r.vars = new Map();
+        r.defvars = [];
+        r.pendphis = null;
+    }
+    startBlock(b) {
+        const r = this;
+        assert(r.b == null, "starting block without ending block");
+        r.b = b;
+    }
+    startSealedBlock(b) {
+        this.sealBlock(b);
+        this.startBlock(b);
+    }
+    sealBlock(b) {
+        const s = this;
+        assert(!b.sealed, `block ${b} already sealed`);
+        debuglog(`${b}`);
+        if (s.pendphis) {
+            let entries = s.pendphis.get(b);
+            if (entries) {
+                for (let [name, phi] of entries) {
+                    s.addPhiOperands(name, phi);
+                }
+                s.pendphis.delete(b);
+            }
+        }
+        b.sealed = true;
+    }
+    endBlock() {
+        const r = this;
+        let b = r.b;
+        assert(b != null, "no current block");
+        while (r.defvars.length <= b.id) {
+            r.defvars.push(null);
+        }
+        r.defvars[b.id] = r.vars;
+        r.vars = new Map();
+        r.b = null;
+        if (!b.sealed) {
+            r.sealBlock(b);
+        }
+        return b;
+    }
+    startFun(f) {
+        const r = this;
+        assert(r.f == null, "starting function with existing function");
+        r.f = f;
+    }
+    endFun() {
+        const r = this;
+        assert(r.f, "ending function without a current function");
+        r.f = null;
+    }
+    nilValue() {
+        assert(this.b, "no current block");
+        return this.b.newValue0(Op.None, u_t_nil);
+    }
+    addTopLevel(sfile, d) {
+        const r = this;
+        r.sfile = sfile;
+        if (d instanceof MultiDecl) {
+            for (let d2 of d.decls) {
+                r.addTopLevel(sfile, d2);
+            }
+        }
+        else if (d instanceof VarDecl) {
+            r.global(d);
+        }
+        else if (d instanceof FunExpr) {
+            if (d.isInit) {
+                assert(d.sig.params.length == 0, 'init fun with parameters');
+                assert(d.sig.result === u_t_nil, 'init fun with result');
+                assert(d.body, 'missing body');
+                r.initCode(d.body);
+            }
+            else if (d.body) {
+                return r.fun(d);
+            }
+            else {
+                debuglog(`skipping pure function declaration ${d}`);
+            }
+        }
+        else if (d instanceof ImportDecl) {
+            debuglog(`TODO ImportDecl`);
+        }
+        else if (d instanceof TypeDecl) {
+            debuglog(`TODO TypeDecl`);
+        }
+        return null;
+    }
+    global(v) {
+        debuglog(`TODO`);
+    }
+    initCode(body) {
+    }
+    fun(x) {
+        const r = this;
+        assert(x.body, `unresolved function ${x}`);
+        assert(x.type, "unresolved function type");
+        let funtype = x.type;
+        let f = new Fun(funtype, x.name ? x.name.value : byteStr_anonfun);
+        let entryb = f.blocks[0];
+        for (let i = 0; i < x.sig.params.length; i++) {
+            let p = x.sig.params[i];
+            if (p.name) {
+                let t = funtype.inputs[i];
+                let name = p.name.value;
+                let v = entryb.newValue0(Op.Param, t, name);
+                r.vars.set(name, v);
+            }
+        }
+        r.startFun(f);
+        r.startSealedBlock(entryb);
+        let bodyval = r.block(x.body);
+        if (r.b) {
+            r.b.kind = BlockKind.Ret;
+            if (!(x.body instanceof Block)) {
+                r.b.control = bodyval;
+            }
+            r.endBlock();
+        }
+        assert(r.b == null, "function exit block not ended");
+        assert(f.blocks[f.blocks.length - 1].kind == BlockKind.Ret, "last block in function is not BlockKind.Ret");
+        r.endFun();
+        r.pkg.funs.push(f);
+        return f;
+    }
+    block(x) {
+        const r = this;
+        if (x instanceof Block) {
+            let end = x.list.length;
+            let lasti = end - 1;
+            for (let i = 0; i != end; ++i) {
+                if (!r.b) {
+                    r.diag('warn', `unreachable code`, x.list[i].pos);
+                    break;
+                }
+                r.stmt(x.list[i], i == lasti);
+            }
+            return null;
+        }
+        else {
+            return r.expr(x);
+        }
+    }
+    stmt(s, isLast = false) {
+        const r = this;
+        if (s instanceof IfExpr) {
+            r.if_(s);
+        }
+        else if (s instanceof ReturnStmt) {
+            r.ret(r.expr(s.result));
+        }
+        else if (s instanceof Expr) {
+            if (!isLast && s instanceof Ident) {
+                r.diag('warn', `unused expression`, s.pos);
+            }
+            else {
+                r.expr(s);
+            }
+        }
+        else {
+            debuglog(`TODO: handle ${s.constructor.name}`);
+        }
+    }
+    ret(val) {
+        const r = this;
+        let b = r.endBlock();
+        b.kind = BlockKind.Ret;
+        b.control = val;
+    }
+    if_(s) {
+        const r = this;
+        let control = r.expr(s.cond);
+        let ifb = r.endBlock();
+        ifb.kind = BlockKind.If;
+        ifb.control = control;
+        let thenb = r.f.newBlock(BlockKind.Plain);
+        let elseb = r.f.newBlock(BlockKind.Plain);
+        ifb.succs = [thenb, elseb];
+        thenb.preds = [ifb];
+        r.startSealedBlock(thenb);
+        r.block(s.then);
+        thenb = r.endBlock();
+        if (s.els_) {
+            let contb = r.f.newBlock(BlockKind.Plain);
+            elseb.preds = [ifb];
+            r.startSealedBlock(elseb);
+            r.block(s.els_);
+            elseb = r.endBlock();
+            elseb.succs = [contb];
+            thenb.succs = [contb];
+            contb.preds = [thenb, elseb];
+            r.startSealedBlock(contb);
+        }
+        else {
+            thenb.succs = [elseb];
+            elseb.preds = [ifb, thenb];
+            elseb.succs = null;
+            r.startSealedBlock(elseb);
+        }
+    }
+    assign(left, right) {
+        const s = this;
+        let t = left.type;
+        assert(left.type);
+        assert(left instanceof Ident, `${left.constructor.name} not supported`);
+        let name = left.value;
+        let v = s.b.newValue1(Op.Copy, right.type, right);
+        debuglog(`assign "${name}" ${left} <— ${right}`);
+        s.writeVariable(name, v);
+        return v;
+    }
+    assignment(s) {
+        const r = this;
+        if (s.op == token.INC || s.op == token.DEC) {
+            assert(s.lhs.length == 1);
+            assert(s.rhs.length == 0);
+            let lhs = s.lhs[0];
+            assert(lhs.type instanceof BasicType, `${lhs.type} is not BasicType`);
+            let t = lhs.type;
+            let x = r.expr(lhs);
+            let y = r.f.constVal(t, 1);
+            let op = getop(s.op == token.INC ? token.ADD : token.SUB, t);
+            let v = r.b.newValue2(op, t, x, y);
+            return r.assign(lhs, v);
+        }
+        if (s.op != token.ASSIGN) {
+            assert(s.op < token.assignop_beg || s.op > token.assignop_end, `invalid assignment operation ${token[s.op]}`);
+            assert(s.lhs.length == 1);
+            assert(s.rhs.length == 1);
+            let lhs = s.lhs[0];
+            let t = lhs.type;
+            assert(t instanceof BasicType, "increment operation on complex type");
+            let op = getop(s.op, t);
+            let x = r.expr(lhs);
+            let y = r.expr(s.rhs[0]);
+            let v = r.b.newValue2(op, t, x, y);
+            return r.assign(lhs, v);
+        }
+        let z = s.lhs.length;
+        let preloadRhs = null;
+        if (z > 1) {
+            let leftnames = new Map();
+            for (let i = 0; i < z; i++) {
+                let x = s.lhs[i];
+                if (x instanceof Ident) {
+                    leftnames.set(x.value, i);
+                }
+            }
+            for (let i = 0; i < z; i++) {
+                let x = s.rhs[i];
+                if (x instanceof Ident) {
+                    let Li = leftnames.get(x.value);
+                    if (Li == i) {
+                        r.diag('warn', `${x} assigned to itself`, x.pos);
+                    }
+                    else if (Li !== undefined) {
+                        if (!preloadRhs) {
+                            preloadRhs = new Array(s.rhs.length);
+                        }
+                        preloadRhs[i] = r.expr(x);
+                    }
+                }
+            }
+        }
+        let v = null;
+        for (let i = 0; i < z; i++) {
+            let left = s.lhs[i];
+            let k;
+            if (preloadRhs && (k = preloadRhs[i])) {
+                v = k;
+            }
+            else {
+                v = r.expr(s.rhs[i]);
+            }
+            v = r.assign(left, v);
+        }
+        return v;
+    }
+    expr(s) {
+        const r = this;
+        assert(s.type, `type not resolved for ${s}`);
+        if (s instanceof BasicLit) {
+            if (s.op != token.ILLEGAL) {
+                debuglog(`TODO handle BasicLit.op`);
+            }
+            let t = s.type;
+            let c = 0;
+            if (s.isInt()) {
+                c = s.isSignedInt() ? s.parseSInt() : s.parseUInt();
+            }
+            else {
+                c = s.parseFloat();
+            }
+            return r.f.constVal(t, c);
+        }
+        if (s instanceof Ident) {
+            let v = r.readVariable(s.value, s.type);
+            return v;
+        }
+        if (s instanceof Assignment) {
+            return r.assignment(s);
+        }
+        if (s instanceof Operation) {
+            if (s.op == token.OROR || s.op == token.ANDAND) {
+                assert(s.y != null);
+                let tmpname = asciiByteStr('tmp');
+                let left = r.expr(s.x);
+                r.writeVariable(tmpname, left);
+                let t = left.type;
+                let rightb = r.f.newBlock(BlockKind.Plain);
+                let contb = r.f.newBlock(BlockKind.Plain);
+                let ifb = r.endBlock();
+                ifb.kind = BlockKind.If;
+                ifb.control = left;
+                if (s.op == token.OROR) {
+                    ifb.succs = [contb, rightb];
+                }
+                else {
+                    ifb.succs = [rightb, contb];
+                }
+                rightb.preds = [ifb];
+                r.startSealedBlock(rightb);
+                let right = r.expr(s.y);
+                let tmpv = r.b.newValue1(Op.Copy, right.type, right);
+                r.writeVariable(tmpname, tmpv);
+                rightb = r.endBlock();
+                rightb.succs = [contb];
+                assert(t.equals(right.type), "operands have different types");
+                contb.preds = [ifb, rightb];
+                r.startSealedBlock(contb);
+                return r.readVariable(tmpname, u_t_bool);
+            }
+            else {
+                let left = r.expr(s.x);
+                let t = s.type;
+                assert(t instanceof BasicType);
+                let op = getop(s.op, t);
+                if (s.y) {
+                    let right = r.expr(s.y);
+                    return r.b.newValue2(op, t, left, right);
+                }
+                else {
+                    return r.b.newValue1(op, t, left);
+                }
+            }
+        }
+        debuglog(`TODO: handle ${s.constructor.name}`);
+        return r.nilValue();
+    }
+    readVariable(name, t, b) {
+        const s = this;
+        debuglog(`${name} ${b || s.b}`);
+        if (!b || b === s.b) {
+            let v = s.vars.get(name);
+            if (v) {
+                return v;
+            }
+            b = s.b;
+        }
+        else {
+            let m = s.defvars[b.id];
+            if (m) {
+                let v = m.get(name);
+                if (v) {
+                    return v;
+                }
+            }
+        }
+        debuglog(`${name} not local; readVariableRecursive`);
+        let v = s.readVariableRecursive(name, t, b);
+        return v;
+    }
+    writeVariable(name, v, b) {
+        const s = this;
+        debuglog(`${name} ${b || s.b} ${Op[v.op]} ${v}`);
+        if (!b || b === s.b) {
+            s.vars.set(name, v);
+        }
+        else {
+            assert(s.defvars.length >= b.id);
+            let m = s.defvars[b.id];
+            if (m) {
+                m.set(name, v);
+            }
+            else {
+                s.defvars[b.id] = new Map([[name, v]]);
+            }
+        }
+    }
+    readVariableRecursive(name, t, b) {
+        const s = this;
+        let val;
+        if (!b.sealed) {
+            debuglog(`${b} not yet sealed`);
+            val = b.newPhi(t);
+            let names = s.pendphis ? s.pendphis.get(b) : null;
+            if (!names) {
+                names = new Map();
+                if (!s.pendphis) {
+                    s.pendphis = new Map();
+                }
+                s.pendphis.set(b, names);
+            }
+            names.set(name, val);
+        }
+        else if (b.preds.length == 1) {
+            debuglog(`${name} ${b} common case: single predecessor`);
+            val = s.readVariable(name, t, b.preds[0]);
+        }
+        else {
+            debuglog(`${name} ${b} uncommon case: multiple predecessors`);
+            val = b.newPhi(t);
+            s.writeVariable(name, val, b);
+            val = s.addPhiOperands(name, val);
+        }
+        s.writeVariable(name, val, b);
+        return val;
+    }
+    addPhiOperands(name, phi) {
+        const s = this;
+        assert(phi.op == Op.Phi);
+        let trivialValue = null;
+        for (let pred of phi.b.preds) {
+            let v = s.readVariable(name, phi.type, pred);
+            debuglog(`v ${v} ${v.constructor.name} ${Op[v.op]}`);
+            if (phi.args && phi.args.length == 1 && phi.args[0] === v) {
+                trivialValue = v;
+            }
+            else {
+                phi.appendArg(v);
+                trivialValue = null;
+            }
+        }
+        if (trivialValue) {
+            debuglog(`isTrivial!`);
+            let i = phi.b.values.indexOf(phi);
+            assert(i != -1, "not in parent block but still references block");
+            phi.b.values.splice(i, 1);
+            trivialValue.uses++;
+            return trivialValue;
+        }
+        return s.tryRemoveTrivialPhi(phi);
+    }
+    tryRemoveTrivialPhi(phi) {
+        const s = this;
+        assert(phi.op == Op.Phi);
+        let same = null;
+        debuglog(`${phi}`);
+        assert(phi.args != null, "phi without operands");
+        for (let operand of phi.args) {
+            if (operand === same || operand === phi) {
+                continue;
+            }
+            if (same != null) {
+                debuglog(`${phi} not trivial (keep)`);
+                return phi;
+            }
+            same = operand;
+        }
+        debuglog(`${phi} is trivial (remove)`);
+        if (same == null) {
+            debuglog(`${phi} unreachable or in the start block`);
+            same = new Value(0, Op.None, u_t_nil, phi.b, null);
+        }
+        phi.users.delete(phi);
+        let users = phi.users;
+        phi.replaceBy(same);
+        debuglog(`replace ${phi} with ${same}`, same.aux);
+        for (let use of users) {
+            if (use.op == Op.Phi) {
+                s.tryRemoveTrivialPhi(use);
+            }
+        }
+        return same;
+    }
+    diag(k, msg, pos) {
+        const r = this;
+        assert(k != "error", "unexpected DiagKind 'error'");
+        if (r.diagh) {
+            assert(r.sfile);
+            r.diagh(r.sfile.position(pos), msg, k);
+        }
+    }
+}
+
+class IRFmt {
+    constructor(types, style$$1, println) {
+        this.types = types;
+        this.style = style$$1;
+        this.println = println;
+        this.rarr = style$$1.grey(' —> ');
+        this.larr = style$$1.grey(' <— ');
+    }
+}
+function fmtval(f, v) {
+    let s = `v${v.id} = `;
+    s += Op[v.op];
+    if (f.types) {
+        s += ' ' + f.style.grey(`<${v.type}>`);
+    }
+    if (v.args)
+        for (let arg of v.args) {
+            s += ' ' + arg;
+        }
+    if (v.aux !== null) {
+        s += ' [' + v.aux + ']';
+    }
+    return s;
+}
+function printval(f, v, indent) {
+    f.println(indent + fmtval(f, v));
+}
+function printblock(f, b, indent) {
+    let label = b.toString();
+    let preds = '';
+    if (b.preds && b.preds.length) {
+        preds = f.larr + b.preds.map(b => f.style.lightyellow(b.toString())).join(', ');
+    }
+    f.println(indent + f.style.lightyellow(label + ':') + preds);
+    let valindent = indent + '  ';
+    for (let v of b.values) {
+        printval(f, v, valindent);
+    }
+    switch (b.kind) {
+        case BlockKind.Plain: {
+            assert(b.succs != null, 'missing successor for plain block');
+            assert(b.succs && b.succs.length == 1, `b.succs.length = ${b.succs && b.succs.length || 0}; expected 1`);
+            let succs = b.succs;
+            let contb = succs[0];
+            f.println(indent +
+                f.style.cyan('cont') + f.rarr +
+                f.style.lightyellow(contb.toString()));
+            break;
+        }
+        case BlockKind.If: {
+            assert(b.succs != null, 'missing successors for if block');
+            assert(b.succs && b.succs.length == 2, `b.succs.length = ${b.succs && b.succs.length || 0}; expected 2`);
+            assert(b.control, "missing control (condition) value");
+            let succs = b.succs;
+            let thenb = succs[0];
+            let elseb = succs[1];
+            f.println(indent +
+                f.style.cyan('if') +
+                ` ${b.control}${f.rarr}` +
+                f.style.lightyellow(thenb.toString()) + ' ' +
+                f.style.lightyellow(elseb.toString()));
+            break;
+        }
+        case BlockKind.Ret: {
+            assert(b.succs == null, "can't have successor to return block");
+            f.println(indent +
+                f.style.cyan('ret') + (b.control ? ' ' + b.control : ''));
+            break;
+        }
+        default:
+            assert(false, `unexpected block kind ${BlockKind[b.kind]}`);
+    }
+}
+function printfun(f, fn) {
+    f.println(f.style.white(fn.toString()) +
+        ' (' + fn.type.inputs.join(' ') + ')->' + fn.type.result);
+    let first = true;
+    for (let b of fn.blocks) {
+        if (first) {
+            first = false;
+        }
+        else {
+            f.println('');
+        }
+        printblock(f, b, '  ');
+    }
+}
+function printpkg(f, pkg) {
+    for (let i = 0; i < pkg.funs.length; i++) {
+        printfun(f, pkg.funs[i]);
+        if (i + 1 < pkg.funs.length) {
+            f.println('');
+        }
+    }
+}
+function printir(v, w, o) {
+    let f = new IRFmt(!(o && o.noTypes), (o && o.colors ? style :
+        o && o.colors === false ? noStyle :
+            stdoutStyle), w || console.log.bind(console));
+    if (v instanceof Pkg) {
+        printpkg(f, v);
+    }
+    else if (v instanceof Fun) {
+        printfun(f, v);
+    }
+    else if (v instanceof Block$1) {
+        printblock(f, v, '');
+    }
+    else if (v instanceof Value) {
+        printval(f, v, '');
+    }
+    else {
+        let o = v;
+        assert(false, `unexpected value ${o && typeof o == 'object' ? o.constructor.name : o}`);
+    }
+}
+function fmtir(v, options) {
+    let str = '';
+    let w = (s) => { str += s + '\n'; };
+    printir(v, w, options);
+    return str;
+}
+//# sourceMappingURL=ir-repr.js.map
+
+let readFileSync;
+let isNodeJsLikeEnv = false;
+try {
+    const _readFileSync = require('fs').readFileSync;
+    readFileSync = _readFileSync;
+    isNodeJsLikeEnv = true;
+}
+catch (_) {
+    let global_readFileSync = global['readFileSync'];
+    if (global_readFileSync && typeof global_readFileSync == 'function') {
+        readFileSync = global_readFileSync;
+    }
+    else {
+        readFileSync = (fn, options) => {
+            return new Uint8Array(0);
+        };
+    }
+}
 const reprOptions = { colors: stdoutSupportsStyle };
+let diagnostics;
+function errh(pos, msg, errcode) {
+    let message = `${pos}: ${msg} (${errcode})`;
+    if (isNodeJsLikeEnv) {
+        console.error(stdoutStyle.red(message));
+    }
+    diagnostics.push({ type: 'error', errcode, message, pos });
+}
+function diagh(pos, msg, type) {
+    const message = `${pos}: ${type}: ${msg}`;
+    if (isNodeJsLikeEnv) {
+        console.log('[diag] ' +
+            (type == "info" ? stdoutStyle.cyan(message) :
+                stdoutStyle.lightyellow(message)));
+    }
+    diagnostics.push({ type, message, pos });
+}
 function parsePkg(name, sources, universe, parser, typeres) {
     const pkg = new Package(name, new Scope(universe.scope));
-    const sfileSet = new SrcFileSet();
-    const errh = (p, msg, typ) => {
-        console.error(stdoutStyle.red(`${p}: ${msg} (${typ})`));
-    };
-    const diagh = (p, msg, k) => {
-        const m = `[diag] ${p}: ${msg} (${DiagKind[k]})`;
-        console.log(k == DiagKind.INFO ? stdoutStyle.cyan(m) : stdoutStyle.lightyellow(m));
-    };
-    typeres.init(sfileSet, universe, errh);
+    const fset = new SrcFileSet();
+    typeres.init(fset, universe, errh);
     for (let filename of sources) {
-        console.log('\n--------------------------------------------------------\n' +
-            `parse ${filename}`);
-        const sdata = fs.readFileSync(filename, { flag: 'r' });
-        const sfile = sfileSet.addFile(filename, sdata.length);
+        if (isNodeJsLikeEnv) {
+            banner(`parse ${filename}`);
+        }
+        const sdata = readFileSync(filename, { flag: 'r' });
+        const sfile = fset.addFile(filename, sdata.length);
         parser.initParser(sfile, sdata, universe, pkg.scope, typeres, errh, diagh, Mode.ScanComments);
         const file = parser.parseFile();
         pkg.files.push(file);
-        if (file.imports) {
-            console.log(`${file.imports.length} imports`);
-            for (let imp of file.imports) {
-                console.log(astRepr(imp, reprOptions));
+        if (isNodeJsLikeEnv) {
+            if (file.imports) {
+                console.log(`${file.imports.length} imports`);
+                for (let imp of file.imports) {
+                    console.log(astRepr(imp, reprOptions));
+                }
             }
-        }
-        if (file.unresolved) {
-            console.log(`${file.unresolved.size} unresolved references`);
-            for (let ident of file.unresolved) {
-                console.log(' - ' + astRepr(ident, reprOptions));
+            if (file.unresolved) {
+                console.log(`${file.unresolved.size} unresolved references`);
+                for (let ident of file.unresolved) {
+                    console.log(' - ' + astRepr(ident, reprOptions));
+                }
             }
-        }
-        console.log(`${file.decls.length} declarations`);
-        for (let decl of file.decls) {
-            console.log(astRepr(decl, reprOptions));
+            console.log(`${file.decls.length} declarations`);
+            console.log(astRepr(file, reprOptions));
         }
     }
-    if (parser.errorCount != 0) {
+    if (parser.errorCount > 0 || typeres.errorCount > 0) {
         return Promise.resolve({ pkg, success: false });
     }
-    console.log('\n--------------------------------------------------------\n' +
-        `bind & assemble ${pkg}`);
+    if (isNodeJsLikeEnv) {
+        banner(`bind & assemble ${pkg}`);
+    }
     function importer(_imports, _path) {
         return Promise.reject(new Error(`not found`));
     }
-    return bindpkg(pkg, sfileSet, importer, typeres, errh)
+    return bindpkg(pkg, fset, importer, typeres, errh)
         .then(hasErrors => ({ pkg, success: !hasErrors }));
 }
-function main() {
+function main(sources, noIR) {
     const strSet = new ByteStrSet();
     const typeSet = new TypeSet();
     const universe = new Universe(strSet, typeSet);
     const typeres = new TypeResolver();
     const parser = new Parser();
-    parsePkg("example", ['example/scope4.xl'], universe, parser, typeres).then(r => {
+    const _sources = sources || ['example/ssa1.xl'];
+    diagnostics = [];
+    let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
         if (!r.success) {
-            return;
+            return { success: false, diagnostics };
         }
+        if (noIR) {
+            return { success: true, diagnostics, ast: r.pkg };
+        }
+        const irb = new IRBuilder();
+        irb.init(diagh);
         for (const file of r.pkg.files) {
-            console.log('\n========================================================');
-            console.log(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`);
-            console.log('--------------------------------------------------------');
-            for (let decl of file.decls) {
-                console.log(astRepr(decl, reprOptions));
+            if (isNodeJsLikeEnv) {
+                banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`);
+                console.log(astRepr(r.pkg, reprOptions));
+                banner(`ssa-ir ${file.sfile.name}`);
+            }
+            let sfile = file.sfile;
+            for (let d of file.decls) {
+                let n = irb.addTopLevel(sfile, d);
+                if (isNodeJsLikeEnv) {
+                    if (n) {
+                        console.log(`\n-----------------------\n`);
+                        printir(n);
+                    }
+                }
             }
         }
+        return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg };
     });
+    if (!sources && isNodeJsLikeEnv) {
+        return p.catch(err => {
+            console.error(err.stack || '' + err);
+            process.exit(1);
+            return { success: false, diagnostics };
+        });
+    }
+    return p;
 }
-main();
+function banner(message) {
+    if (stdoutSupportsStyle) {
+        const s = (s) => '\x1b[40m' + stdoutStyle.white(s) + '\x1b[0m';
+        process.stdout.write(s('\n\n  ' + message + '\n') + '\n\n');
+    }
+    else {
+        console.log('\n========================================================\n' +
+            message +
+            '\n--------------------------------------------------------');
+    }
+}
+if (isNodeJsLikeEnv) {
+    main();
+}
+else {
+    global['colang'] = {
+        main,
+        fmtast: astRepr,
+        fmtir,
+        printir,
+    };
+}
+//# sourceMappingURL=main.js.map
 //# sourceMappingURL=xlang.debug.js.map

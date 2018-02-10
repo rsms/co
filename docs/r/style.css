@@ -38,7 +38,7 @@ pre, code, tt {
 }
 img { display: block; border: none; vertical-align: bottom; }
 hr { height:1px; border:none; background-color:#ddd; }
-strong, b { font-weight: 500; color:#111; }
+strong, b { font-weight: 600; letter-spacing:0.01em; }
 num { /* number */
   font-feature-settings: 'calt' 1, 'ss01' 1;
   white-space: pre;
@@ -243,6 +243,26 @@ body { margin-top: 80px; }*/
 /* main */
 #main { margin-bottom: 3em; }
 
+table {
+  display: block;
+  width: 100%;
+  overflow: auto;
+  border-spacing: 0;
+  border-collapse: collapse;
+  box-sizing:border-box;
+}
+  table td, table th {
+    padding: 6px 13px;
+    border:1px solid #d5d5d5;
+    box-sizing: border-box;
+  }
+  table th {
+    color: black;
+    font-weight: 500;
+    background: #f5f5f5;
+  }
+
+
 /* ---------------------------------------------------------------------- */
 /* main content */
 section.content { padding-top:40px; }
@@ -382,6 +402,8 @@ section.content { padding-top:40px; }
   section.content div.footnotes li { color:#999; }
   section.content div.footnotes li > p { margin:0; }
   section.content div.footnotes li:target { background:#ffc; color:inherit; }
+
+  section.content > div > *:first-child { margin-top:0; }
   
 
 section.content.sub {

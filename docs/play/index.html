@@ -1,8 +1,427 @@
 ---
-layout: page
-title: Play
+layout: default
+title: Playground
 ---
+<!-- <h2>Playground</h2> -->
 
+<script>
+
+// hack to support reading "files"
+// type SyncFileReader (fn :string, options? :{[k:string]:any}) => Uint8Array
+var gSourceFiles = {}
+var utf8encoder = new TextEncoder('utf-8')
+window.readFileSync = function(fn, options) {
+  return utf8encoder.encode(gSourceFiles[fn])
+}
+
+</script>
+<script src="ted.js"></script>
 <script src="xlang.debug.js"></script>
+<!-- <script src="https://unpkg.com/viz.js@1.8.0/viz-lite.js"></script> -->
 
-Playground
+<style type="text/css">
+
+.main {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 80px; /* height of header */
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  overflow:hidden;
+}
+
+.files {
+  display: flex;
+  align-items:stretch;
+}
+
+/* TextEDitor */
+.ted.file {
+  margin-top: 1px;
+  width: 500px;
+}
+.ted.file .name {
+  margin:0;
+  padding:8px 35px;
+  background:#f5f5f5;
+  font-size:1.1em;
+  font-weight:500;
+  /*display: none;*/
+}
+.ted.file .content {
+  overflow-y: auto;
+  /*width: 500px;*/
+  font-family: 'Inconsolata', monospace;
+  font-size: 16px;
+  line-height: 18px;
+  background: #f5f5f5;
+  border-radius: 3px;
+  /*min-height: 100px;*/
+  /*max-height: 50vh;*/
+}
+  .ted .linenos {
+    width: 30px;
+  }
+  .ted .lineno {
+    padding-left: 8px;
+    padding-right: 10px;
+    transition: 100ms all ease;
+  }
+
+*[id^="template"] {
+  opacity:0.5;
+}
+
+.statues {
+  margin-top: 20px;
+}
+.status {
+  display: block;
+  margin-bottom:2px;
+  padding:4px 10px;
+  line-height:1.5;
+}
+.status.ok {
+  background: lightgreen;
+}
+.status.err {
+  background: #ffeeee;
+  color: #600;
+}
+.status.diag {
+  background: #fbf7bc;
+}
+
+.console {
+  border-top:2px solid #111;
+  flex:1 1 20%;
+  /*font-size:11px;*/
+  /*font-size: 16px;
+  line-height: 20px;*/
+  font-family: 'Inconsolata', monospace;
+  font-size: 13px;
+  overflow-y: auto;
+}
+  .console hr {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    height: 2;
+    background: #999;
+  }
+  .console .entry {
+    padding: 2px 35px;
+    border-top:1px solid #f2f2f2;
+  }
+  .console .entry:first-child {
+    border-top: none;
+  }
+  .console .entry.error {
+    color: darkred;
+    /*color: maroon;*/
+  }
+  .console .entry.warn {
+    color: rgba(0,0,0,0.4);
+  }
+  .console .entry.info {
+    color: blue;
+  }
+  .console hr + .entry {
+    border-top: none;
+  }
+
+.sources {
+  flex:1 1 80%;
+  display: flex;
+  align-items: stretch;
+  min-height: 100px;
+}
+  .sources .info {
+    flex:1 1 50%;
+    overflow:hidden;
+    display: flex;
+  }
+  .sources .result {
+    /*background: lightpink;*/
+    white-space: pre;
+    font-family: 'Inconsolata', monospace;
+    font-size: 13px;
+    overflow-y: auto;
+    border-left: 1px solid #ddd;
+    flex: 1 1 50%;
+    padding: 5px;
+  }
+
+</style>
+
+<div class="main">
+  <div class="sources">
+    <div class="files"></div>
+    <div class="info">
+      <div class="result" id="result-ast"></div>
+      <div class="result" id="result-ir"></div>
+    </div>
+  </div>
+  <div class="console">
+    <div id="template-console-entry" class="entry">
+      <span class="message"></span>
+    </div>
+  </div>
+</div>
+
+<script>
+
+function $(q, e) {
+  return (e || document).querySelector(q)
+}
+
+function $$(q, e) {
+  return [].slice.apply((e || document).querySelectorAll(q))
+}
+
+// monotime() :number
+let monotime = (
+  typeof performance != 'undefined' && performance.now ?
+    performance.now.bind(performance) :
+  () => (new Date()).getTime() * 1000
+)
+
+let _templateCache = {}
+function template(id) {
+  let t = _templateCache[id]
+  if (!t) {
+    t = document.getElementById('template-' + id)
+    if (!t) {
+      console.error('template "'+id+'" not found')
+      return
+    }
+    t.parentNode.removeChild(t)
+    t.removeAttribute('id')
+    _templateCache[id] = t
+  }
+  return t.cloneNode(true)
+}
+
+
+// window.onerror = function(a, b, c) {
+//   console.error('err', a,b,c)
+// }
+
+
+class Console {
+  constructor(el) {
+    this.el = el
+    this.entTemplate = template('console-entry')
+    this.el.innerText = ''
+  }
+
+  logv(cls, args) {
+    let c = this
+    let ent = c.entTemplate.cloneNode(true)
+    let msgel = $('.message', ent)
+    let fileLink = null
+
+    let s = args.filter((obj, i) => {
+      // pick out first argument if its a file
+      if (i == 0 && obj instanceof ted.File) {
+        fileLink = obj
+        return false
+      }
+      return true
+    }).map(obj => {
+      let t = typeof obj
+      if (obj && t == 'object') {
+        return JSON.stringify(obj)
+      }
+      return obj
+    }).join(' ')
+    
+    msgel.innerText = s
+    
+    if (cls) {
+      ent.classList.add(cls)
+    }
+
+    if (fileLink) {
+      console.log('TODO: hook up console entry to file', fileLink)
+    }
+
+    c.el.appendChild(ent)
+    ent.scrollIntoViewIfNeeded()
+  }
+
+  log() {
+    this.logv(null, [].slice.call(arguments))
+  }
+
+  info() {
+    this.logv('info', [].slice.call(arguments))
+  }
+
+  warn() {
+    this.logv('warn', [].slice.call(arguments))
+  }
+
+  error() {
+    this.logv('error', [].slice.call(arguments))
+  }
+
+  divider() {
+    if (this.el.children.length) {
+      this.el.appendChild(document.createElement('hr'))
+    }
+  }
+}
+var cons = new Console($('.console'))
+
+
+// compilePkg(srcs :{[name:string]:string}, skipIR? :bool) :Promise<Result>
+//
+// interface Result {
+//   success     :bool
+//   diagnostics :diaginfo[]
+//   ast?        :ast.Package
+//   ir?         :ir.Pkg
+// }
+// interface diaginfo {
+//   type: string  // info | warn | error
+//   message: string
+// }
+//
+function compilePkg(sourceFiles, skipIR) {
+  gSourceFiles = sourceFiles
+  return colang.main(Object.keys(sourceFiles), skipIR)
+}
+
+var pkg = {
+  files: {}, // :{[k:string]:FileView}
+  needsCompile: false,
+  isCompiling: false,
+
+  compile() {
+    if (this.compilePromise) {
+      // serialize
+      this.compilePromise.then(() => this.compile())
+      return
+    }
+
+    this.resetResults()
+
+    let sources = {}
+    for (let name of Object.keys(this.files)) {
+      sources[name] = this.files[name].text()
+    }
+
+    cons.divider()
+    cons.log('compiling package with files', Object.keys(sources))
+    // console.log('compiling', sources)
+
+    this.isCompiling = true
+    this.needsCompile = false
+    let startTime = monotime()
+    compilePkg(sources, /*skipIR=*/false).then(r => {
+      let endTime = monotime()
+      let what = r.success ? 'completed in' : 'failed after'
+      cons.log(`${what} ${(endTime - startTime).toFixed(1)}ms`)
+
+      this.isCompiling = false
+      this.onCompiled(r)
+      if (this.needsCompile) {
+        // another compilation was requested
+        this.compile().catch(err => {
+          console.error('EXC', err.stack || err)
+        })
+      }
+    })
+  },
+
+  resetResults() {
+    for (let name of Object.keys(this.files)) {
+      let f = this.files[name]
+      f.clearLineDiags()
+    }
+  },
+
+  presentDiag(d) {
+    switch (d.type) {
+      case 'error': cons.error(d.message); break
+      case 'warn':  cons.warn(d.message); break
+      case 'info':  cons.info(d.message); break
+      default:      cons.log(d.type, d.message)
+    }
+    let f = d.pos && d.pos.filename ? this.files[d.pos.filename] : null
+    if (!f) {
+      return
+    }
+    f.setLineDiag(d.pos.line, d)
+  },
+
+  onCompiled(r) {
+    console.log('compilation result:', r)
+    // errors first
+    for (let d of r.diagnostics) {
+      if (d.type == 'error') {
+        this.presentDiag(d)
+      }
+    }
+    // then warnings and info
+    for (let d of r.diagnostics) {
+      if (d.type != 'error') {
+        this.presentDiag(d)
+      }
+    }
+
+    // print AST and IR
+    if (r.ast) {
+      let resultel = $('#result-ast')
+      resultel.innerText = colang.fmtast(r.ast)
+    }
+
+    if (r.ir) {
+      let resultel = $('#result-ir')
+      resultel.innerText = colang.fmtir(r.ir)
+    }
+  },
+
+  compilerDebounceTime: 100,
+  compilerDebounceTimer: null,
+
+  setNeedsCompile() {
+    this.needsCompile = true
+    clearTimeout(this.compilerDebounceTimer)
+    this.compilerDebounceTimer = setTimeout(
+      () => this.isCompiling || this.compile(),
+      this.compilerDebounceTime
+    )
+  },
+}
+
+// create a FileView with some default code
+let f = new ted.File('hello.co', `
+fun foo(x, y int) int {
+\tif x > 3 {
+\t\ty++
+\t}
+\tx + y
+}
+
+fun bar(x int) bool {
+\tx || 0
+}
+`.trim())
+f.onChange = () => pkg.setNeedsCompile()
+pkg.files[f.name] = f
+f.mount($('.main .files'))
+
+// XXX DEBUG
+let ti = f.text().indexOf('z') + 1
+f.view.setCurRange([ti, ti])
+// setTimeout(() => f.tview.decIndent(), 100)
+
+// initial compilation
+pkg.compile()
+
+</script>

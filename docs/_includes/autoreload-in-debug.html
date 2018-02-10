@@ -20,7 +20,10 @@ function check() {
   r.open('GET', url, true);
   r.onreadystatechange = function() {
     if (r.readyState == 4){
-      var found_etag = r.getResponseHeader('Etag').replace(/^"|"$/g);
+      var found_etag = r.getResponseHeader('Etag');
+      if (found_etag) {
+        found_etag = found_etag.replace(/^"|"$/g);
+      }
       //console.log('current_etag:', current_etag, 'found_etag:', found_etag);
       if (current_etag === null) {
         current_etag = found_etag;
