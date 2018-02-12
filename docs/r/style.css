@@ -195,6 +195,7 @@ body { margin-top: 80px; }*/
 /* small screens */
 @media only screen and (max-device-width: 480px) {
   .header {
+    /* note: need to be sync'd with style in /play/index.html */
     height: 110px;
   }
   .header > div {

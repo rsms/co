@@ -1,6 +1,6 @@
 ---
 layout: page
-title: Patterns
+title: IR
 ---
 
 # Intermediate Representation (IR)

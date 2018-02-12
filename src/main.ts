@@ -49,21 +49,21 @@ interface diaginfo {
 }
 let diagnostics :diaginfo[]
 
-function errh(pos :Position, msg :string, errcode :string) {
-  let message = `${pos}: ${msg} (${errcode})`
+function errh(pos :Position, message :string, errcode :string) {
   if (isNodeJsLikeEnv) {
-    console.error(stdoutStyle.red(message))
+    let msg = `${pos}: ${message} (${errcode})`
+    console.error(stdoutStyle.red(msg))
   }
   diagnostics.push({ type: 'error', errcode, message, pos })
 }
 
-function diagh(pos :Position, msg :string, type :string) {
-  const message = `${pos}: ${type}: ${msg}`
+function diagh(pos :Position, message :string, type :string) {
   if (isNodeJsLikeEnv) {
+    const msg = `${pos}: ${type}: ${message}`
     console.log(
       '[diag] ' +
-      ( type == "info" ? stdoutStyle.cyan(message) :
-        stdoutStyle.lightyellow(message)
+      ( type == "info" ? stdoutStyle.cyan(msg) :
+        stdoutStyle.lightyellow(msg)
       )
     )
   }
@@ -168,7 +168,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
 
   let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
     if (!r.success) {
-      return { success: false, diagnostics }
+      return { success: false, diagnostics, ast: r.pkg }
     }
     if (noIR) {
       return { success: true, diagnostics, ast: r.pkg }
@@ -178,31 +178,35 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
     irb.init(diagh)
 
     // print AST & build IR
-    for (const file of r.pkg.files) {
+    try {
+      for (const file of r.pkg.files) {
 
-      if (isNodeJsLikeEnv) {
-        banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
-        console.log(astRepr(r.pkg, reprOptions))
-        // for (let decl of file.decls) {
-        //   console.log(astRepr(decl, reprOptions))
-        // }
-        banner(`ssa-ir ${file.sfile.name}`)
-      }
-
-      // build IR
-      let sfile = file.sfile
-      for (let d of file.decls) {
-        let n = irb.addTopLevel(sfile, d)
         if (isNodeJsLikeEnv) {
-          if (n) {
-            console.log(`\n-----------------------\n`)
-            printir(n)
+          banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
+          console.log(astRepr(r.pkg, reprOptions))
+          // for (let decl of file.decls) {
+          //   console.log(astRepr(decl, reprOptions))
+          // }
+          banner(`ssa-ir ${file.sfile.name}`)
+        }
+
+        // build IR
+        let sfile = file.sfile
+        for (let d of file.decls) {
+          let n = irb.addTopLevel(sfile, d)
+          if (isNodeJsLikeEnv) {
+            if (n) {
+              console.log(`\n-----------------------\n`)
+              printir(n)
+            }
           }
         }
       }
-    }
 
-    return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg }
+      return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg }
+    } catch (error) {
+      return { success: false, error, diagnostics, ast: r.pkg }
+    }
   })
 
   if (!sources && isNodeJsLikeEnv) {

@@ -7162,6 +7162,7 @@ class IRBuilder {
         }
     }
 }
+//# sourceMappingURL=ir.js.map
 
 class IRFmt {
     constructor(types, style$$1, println) {
@@ -7307,19 +7308,19 @@ catch (_) {
 }
 const reprOptions = { colors: stdoutSupportsStyle };
 let diagnostics;
-function errh(pos, msg, errcode) {
-    let message = `${pos}: ${msg} (${errcode})`;
+function errh(pos, message, errcode) {
     if (isNodeJsLikeEnv) {
-        console.error(stdoutStyle.red(message));
+        let msg = `${pos}: ${message} (${errcode})`;
+        console.error(stdoutStyle.red(msg));
     }
     diagnostics.push({ type: 'error', errcode, message, pos });
 }
-function diagh(pos, msg, type) {
-    const message = `${pos}: ${type}: ${msg}`;
+function diagh(pos, message, type) {
     if (isNodeJsLikeEnv) {
+        const msg = `${pos}: ${type}: ${message}`;
         console.log('[diag] ' +
-            (type == "info" ? stdoutStyle.cyan(message) :
-                stdoutStyle.lightyellow(message)));
+            (type == "info" ? stdoutStyle.cyan(msg) :
+                stdoutStyle.lightyellow(msg)));
     }
     diagnostics.push({ type, message, pos });
 }
@@ -7375,31 +7376,36 @@ function main(sources, noIR) {
     diagnostics = [];
     let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
         if (!r.success) {
-            return { success: false, diagnostics };
+            return { success: false, diagnostics, ast: r.pkg };
         }
         if (noIR) {
             return { success: true, diagnostics, ast: r.pkg };
         }
         const irb = new IRBuilder();
         irb.init(diagh);
-        for (const file of r.pkg.files) {
-            if (isNodeJsLikeEnv) {
-                banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`);
-                console.log(astRepr(r.pkg, reprOptions));
-                banner(`ssa-ir ${file.sfile.name}`);
-            }
-            let sfile = file.sfile;
-            for (let d of file.decls) {
-                let n = irb.addTopLevel(sfile, d);
+        try {
+            for (const file of r.pkg.files) {
                 if (isNodeJsLikeEnv) {
-                    if (n) {
-                        console.log(`\n-----------------------\n`);
-                        printir(n);
+                    banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`);
+                    console.log(astRepr(r.pkg, reprOptions));
+                    banner(`ssa-ir ${file.sfile.name}`);
+                }
+                let sfile = file.sfile;
+                for (let d of file.decls) {
+                    let n = irb.addTopLevel(sfile, d);
+                    if (isNodeJsLikeEnv) {
+                        if (n) {
+                            console.log(`\n-----------------------\n`);
+                            printir(n);
+                        }
                     }
                 }
             }
+            return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg };
         }
-        return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg };
+        catch (error) {
+            return { success: false, error, diagnostics, ast: r.pkg };
+        }
     });
     if (!sources && isNodeJsLikeEnv) {
         return p.catch(err => {
@@ -7432,5 +7438,4 @@ else {
         printir,
     };
 }
-//# sourceMappingURL=main.js.map
 //# sourceMappingURL=xlang.debug.js.map

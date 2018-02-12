@@ -33,15 +33,10 @@ window.readFileSync = function(fn, options) {
   overflow:hidden;
 }
 
-.files {
-  display: flex;
-  align-items:stretch;
-}
-
 /* TextEDitor */
 .ted.file {
   margin-top: 1px;
-  width: 500px;
+  min-width: 100px;
 }
 .ted.file .name {
   margin:0;
@@ -71,8 +66,8 @@ window.readFileSync = function(fn, options) {
     transition: 100ms all ease;
   }
 
-*[id^="template"] {
-  opacity:0.5;
+*[id^="template"], #icons {
+  display: none;
 }
 
 .statues {
@@ -109,25 +104,60 @@ window.readFileSync = function(fn, options) {
     margin: 0;
     padding: 0;
     border: 0;
-    height: 2;
-    background: #999;
+    height: 24px;
+    background: #f2f2f2;
   }
   .console .entry {
-    padding: 2px 35px;
+    padding: 2px 8px;
     border-top:1px solid #f2f2f2;
+    display: flex;
+    align-items: center;
+    /*background-size: 12px 12px;
+    background-position: 13px center;
+    background-repeat: no-repeat;*/
   }
   .console .entry:first-child {
     border-top: none;
   }
+    .console .entry .icon {
+      flex: 0 0 auto;
+      display: flex;
+      width: 12px;
+      height: 12px;
+      margin-right:8px;
+    }
+      .console .entry .icon > svg {
+        width: inherit;
+        height: inherit;
+      }
+    .console .entry .message {
+      flex: 1 0 auto;
+      /* white-space: nowrap; */
+      line-break: strict;
+      word-break: keep-all;
+      overflow-wrap: break-word;
+      margin-right:10px;
+    }
+    .console .entry .origin {
+      color: #aaa;
+      flex: 0 1 auto;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: clip;
+      text-align: right;
+    }
+
   .console .entry.error {
-    color: darkred;
-    /*color: maroon;*/
+    color: #c32700;
   }
   .console .entry.warn {
-    color: rgba(0,0,0,0.4);
+    color: #bf7e17;
   }
   .console .entry.info {
-    color: blue;
+    color: #2975a5;
+  }
+  .console .entry.success {
+    color: #168a3b;
   }
   .console hr + .entry {
     border-top: none;
@@ -139,11 +169,23 @@ window.readFileSync = function(fn, options) {
   align-items: stretch;
   min-height: 100px;
 }
+  .sources .files {
+    flex:1 1 40%;
+    max-width:500px;
+    display: flex;
+    align-items: stretch;
+  }
+    .sources .files .file {
+      flex:1 1 auto;
+    }
   .sources .info {
-    flex:1 1 50%;
+    flex:1 1 60%;
     overflow:hidden;
     display: flex;
   }
+    .sources .info #result-ir {
+      max-width: 230px;
+    }
   .sources .result {
     /*background: lightpink;*/
     white-space: pre;
@@ -155,7 +197,52 @@ window.readFileSync = function(fn, options) {
     padding: 5px;
   }
 
+@media only screen and (max-device-width: 480px) {
+  /* case: display width <= 800px */
+  .main {
+    /* note: need to be sync'd with /r/style.css */
+    top: 110px;
+  }
+}
+
+@media only screen and (max-width: 900px) {
+  /* case: window width <= 800px */
+  .sources .info {
+    flex-direction: column;
+  }
+  .sources .info > *:first-child {
+    border-bottom: 1px solid #ccc;
+  }
+  .sources .info #result-ir {
+    max-width: none;
+  }
+}
+
+@media only screen and (max-width: 500px) {
+  /* case: window width <= 500px */
+  .sources {
+    flex-direction: column;
+  }
+  .sources .info > *:first-child {
+    border-top: 1px solid #ccc;
+  }
+}
+
 </style>
+
+<div id="icons">
+  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-check"><polyline points="20 6 9 17 4 12"></polyline></svg>
+
+  <svg class="feather feather-alert-triangle" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+    <line x1="12" y1="9" x2="12" y2="13"></line>
+    <line x1="12" y1="17" x2="12" y2="17"></line>
+  </svg>
+
+  <svg class="feather feather-flag" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path><line x1="4" y1="22" x2="4" y2="15"></line></svg>
+
+  <svg class="feather feather-x" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+</div>
 
 <div class="main">
   <div class="sources">
@@ -167,7 +254,9 @@ window.readFileSync = function(fn, options) {
   </div>
   <div class="console">
     <div id="template-console-entry" class="entry">
-      <span class="message"></span>
+      <div class="icon"></div>
+      <div class="message"></div>
+      <div class="origin"></div>
     </div>
   </div>
 </div>
@@ -206,29 +295,83 @@ function template(id) {
 }
 
 
-// window.onerror = function(a, b, c) {
-//   console.error('err', a,b,c)
-// }
-
-
 class Console {
   constructor(el) {
     this.el = el
     this.entTemplate = template('console-entry')
     this.el.innerText = ''
+    this.icons = new Map()
+  }
+
+  getIcon(name) {
+    let icon = this.icons.get(name)
+    if (!icon) {
+      let classname = {
+        'success': 'feather-check',
+        'info': 'feather-flag',
+        'warn': 'feather-alert-triangle',
+        'error': 'feather-x',
+      }[name]
+      icon = classname ? $('#icons .' + classname) : null
+      if (!icon) {
+        return null
+      }
+      this.icons.set(name, icon)
+    }
+    return icon.cloneNode(true)
+  }
+
+  fmtorigin(origin) {
+    // origin = {
+    //   filename :string
+    //   line     :number
+    //   column   :number
+    // }
+    let file = origin.filename
+    let fileStart = file.substr(0,6)
+    let p = file.lastIndexOf('/')
+    if (p != -1) {
+      let p2 = file.lastIndexOf('?')
+      if (p2 > p) {
+        p = file.lastIndexOf('/', p - 1)
+        if (p != -1) {
+          file = file.substring(p + 1, p2)
+        }
+      } else {
+        file = file.substr(p + 1)
+      }
+    }
+    return file + ':' + origin.line + ':' + origin.column
   }
 
   logv(cls, args) {
     let c = this
     let ent = c.entTemplate.cloneNode(true)
+    let iconel = $('.icon', ent)
     let msgel = $('.message', ent)
     let fileLink = null
+    let origin = null
+
+    let icon = cls ? this.getIcon(cls) : null
+    if (icon) {
+      iconel.appendChild(icon)
+    }
 
     let s = args.filter((obj, i) => {
       // pick out first argument if its a file
-      if (i == 0 && obj instanceof ted.File) {
-        fileLink = obj
-        return false
+      if (i == 0) {
+        if (obj instanceof ted.File) {
+          fileLink = obj
+          return false
+        } else if (
+          typeof obj == 'object' &&
+          obj.filename &&
+          obj.line !== undefined &&
+          obj.column !== undefined
+        ) {
+          origin = obj
+          return false
+        }
       }
       return true
     }).map(obj => {
@@ -245,30 +388,24 @@ class Console {
       ent.classList.add(cls)
     }
 
-    if (fileLink) {
-      console.log('TODO: hook up console entry to file', fileLink)
+    if (fileLink || origin) {
+      let originel = $('.origin', ent)
+      if (fileLink) {
+        console.log('TODO: hook up console entry.origin to ted.File', fileLink)
+      } else if (origin) {
+        originel.innerText = this.fmtorigin(origin)
+      }
     }
 
     c.el.appendChild(ent)
     ent.scrollIntoViewIfNeeded()
   }
 
-  log() {
-    this.logv(null, [].slice.call(arguments))
-  }
-
-  info() {
-    this.logv('info', [].slice.call(arguments))
-  }
-
-  warn() {
-    this.logv('warn', [].slice.call(arguments))
-  }
-
-  error() {
-    this.logv('error', [].slice.call(arguments))
-  }
-
+  log() { this.logv(null, [].slice.call(arguments)) }
+  info() { this.logv('info', [].slice.call(arguments)) }
+  warn() { this.logv('warn', [].slice.call(arguments)) }
+  error() { this.logv('error', [].slice.call(arguments)) }
+  success() { this.logv('success', [].slice.call(arguments)) }
   divider() {
     if (this.el.children.length) {
       this.el.appendChild(document.createElement('hr'))
@@ -276,6 +413,25 @@ class Console {
   }
 }
 var cons = new Console($('.console'))
+
+// show uncaught exceptions in our home-made console
+window.addEventListener('error', ev => {
+  console.error(ev.error.stack || ''+ev.error)
+  cons.error({
+    filename: ev.filename,
+    line:     ev.lineno,
+    column:   ev.colno,
+  }, ev.message + ' (see js console for details)')
+})
+
+
+// setTimeout(() => {
+//   cons.log('test message of type log')
+//   cons.info('test message of type info')
+//   cons.warn('test message of type warn')
+//   cons.error('test message of type error')
+//   cons.success('test message of type success')
+// }, 10)
 
 
 // compilePkg(srcs :{[name:string]:string}, skipIR? :bool) :Promise<Result>
@@ -317,15 +473,18 @@ var pkg = {
 
     cons.divider()
     cons.log('compiling package with files', Object.keys(sources))
-    // console.log('compiling', sources)
 
     this.isCompiling = true
     this.needsCompile = false
     let startTime = monotime()
     compilePkg(sources, /*skipIR=*/false).then(r => {
       let endTime = monotime()
-      let what = r.success ? 'completed in' : 'failed after'
-      cons.log(`${what} ${(endTime - startTime).toFixed(1)}ms`)
+      let duration = (endTime - startTime).toFixed(1) + 'ms'
+      if (r.success) {
+        cons.success(`completed in ${duration}`)
+      } else {
+        cons.log(`failed after ${duration}`)
+      }
 
       this.isCompiling = false
       this.onCompiled(r)
@@ -347,10 +506,10 @@ var pkg = {
 
   presentDiag(d) {
     switch (d.type) {
-      case 'error': cons.error(d.message); break
-      case 'warn':  cons.warn(d.message); break
-      case 'info':  cons.info(d.message); break
-      default:      cons.log(d.type, d.message)
+      case 'error': cons.error(d.pos, d.message); break
+      case 'warn':  cons.warn(d.pos, d.message); break
+      case 'info':  cons.info(d.pos, d.message); break
+      default:      cons.log(d.pos, d.type, d.message)
     }
     let f = d.pos && d.pos.filename ? this.files[d.pos.filename] : null
     if (!f) {
@@ -374,16 +533,9 @@ var pkg = {
       }
     }
 
-    // print AST and IR
-    if (r.ast) {
-      let resultel = $('#result-ast')
-      resultel.innerText = colang.fmtast(r.ast)
-    }
-
-    if (r.ir) {
-      let resultel = $('#result-ir')
-      resultel.innerText = colang.fmtir(r.ir)
-    }
+    // show AST and IR
+    $('#result-ast').innerText = r.ast ? colang.fmtast(r.ast) : ''
+    $('#result-ir').innerText = r.ir ? colang.fmtir(r.ir) : ''
   },
 
   compilerDebounceTime: 100,
