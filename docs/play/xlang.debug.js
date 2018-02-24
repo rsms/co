@@ -139,6 +139,7 @@ function bufcmp(a, b) {
         bL < aL ? 1 :
             0);
 }
+//# sourceMappingURL=btree.js.map
 
 function tokstr(t) {
     return tokenStrings.get(t) || token[t].toLowerCase();
@@ -340,6 +341,7 @@ const keywords = new BTree({ k: cdat.subarray(0, 2), v: token.GO,
 function lookupKeyword(ident) {
     return keywords.get(ident) || token.NAME;
 }
+//# sourceMappingURL=token.js.map
 
 function search(n, f) {
     let i = 0, j = n;
@@ -448,6 +450,7 @@ const debuglog = DEBUG ? function (...v) {
     v.splice(0, 0, prefix);
     console.log.apply(console, v);
 } : function (...v) { };
+//# sourceMappingURL=util.js.map
 
 const UniError = 0xFFFD;
 const UniSelf = 0x80;
@@ -564,6 +567,7 @@ function encodeAsString(cp) {
     cp -= 0x10000;
     return String.fromCharCode((cp >> 10) + surrogateMin, (cp % rune2Max) + 0xDC00);
 }
+//# sourceMappingURL=utf8.js.map
 
 const MaxRune = 0x10FFFF;
 const InvalidChar = 0xFFFD;
@@ -919,6 +923,7 @@ function isEmojiModifierBase(c) {
 function isEmojiModifier(c) {
     return ((0x1F3FB <= c && c <= 0x1F3FF));
 }
+//# sourceMappingURL=unicode.js.map
 
 const TERM = typeof process != 'undefined' && process.env.TERM || '';
 function sfn(open, close) {
@@ -996,6 +1001,8 @@ const stdoutStyle = (typeof process != 'undefined' && streamStyle(process.stdout
 const stderrStyle = (typeof process != 'undefined' && streamStyle(process.stderr) || noStyle);
 const stdoutSupportsStyle = stdoutStyle !== noStyle;
 
+//# sourceMappingURL=termstyle.js.map
+
 class ErrorReporter {
     constructor(defaultErrCode, errh = null) {
         this.defaultErrCode = defaultErrCode;
@@ -1033,6 +1040,7 @@ class ErrorReporter {
         }
     }
 }
+//# sourceMappingURL=error.js.map
 
 const SL = 0x2F;
 const DOT = 0x2E;
@@ -1190,6 +1198,7 @@ TEST("path.join", () => {
     t(["a", ""], "a");
     t(["", "a"], "a");
 });
+//# sourceMappingURL=path.js.map
 
 var Mode;
 (function (Mode) {
@@ -2388,6 +2397,7 @@ const asciiFeats = new Uint8Array([
     0,
     0,
 ]);
+//# sourceMappingURL=scanner.js.map
 
 function strtou(b, base, offs = 0) {
     assert(base >= 2);
@@ -2451,6 +2461,7 @@ TEST("strtou", () => {
     t("x123", 10, -1);
     t("-123", 10, -1);
 });
+//# sourceMappingURL=strtou.js.map
 
 let nextgid = 0;
 class Group {
@@ -3104,6 +3115,7 @@ class Package {
         return `Package(${this.name})`;
     }
 }
+//# sourceMappingURL=ast.js.map
 
 const kEmptyByteArray = new Uint8Array(0);
 const kBytes__ = new Uint8Array([0x5f]);
@@ -4364,6 +4376,7 @@ class Parser extends Scanner {
 function isEmptyFunExpr(d) {
     return d instanceof FunExpr && !d.body;
 }
+//# sourceMappingURL=parser.js.map
 
 class pkgBinder extends ErrorReporter {
     constructor(pkg, fset, importer, types, errh) {
@@ -4484,6 +4497,7 @@ function bindpkg(pkg, fset, importer, typeres, errh) {
     const b = new pkgBinder(pkg, fset, importer, typeres, errh);
     return b.bind().then(() => b.errorCount != 0);
 }
+//# sourceMappingURL=bind.js.map
 
 const NoPos = 0;
 
@@ -4650,6 +4664,7 @@ function searchInts(a, x) {
     }
     return i - 1;
 }
+//# sourceMappingURL=pos.js.map
 
 let _nextId = 0;
 class ByteStr {
@@ -4704,6 +4719,7 @@ function asciiByteStr(s) {
     let b = asciibuf(s);
     return new ByteStr(hashBytes(b, 0, b.length), b);
 }
+//# sourceMappingURL=bytestr.js.map
 
 class TypeSet {
     constructor() {
@@ -4726,6 +4742,7 @@ class TypeSet {
         return t;
     }
 }
+//# sourceMappingURL=typeset.js.map
 
 class ReprCtx {
     constructor() {
@@ -5004,6 +5021,7 @@ function repr1(n, newline, c, flag = 0) {
     }
     return '(???' + reprcons(n, c) + ' ' + repr(n) + ')';
 }
+//# sourceMappingURL=ast-repr.js.map
 
 const universeTypes = new Map();
 const universeValues = new Map();
@@ -5702,6 +5720,7 @@ class Universe {
         return this.typeSet.intern(t);
     }
 }
+//# sourceMappingURL=universe.js.map
 
 class EvalConst {
 }
@@ -6194,8 +6213,8 @@ function intEvaluator(op, x, y) {
     }
     return null;
 }
+//# sourceMappingURL=resolve.js.map
 
-const byteStr__ = asciiByteStr("_");
 const byteStr_anonfun = asciiByteStr('anonfun');
 var Op;
 (function (Op) {
@@ -6506,6 +6525,7 @@ function getop(tok, t) {
 class Value {
     constructor(id, op, type, b, aux) {
         this.args = null;
+        this.comment = '';
         this.uses = 0;
         this.users = new Set();
         this.id = id;
@@ -6570,6 +6590,7 @@ class Block$1 {
         this.control = null;
         this.values = [];
         this.sealed = false;
+        this.comment = '';
         this.kind = kind;
         this.id = id;
         this.f = f;
@@ -6682,12 +6703,18 @@ class Pkg {
         this.init = null;
     }
 }
+var IRFlags;
+(function (IRFlags) {
+    IRFlags[IRFlags["Default"] = 0] = "Default";
+    IRFlags[IRFlags["Comments"] = 1] = "Comments";
+})(IRFlags || (IRFlags = {}));
 class IRBuilder {
     constructor() {
         this.sfile = null;
         this.diagh = null;
+        this.flags = IRFlags.Default;
     }
-    init(diagh = null) {
+    init(diagh = null, flags = IRFlags.Default) {
         const r = this;
         r.pkg = new Pkg();
         r.sfile = null;
@@ -6695,6 +6722,7 @@ class IRBuilder {
         r.vars = new Map();
         r.defvars = [];
         r.incompletePhis = null;
+        r.flags = flags;
     }
     startBlock(b) {
         const r = this;
@@ -6797,7 +6825,10 @@ class IRBuilder {
             if (p.name) {
                 let t = funtype.inputs[i];
                 let name = p.name.value;
-                let v = entryb.newValue0(Op.LoadParam, t, name);
+                let v = entryb.newValue0(Op.LoadParam, t, i);
+                if (r.flags & IRFlags.Comments) {
+                    v.comment = name.toString();
+                }
                 r.vars.set(name, v);
             }
         }
@@ -6889,10 +6920,8 @@ class IRBuilder {
     while_(n) {
         const s = this;
         let entryb = s.endBlock();
-        debuglog(`>>>>>>>>> ${entryb} "entry"`);
         assert(entryb.kind == BlockKind.Plain);
         let ifb = s.f.newBlock(BlockKind.If);
-        debuglog(`>>>>>>>>> ${ifb} "if"`);
         entryb.succs = [ifb];
         ifb.preds = [entryb];
         s.startBlock(ifb);
@@ -6900,7 +6929,6 @@ class IRBuilder {
         ifb = s.endBlock();
         ifb.control = control;
         let thenb = s.f.newBlock(BlockKind.Plain);
-        debuglog(`>>>>>>>>> ${thenb} "then"`);
         thenb.preds = [ifb];
         s.startSealedBlock(thenb);
         s.block(n.body);
@@ -6909,11 +6937,14 @@ class IRBuilder {
         ifb.preds = [entryb, thenb];
         s.sealBlock(ifb);
         let nextb = s.f.newBlock(BlockKind.Plain);
-        debuglog(`>>>>>>>>> ${nextb} "next"`);
         nextb.preds = [ifb];
         ifb.succs = [thenb, nextb];
-        debuglog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• nextb start`);
         s.startSealedBlock(nextb);
+        if (s.flags & IRFlags.Comments) {
+            ifb.comment = 'while';
+            thenb.comment = 'then';
+            nextb.comment = 'endwhile';
+        }
     }
     if_(s) {
         const r = this;
@@ -6938,22 +6969,31 @@ class IRBuilder {
             thenb.succs = [contb];
             contb.preds = [thenb, elseb];
             r.startSealedBlock(contb);
+            if (r.flags & IRFlags.Comments) {
+                thenb.comment = 'then';
+                elseb.comment = 'else';
+                contb.comment = 'endif';
+            }
         }
         else {
             thenb.succs = [elseb];
             elseb.preds = [ifb, thenb];
             elseb.succs = null;
             r.startSealedBlock(elseb);
+            if (r.flags & IRFlags.Comments) {
+                thenb.comment = 'then';
+                elseb.comment = 'endif';
+            }
         }
     }
     assign(left, right) {
         const s = this;
-        let t = left.type;
-        assert(left.type);
         assert(left instanceof Ident, `${left.constructor.name} not supported`);
         let name = left.value;
         let v = s.b.newValue1(Op.Copy, right.type, right);
-        debuglog(`assign "${name}" ${left} <— ${right}`);
+        if (s.flags & IRFlags.Comments) {
+            v.comment = name.toString();
+        }
         s.writeVariable(name, v);
         return v;
     }
@@ -7042,41 +7082,14 @@ class IRBuilder {
             return r.f.constVal(t, c);
         }
         if (s instanceof Ident) {
-            let v = r.readVariable(s.value, s.type, null);
-            return v;
+            return r.readVariable(s.value, s.type, null);
         }
         if (s instanceof Assignment) {
             return r.assignment(s);
         }
         if (s instanceof Operation) {
             if (s.op == token.OROR || s.op == token.ANDAND) {
-                assert(s.y != null);
-                let tmpname = asciiByteStr('tmp');
-                let left = r.expr(s.x);
-                r.writeVariable(tmpname, left);
-                let t = left.type;
-                let rightb = r.f.newBlock(BlockKind.Plain);
-                let contb = r.f.newBlock(BlockKind.Plain);
-                let ifb = r.endBlock();
-                ifb.kind = BlockKind.If;
-                ifb.control = left;
-                if (s.op == token.OROR) {
-                    ifb.succs = [contb, rightb];
-                }
-                else {
-                    ifb.succs = [rightb, contb];
-                }
-                rightb.preds = [ifb];
-                r.startSealedBlock(rightb);
-                let right = r.expr(s.y);
-                let tmpv = r.b.newValue1(Op.Copy, right.type, right);
-                r.writeVariable(tmpname, tmpv);
-                rightb = r.endBlock();
-                rightb.succs = [contb];
-                assert(t.equals(right.type), "operands have different types");
-                contb.preds = [ifb, rightb];
-                r.startSealedBlock(contb);
-                return r.readVariable(tmpname, u_t_bool, null);
+                return r.opAndAnd(s);
             }
             else {
                 let left = r.expr(s.x);
@@ -7097,6 +7110,37 @@ class IRBuilder {
         }
         debuglog(`TODO: handle ${s.constructor.name}`);
         return r.nilValue();
+    }
+    opAndAnd(n) {
+        const s = this;
+        assert(n.y != null);
+        let tmpname = asciiByteStr('tmp');
+        let left = s.expr(n.x);
+        s.writeVariable(tmpname, left);
+        let t = left.type;
+        let rightb = s.f.newBlock(BlockKind.Plain);
+        let contb = s.f.newBlock(BlockKind.Plain);
+        let ifb = s.endBlock();
+        ifb.kind = BlockKind.If;
+        ifb.control = left;
+        if (n.op == token.OROR) {
+            ifb.succs = [contb, rightb];
+        }
+        else {
+            assert(n.op == token.ANDAND);
+            ifb.succs = [rightb, contb];
+        }
+        rightb.preds = [ifb];
+        s.startSealedBlock(rightb);
+        let right = s.expr(n.y);
+        let tmpv = s.b.newValue1(Op.Copy, right.type, right);
+        s.writeVariable(tmpname, tmpv);
+        rightb = s.endBlock();
+        rightb.succs = [contb];
+        assert(t.equals(right.type), "operands have different types");
+        contb.preds = [ifb, rightb];
+        s.startSealedBlock(contb);
+        return s.readVariable(tmpname, u_t_bool, null);
     }
     funcall(x) {
         const s = this;
@@ -7256,6 +7300,7 @@ class IRBuilder {
         }
     }
 }
+//# sourceMappingURL=ir.js.map
 
 class IRFmt {
     constructor(types, style$$1, println) {
@@ -7279,6 +7324,9 @@ function fmtval(f, v) {
     if (v.aux !== null) {
         s += ' [' + v.aux + ']';
     }
+    if (v.comment) {
+        s += '  // ' + v.comment;
+    }
     return s;
 }
 function printval(f, v, indent) {
@@ -7290,7 +7338,8 @@ function printblock(f, b, indent) {
     if (b.preds && b.preds.length) {
         preds = f.larr + b.preds.map(b => f.style.lightyellow(b.toString())).join(', ');
     }
-    f.println(indent + f.style.lightyellow(label + ':') + preds);
+    let comment = b.comment ? '  // ' + b.comment : '';
+    f.println(indent + f.style.lightyellow(label + ':') + preds + comment);
     let valindent = indent + '  ';
     for (let v of b.values) {
         printval(f, v, valindent);
@@ -7379,6 +7428,7 @@ function fmtir(v, options) {
     printir(v, w, options);
     return str;
 }
+//# sourceMappingURL=ir-repr.js.map
 
 let readFileSync;
 let isNodeJsLikeEnv = false;
@@ -7474,7 +7524,7 @@ function main(sources, noIR) {
             return { success: true, diagnostics, ast: r.pkg };
         }
         const irb = new IRBuilder();
-        irb.init(diagh);
+        irb.init(diagh, IRFlags.Comments);
         try {
             for (const file of r.pkg.files) {
                 if (isNodeJsLikeEnv) {
@@ -7533,4 +7583,5 @@ else {
         printir,
     };
 }
+//# sourceMappingURL=main.js.map
 //# sourceMappingURL=xlang.debug.js.map
