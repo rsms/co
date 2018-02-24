@@ -6990,12 +6990,8 @@ class IRBuilder {
         const s = this;
         assert(left instanceof Ident, `${left.constructor.name} not supported`);
         let name = left.value;
-        let v = s.b.newValue1(Op.Copy, right.type, right);
-        if (s.flags & IRFlags.Comments) {
-            v.comment = name.toString();
-        }
-        s.writeVariable(name, v);
-        return v;
+        s.writeVariable(name, right);
+        return right;
     }
     assignment(s) {
         const r = this;
