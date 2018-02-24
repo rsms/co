@@ -15,9 +15,11 @@ export enum Op {
   // special
   None = 0, // nothing (invalid)
   // FwdRef,   // forward reference (SSA)
-  Param,    // function parameter
   Copy,
   Phi,
+  LoadParam,   // read function parameter (inside callee)
+  PushParam,   // push a parameter for a function call
+  Call,        // call a function
 
   // constants
   i32Const, // load an integer as i32
@@ -326,12 +328,14 @@ export class Value {
     // Note: Only used for Phi values. Assertion here to make sure we are
     // intenational about use.
     assert(this.op == Op.Phi, "appendArg on non-phi value")
+    assert(v !== this, `using self as arg to self`)
     if (!this.args) {
       this.args = [v]
     } else {
       this.args.push(v)
     }
-    v.uses++ ; v.users.add(this)
+    v.uses++
+    v.users.add(this)
   }
 
   // replaceBy replaces all uses of this value with v
@@ -341,14 +345,36 @@ export class Value {
     // instead of an array owned by the block. Will
     // make these operations a lot easier.
 
-    assert(this.users.size == 0, "TODO users")
-    // for (let user of this.users) {
-    // }
+    assert(v !== this, 'trying to replace V with V')
 
+    for (let user of this.users) {
+      // TODO FIXME linked-list instead of this complex & slow approach
+      if (user !== v && user.args) {
+        for (let i = 0; i < user.args.length; i++) {
+          if (user.args[i] === this) {
+            dlog(`replace ${this} in user ${user} with ${v}`)
+            user.args[i] = v
+            v.users.add(user)
+            v.uses++
+            this.uses--
+          }
+        }
+      } else if (user === v) {
+        assert(false,
+          `TODO user==v (v=${v} this=${this}) -- CYCLIC USE!`)
+        // this.uses--
+      }
+    }
+
+    // Remove self.
+    // Note that we don't decrement this.uses since the definition
+    // site doesn't count toward "uses".
     let i = this.b.values.indexOf(this)
     assert(i != -1, "not in parent block but still references block")
-    this.b.values[i] = v
-    v.uses++
+    this.b.values.splice(i,1)
+
+    // Note: "uses" does not count for the value's ref to its block, so
+    // we don't decrement this.uses here.
     if (DEBUG) { ;(this as any).b = null }
   }
 }
@@ -548,7 +574,7 @@ export class IRBuilder {
     // all defined variables at the end of each block. Indexed by block id.
     // null indicates there are no variables in that block.
 
-  pendphis :Map<Block,Map<ByteStr,Value>>|null
+  incompletePhis :Map<Block,Map<ByteStr,Value>>|null
     // tracks pending, incomplete phis that are completed by sealBlock for
     // blocks that are sealed after they have started. This happens when preds
     // are not known at the time a block starts, but is known and registered
@@ -562,7 +588,7 @@ export class IRBuilder {
     r.vars = new Map<ByteStr,Value>()
     // r.fwdVars = new Map<ByteStr,Value>()
     r.defvars = []
-    r.pendphis = null
+    r.incompletePhis = null
   }
 
   // startBlock sets the current block we're generating code in
@@ -582,19 +608,20 @@ export class IRBuilder {
   }
 
   // sealBlock sets b.sealed=true, indicating that no further predecessors
-  // will be added.
+  // will be added (no changes to b.preds)
   //
   sealBlock(b :Block) {
     const s = this
     assert(!b.sealed, `block ${b} already sealed`)
     dlog(`${b}`)
-    if (s.pendphis) {
-      let entries = s.pendphis.get(b)
+    if (s.incompletePhis) {
+      let entries = s.incompletePhis.get(b)
       if (entries) {
         for (let [name, phi] of entries) {
+          dlog(`complete pending phi ${phi} (${name})`)
           s.addPhiOperands(name, phi)
         }
-        s.pendphis.delete(b)
+        s.incompletePhis.delete(b)
       }
     }
     b.sealed = true
@@ -616,9 +643,9 @@ export class IRBuilder {
     r.vars = new Map<ByteStr,Value>()
     // r.fwdVars.clear()
     ;(r as any).b = null
-    if (!b.sealed) {
-      r.sealBlock(b)
-    }
+    // if (!b.sealed) {
+    //   r.sealBlock(b)
+    // }
     return b
   }
 
@@ -706,7 +733,7 @@ export class IRBuilder {
       if (p.name) {
         let t = funtype.inputs[i] as Type
         let name = p.name.value
-        let v = entryb.newValue0(Op.Param, t, name)
+        let v = entryb.newValue0(Op.LoadParam, t, name)
         r.vars.set(name, v)
       }
     }
@@ -748,6 +775,7 @@ export class IRBuilder {
       let lasti = end - 1
       for (let i = 0; i != end; ++i) {
         if (!r.b) {
+          dlog('block ended early')
           // block ended early (i.e. from "return")
           r.diag('warn', `unreachable code`, x.list[i].pos)
           break
@@ -766,7 +794,6 @@ export class IRBuilder {
   //
   stmt(s :ast.Stmt, isLast :bool = false) {
     const r = this
-    // dlog(`>> ${s.constructor.name}`)
 
     if (s instanceof ast.IfExpr) {
       r.if_(s)
@@ -774,11 +801,36 @@ export class IRBuilder {
     } else if (s instanceof ast.ReturnStmt) {
       r.ret(r.expr(s.result))
 
+    } else if (s instanceof ast.WhileStmt) {
+      r.while_(s)
+
     } else if (s instanceof ast.Expr) {
       if (!isLast && s instanceof ast.Ident) {
         r.diag('warn', `unused expression`, s.pos)
       } else {
         r.expr(s)
+      }
+
+    } else if (s instanceof ast.VarDecl) {
+      if (s.values) {
+        // explicit value; e.g. "x = 3"
+        for (let i = 0; i < s.idents.length; i++) {
+          let id = s.idents[i]
+          let v = r.expr(s.values[i])
+          assert(!r.vars.has(id.value), `redeclaration of var ${id.value}`)
+          r.vars.set(id.value, v)
+        }
+      } else {
+        // default value; e.g. "x i32"  =>  "x = 0"
+        assert(s.type, 'var decl without type or values')
+        let t = (s.type as ast.Expr).type as BasicType
+        assert(t, 'unresolved type')
+        assert(t instanceof BasicType, 'non-basic type not yet supported')
+        let v = r.f.constVal(t, 0)
+        for (let id of s.idents) {
+          assert(!r.vars.has(id.value), `redeclaration of var ${id.value}`)
+          r.vars.set(id.value, v)
+        }
       }
 
     } else {
@@ -792,6 +844,117 @@ export class IRBuilder {
     let b = r.endBlock()
     b.kind = BlockKind.Ret
     b.control = val
+  }
+
+
+  while_(n: ast.WhileStmt) {
+    const s = this
+
+
+    // let entryb = s.endBlock()
+    // let nextb = s.f.newBlock(BlockKind.Plain)
+    // entryb.kind = BlockKind.Plain
+    // entryb.succs = [nextb] // entry -> if
+
+    // nextb.preds = [entryb] // next <- if
+    // s.startSealedBlock(nextb)
+
+
+    // let entryb = s.endBlock()
+    // assert(entryb.kind == BlockKind.Plain)
+    // let ifb = s.f.newBlock(BlockKind.Plain) // BlockKind.If
+    // entryb.succs = [ifb] // entry -> if
+    
+    // ifb.preds = [entryb] // if <- entry
+    // s.startSealedBlock(ifb)
+    // ifb = s.endBlock()
+
+    // let nextb = s.f.newBlock(BlockKind.Plain)
+    // ifb.succs = [nextb]
+
+    // nextb.preds = [ifb] // next <- if
+    // s.startSealedBlock(nextb)
+
+
+    // end "entry" block (whatever block comes before "while")
+    let entryb = s.endBlock()
+    dlog(`>>>>>>>>> ${entryb} "entry"`)
+    assert(entryb.kind == BlockKind.Plain)
+    // create "if" block, for testing the while condition
+    let ifb = s.f.newBlock(BlockKind.If)
+    dlog(`>>>>>>>>> ${ifb} "if"`)
+    entryb.succs = [ifb] // entry -> if
+    ifb.preds = [entryb] // if <- entry[, then]
+    // start "if" block
+    s.startBlock(ifb) // note: not sealed
+    let control = s.expr(n.cond) // condition for looping
+    // TODO: inspect control and if constant, short-circuit branching.
+    // end "if" block and assign condition
+    ifb = s.endBlock()
+    ifb.control = control
+
+    // create "then" block, to be visited on each loop iteration
+    let thenb = s.f.newBlock(BlockKind.Plain)
+    dlog(`>>>>>>>>> ${thenb} "then"`)
+    thenb.preds = [ifb]
+    // start "then" block (seal as well; preds are complete)
+    s.startSealedBlock(thenb)
+    s.block(n.body) // body (note: ignore return value)
+    // end "then" block
+    thenb = s.endBlock()
+    thenb.succs = [ifb] // thenb -> ifb
+
+    // complete & seal "if" block late, since it depends on "then" block
+    ifb.preds = [entryb, thenb] // if <- entry, then
+    s.sealBlock(ifb) // "if" block sealed here
+
+    // create "next" block, for whatever comes after the "while"
+    let nextb = s.f.newBlock(BlockKind.Plain)
+    dlog(`>>>>>>>>> ${nextb} "next"`)
+    nextb.preds = [ifb] // next <- if, then
+    ifb.succs = [thenb, nextb] // if -> next, then
+    // start "next" block and return
+    dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• nextb start`)
+    s.startSealedBlock(nextb)
+
+
+    // // create block for "if", "then" and "next"
+    // // we need "if" to be a separate block since it has multiple predecessors
+    // // let ifb = s.f.newBlock(BlockKind.If)
+    // // let thenb = s.f.newBlock(BlockKind.Plain)
+    // let nextb = s.f.newBlock(BlockKind.Plain)
+
+    // // end predecessor block (leading up to "while")
+    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• entryb end`)
+    // let entryb = s.endBlock()
+    // entryb.kind = BlockKind.Plain
+    // entryb.succs = [ifb] // entry -> if
+
+    // // start "if" block and generate control condition (in "if" block)
+    // ifb.preds = [entryb, thenb] // if <- entry, then
+    // ifb.succs = [thenb, nextb] // if -> then, next
+    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• ifb start`)
+    // s.startSealedBlock(ifb)
+    // let control = s.expr(n.cond) // condition
+    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• ifb end`)
+    // ifb = s.endBlock()
+    // ifb.control = control
+    // entryb.succs = [ifb] // [update] entry -> if
+
+    // // start "then" block and generate body
+    // thenb.preds = [ifb] // then <- if
+    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• thenb start`)
+    // s.startSealedBlock(thenb)
+    // let bv = s.block(n.body)
+    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• thenb end`)
+    // thenb = s.endBlock()
+
+    // // start "next" block
+    // thenb.succs = [ifb] // then -> if (because "while")
+    // nextb.succs = null
+    // nextb.preds = [ifb, thenb] // next <- if, then
+    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• nextb start`)
+    // s.startSealedBlock(nextb)
   }
 
 
@@ -826,7 +989,7 @@ export class IRBuilder {
     // generate control condition
     let control = r.expr(s.cond)
 
-    // end "if" block
+    // end predecessor block (leading up to and including "if")
     let ifb = r.endBlock()
     ifb.kind = BlockKind.If
     ifb.control = control
@@ -1017,7 +1180,7 @@ export class IRBuilder {
     }
 
     if (s instanceof ast.Ident) {
-      let v = r.readVariable(s.value, s.type as Type)
+      let v = r.readVariable(s.value, s.type as Type, null)
       // if (v.b !== r.b) {
       //   // defined in a different block -- copy
       //   let v1 = v // for dlog
@@ -1124,7 +1287,7 @@ export class IRBuilder {
         contb.preds = [ifb, rightb] // contb <- ifb, rightb
         r.startSealedBlock(contb)
 
-        return r.readVariable(tmpname, ast.u_t_bool)
+        return r.readVariable(tmpname, ast.u_t_bool, null)
 
       } else {
         // Basic operation
@@ -1142,13 +1305,51 @@ export class IRBuilder {
       }
     }
 
+    if (s instanceof ast.CallExpr) {
+      return r.funcall(s)
+    }
+
     dlog(`TODO: handle ${s.constructor.name}`)
     return r.nilValue()
   }
 
-  readVariable(name :ByteStr, t :Type, b? :Block) :Value {
+  funcall(x :ast.CallExpr) :Value {
     const s = this
-    dlog(`${name} ${b || s.b}`)
+
+    if (x.hasDots) {
+      dlog(`TODO: handle call with hasDots`)
+    }
+
+    // first unroll argument values
+    let argvals :Value[] = []
+    for (let arg of x.args) {
+      argvals.push(s.expr(arg))
+    }
+
+    // then push params
+    for (let v of argvals) {
+      s.b.newValue1(Op.PushParam, v.type, v)
+    }
+
+    // TODO: handle any function by
+    // let fv = s.expr(x.fun)
+    // and implementing function resolution somehow in readGlobal et al.
+
+    assert(x.fun instanceof ast.Ident, "non-id callee not yet supported")
+    let funid = x.fun as ast.Ident
+    assert(funid.ent, "unresolved callee")
+
+    let ft = funid.type as FunType
+    assert(ft, "unresolved function type")
+
+    return s.b.newValue0(Op.Call, ft.result, funid.value)
+  }
+
+  readVariable(name :ByteStr, t :Type, b :Block|null) :Value {
+    const s = this
+
+    // dlog(`${name} ${b || s.b}`)
+
     if (!b || b === s.b) {
       let v = s.vars.get(name)
       if (v) {
@@ -1165,7 +1366,7 @@ export class IRBuilder {
       }
     }
 
-    dlog(`${name} not local; readVariableRecursive`)
+    // dlog(`${name} not local; readVariableRecursive`)
 
     // let v = s.fwdVars.get(name)
     // if (!v) {
@@ -1175,21 +1376,25 @@ export class IRBuilder {
     // }
 
     // global value numbering
-    let v = s.readVariableRecursive(name, t, b)
-    // dlog(`--> v = ${v}`)
-    // if (!(v instanceof Phi)) {
-    //   v = b.newValue1(Op.Copy, t, v)
-    // }
-    return v
+    return s.readVariableRecursive(name, t, b)
+  }
+
+  readGlobal(name :ByteStr) :Value {
+    const s = this
+    dlog(`TODO readGlobal ${name}`)
+    return s.nilValue() // FIXME
   }
 
   writeVariable(name :ByteStr, v :Value, b? :Block) {
     const s = this
-    dlog(`${name} ${b || s.b} ${Op[v.op]} ${v}`)
+    dlog(`${b || s.b} ${name} = ${Op[v.op]} ${v}`)
     if (!b || b === s.b) {
       s.vars.set(name, v)
     } else {
-      assert(s.defvars.length >= b.id)
+      while (s.defvars.length <= b.id) {
+        // fill any holes
+        s.defvars.push(null)
+      }
       let m = s.defvars[b.id]
       if (m) {
         m.set(name, v)
@@ -1199,29 +1404,45 @@ export class IRBuilder {
     }
   }
 
+  addIncompletePhi(phi :Value, name :ByteStr, b :Block) {
+    const s = this
+    dlog(`${b} ${phi} var=${name}`)
+    let names = s.incompletePhis ? s.incompletePhis.get(b) : null
+    if (!names) {
+      names = new Map<ByteStr,Value>()
+      if (!s.incompletePhis) {
+        s.incompletePhis = new Map<Block,Map<ByteStr,Value>>()
+      }
+      s.incompletePhis.set(b, names)
+    }
+    names.set(name, phi)
+  }
+
   readVariableRecursive(name :ByteStr, t :Type, b :Block) :Value {
     const s = this
     let val :Value
+
     if (!b.sealed) {
       // incomplete CFG
-      dlog(`${b} not yet sealed`)
+      dlog(`${b} ${name} not yet sealed`)
       val = b.newPhi(t)
-      // register as pending
-      let names = s.pendphis ? s.pendphis.get(b) : null
-      if (!names) {
-        names = new Map<ByteStr,Value>()
-        if (!s.pendphis) {
-          s.pendphis = new Map<Block,Map<ByteStr,Value>>()
-        }
-        s.pendphis.set(b, names)
-      }
-      names.set(name, val)
+      s.addIncompletePhi(val, name, b)
+
     } else if (b.preds.length == 1) {
-      dlog(`${name} ${b} common case: single predecessor`)
+      dlog(`${b} ${name} common case: single predecessor ${b.preds[0]}`)
       // Optimize the common case of one predecessor: No phi needed
       val = s.readVariable(name, t, b.preds[0])
+      dlog(`found ${name} : ${val}`)
+
+    } else if (b.preds.length == 0) {
+      dlog(`${b} ${name} uncommon case: outside of function`)
+      // entry block
+      val = s.readGlobal(name)
+      // TODO: consider just returning the value here instead of falling
+      // through and causing writeVariable.
+
     } else {
-      dlog(`${name} ${b} uncommon case: multiple predecessors`)
+      dlog(`${b} ${name} uncommon case: multiple predecessors`)
       // Break potential cycles with operandless phi
       val = b.newPhi(t)
       s.writeVariable(name, val, b)
@@ -1235,39 +1456,23 @@ export class IRBuilder {
     const s = this
     assert(phi.op == Op.Phi)
     // Determine operands from predecessors
-    let trivialValue :Value|null = null
+    dlog(`${name} phi=${phi}`)
     for (let pred of phi.b.preds) {
+      dlog(`  ${pred}`)
       let v = s.readVariable(name, phi.type, pred)
-      dlog(`v ${v} ${v.constructor.name} ${Op[v.op]}`)
-      if (phi.args && phi.args.length == 1 && phi.args[0] === v) {
-        trivialValue = v
-      } else {
+      if (v !== phi) {
+        dlog(`  ${pred} ${v}<${Op[v.op]}>`)
         phi.appendArg(v)
-        trivialValue = null
       }
     }
-    if (trivialValue) {
-      dlog(`isTrivial!`)
-      
-      // phi.replaceBy(trivialValue)
-
-      // remove Phi
-      // TODO wrap up into function on Value
-      let i = phi.b.values.indexOf(phi)
-      assert(i != -1, "not in parent block but still references block")
-      phi.b.values.splice(i, 1)
-      trivialValue.uses++
-      return trivialValue
-    }
     return s.tryRemoveTrivialPhi(phi)
-    // return phi
   }
 
   tryRemoveTrivialPhi(phi :Value) :Value {
     const s = this
     assert(phi.op == Op.Phi)
     let same :Value|null = null
-    dlog(`${phi}`)
+    dlog(`${phi.b} ${phi}`)
 
     assert(phi.args != null, "phi without operands")
     for (let operand of phi.args as Value[]) {
@@ -1275,24 +1480,25 @@ export class IRBuilder {
         continue // Unique value or self−reference
       }
       if (same != null) {
-        dlog(`${phi} not trivial (keep)`)
+        dlog(`${phi.b} ${phi} not trivial (keep)`)
         return phi // The phi merges at least two values: not trivial
       }
       same = operand
     }
 
-    dlog(`${phi} is trivial (remove)`)
+    dlog(`${phi.b} ${phi} is trivial (remove)`)
 
     if (same == null) {
-      dlog(`${phi} unreachable or in the start block`)
-      same = new Value(0, Op.None, ast.u_t_nil, phi.b, null) // dummy
+      dlog(`${phi.b} ${phi} unreachable or in the start block`)
+      same = new Value(0, Op.None, ast.u_t_nil, phi.b, null) // dummy FIXME
       // same = new Undef() // The phi is unreachable or in the start block
     }
 
     phi.users.delete(phi) // Remember all users except the phi itself
     let users = phi.users
+    dlog(`${phi.b} replace ${phi} with ${same} (aux = ${same.aux})`)
     phi.replaceBy(same) // Reroute all uses of phi to same and remove phi
-    dlog(`replace ${phi} with ${same}`, same.aux)
+    assert(phi.uses == 0, `still used even after Value.replaceBy`)
 
     // Try to recursively remove all phi users, which might have become trivial
     for (let use of users) {

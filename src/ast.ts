@@ -242,6 +242,16 @@ export class ReturnStmt extends Stmt {
 }
 
 
+export class WhileStmt extends Stmt {
+  constructor(pos :Pos, scope :Scope,
+  public cond :Expr, // condition for executing the body
+  public body :Expr,
+  ) {
+    super(pos, scope)
+  }
+}
+
+
 // ——————————————————————————————————————————————————————————————————
 // Declarations
 

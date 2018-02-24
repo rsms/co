@@ -19,6 +19,7 @@ import {
   Field,
   Stmt,
   ReturnStmt,
+  WhileStmt,
   
   Decl,
   ImportDecl,
@@ -247,7 +248,7 @@ export class Parser extends scanner.Scanner {
       return
     }
 
-    assert(ident.ent == null)
+    assert(ident.ent == null, `redeclaration of ${ident}`)
 
     const ent = new Ent(ident.value, decl, x)
     if (!scope.declareEnt(ent)) {
@@ -996,7 +997,7 @@ export class Parser extends scanner.Scanner {
     return list
   }
 
-  // shouldStoreToEnt returns true if entis within atScope in such a way
+  // shouldStoreToEnt returns true if ent is within atScope in such a way
   // that "ent = value" means "store value to ent".
   //
   shouldStoreToEnt(ent :Ent, atScope :Scope) :bool {
@@ -1088,6 +1089,7 @@ export class Parser extends scanner.Scanner {
         continue
       }
 
+      id.ent = null
       
       // new declaration
       //
@@ -1293,6 +1295,9 @@ export class Parser extends scanner.Scanner {
       // case token.SELECT:
       //   return p.selectStmt()
 
+      case token.WHILE:
+        return p.whileStmt()
+
       case token.IF:
         return p.ifExpr(/*ctx=*/null)
 
@@ -1341,7 +1346,26 @@ export class Parser extends scanner.Scanner {
     return null
   }
 
-  ifExpr(ctx :exprCtx, hasIfScope :bool = false) :IfExpr {
+  whileStmt() :WhileStmt {
+    //
+    // WhileStmt = "while" Expression Block
+    //
+    const p = this
+    const pos = p.pos
+    const scope = p.scope
+
+    p.want(token.WHILE)
+
+    const cond = p.expr(/*ctx=*/null)
+    p.types.resolve(cond)
+
+    const body = p.expr(/*ctx=*/null)
+
+    return new WhileStmt(pos, scope, cond, body)
+  }
+
+  ifExpr(ctx :exprCtx) :IfExpr {
+    //
     // IfExpr = "if" Expression Block
     //          [ "else" ( IfExpr | Block ) ]
     //
@@ -1349,55 +1373,40 @@ export class Parser extends scanner.Scanner {
     // e.g. `if x = size() > 1 print("large number: $x")`
     //
     const p = this
+
+    // push a scope for conditions to support e.g. capture of x in
+    //   if x = a() > 0 print("$x > 0") else print("$x < 0")
+    //
+    p.pushScope()
+    const s = p.ifExpr2(ctx)
+    p.popScope()
+
+    return s
+  }
+
+  ifExpr2(ctx :exprCtx) :IfExpr {
+    // used by ifExpr
+    const p = this
     const pos = p.pos
     const scope = p.scope
 
     p.want(token.IF)
 
-    // make sure we have a scope for conditions to support e.g.
-    //   if x = a() > 0 print("$x > 0") else print("$x < 0")
-    if (!hasIfScope) {
-      p.pushScope()
-    }
-
     const cond = p.expr(ctx)
     p.types.resolve(cond)
 
-    p.pushScope()
     const then = p.expr(ctx)
-    p.popScope()
-
-    // optional semicolon after "then" expr.
-    // allows us to peek ahead and see if an "else" follows,
-    // allowing "else" to follow on the next line.
-    // let consumedSemiAt = -1
-    // if (!(then instanceof Block) && p.tok == token.SEMICOLON) {
-    //   consumedSemiAt = p.offset
-    //   p.next()
-    // }
 
     const s = new IfExpr(pos, scope, cond, then, null)
 
     if (p.got(token.ELSE)) {
       if (p.tok == token.IF) {
-        s.els_ = p.ifExpr(ctx, /*hasIfScope=*/true)
+        s.els_ = p.ifExpr2(ctx)
       } else {
         p.pushScope()
         s.els_ = p.expr(ctx)
         p.popScope()
       }
-    }
-    // else if (consumedSemiAt != -1) {
-    //   debuglog(`revert SEMI`)
-    //   // revert semicolon (we just wanted to peek ahead for "else")
-    //   p.setOffset(consumedSemiAt)
-    //   p.tok = token.SEMICOLON
-    //   // p.next()
-    //   // assert(p.tok == token.SEMICOLON, `"${tokstr(p.tok)}" is not SEMICOLON`)
-    // }
-
-    if (!hasIfScope) {
-      p.popScope()
     }
 
     return s
@@ -1508,7 +1517,7 @@ export class Parser extends scanner.Scanner {
       x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx))
     }
 
-    p.types.resolve(x)
+    // p.types.resolve(x) // should be resolved when needed
 
     return x
   }

@@ -158,7 +158,6 @@ export const style :Style = (
 // }
 // ;(process as any).exit(0)
 
-
 // streamStyle returns the most appropriate Style object for `w`
 export function streamStyle(w :has_isTTY) {
   return termColorSupport && w.isTTY ? style : noStyle

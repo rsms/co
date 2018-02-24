@@ -205,6 +205,9 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
 
       return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg }
     } catch (error) {
+      if (isNodeJsLikeEnv) {
+        throw error
+      }
       return { success: false, error, diagnostics, ast: r.pkg }
     }
   })

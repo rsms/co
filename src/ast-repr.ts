@@ -12,6 +12,7 @@ import {
 
   Field,
   ReturnStmt,
+  WhileStmt,
 
   // Decl,
   ImportDecl,
@@ -250,16 +251,23 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   if (n instanceof Block) {
     return (
       n.list.length ?
-        newline + '{' +
+        newline + '(' + reprt(n.type, newline, c) + 'block ' +
         n.list.map(n => nl2 + repr1(n, nl2, c).trim()).join('') +
-        newline + '}' :
-        '{}'
+        newline + ')' :
+        '(block)'
+    )
+  }
+
+  if (n instanceof WhileStmt) {
+    return (
+      '(while ' + repr1(n.cond, nl2, c) + ' ' +
+      repr1(n.body, nl2, c) + newline + ')'
     )
   }
 
   if (n instanceof ReturnStmt) {
     if (n.result) {
-      return newline + `(${reprcons(n, c)} ${repr1(n.result, nl2, c)})`
+      return newline + `(return ${repr1(n.result, nl2, c)})`
     }
     return newline + reprcons(n, c)
   }
@@ -346,11 +354,29 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
 
   // --------
 
-
   let s = '('
   if (n instanceof Expr && !c.typedepth) {
     s += reprt(n.type, newline, c)
   }
+
+
+  if (n instanceof FunExpr) {
+    s += 'fun '
+    if (n.isInit) {
+      s += 'init '
+    } else if (n.name) {
+      s += reprid(n.name, c) + ' '
+    }
+    s += repr1(n.sig, newline, c)
+    if (n.body) {
+      s += ' ' + repr1(n.body, nl2, c)
+    }
+    return s + ')'
+  }
+
+
+  // --------
+
   s += reprcons(n, c)
 
   if (n instanceof ImportDecl) {
@@ -405,20 +431,6 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
 
   if (n instanceof TypeConvExpr) {
     return s + ' ' + repr1(n.expr, newline, c) + ')'
-  }
-
-  if (n instanceof FunExpr) {
-    s += ' '
-    if (n.isInit) {
-      s += 'init '
-    } else if (n.name) {
-      s += repr1(n.name, newline, c) + ' '
-    }
-    s += repr1(n.sig, newline, c)
-    if (n.body) {
-      s += ' ' + repr1(n.body, nl2, c)
-    }
-    return s + ')'
   }
 
   if (n instanceof TupleExpr) {

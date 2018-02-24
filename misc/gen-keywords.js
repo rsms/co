@@ -99,6 +99,7 @@ const keywordsJS = genBTree(cdat, new Map([
   ["symbol",  "token.SYMBOL"],
   ["type",  "token.TYPE"],
   // ["var",   "token.VAR"],
+  ["while",   "token.WHILE"],
 ]))
 
 console.log(
