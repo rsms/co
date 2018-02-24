@@ -139,7 +139,6 @@ function bufcmp(a, b) {
         bL < aL ? 1 :
             0);
 }
-//# sourceMappingURL=btree.js.map
 
 function tokstr(t) {
     return tokenStrings.get(t) || token[t].toLowerCase();
@@ -251,10 +250,8 @@ var token;
     token[token["SWITCH"] = 93] = "SWITCH";
     token[token["SYMBOL"] = 94] = "SYMBOL";
     token[token["TYPE"] = 95] = "TYPE";
-    token[token["keyword_end"] = 96] = "keyword_end";
-    token[token["LOAD"] = 97] = "LOAD";
-    token[token["STORE"] = 98] = "STORE";
-    token[token["COPY"] = 99] = "COPY";
+    token[token["WHILE"] = 96] = "WHILE";
+    token[token["keyword_end"] = 97] = "keyword_end";
 })(token || (token = {}));
 const tokenStrings = new Map([
     [token.NAMEAT, "@"],
@@ -307,45 +304,42 @@ const tokenStrings = new Map([
     [token.RBRACE, "}"],
     [token.SEMICOLON, ";"],
     [token.COLON, ":"],
-    [token.LOAD, "load"],
-    [token.STORE, "store"],
-    [token.COPY, "copy"],
 ]);
 for (let i = token.keyword_beg + 1; i < token.keyword_end; ++i) {
     const t = token[i];
     tokenStrings.set(token[t], t.toLowerCase());
 }
 const cdat = new Uint8Array([
-    102, 117, 110, 100, 101, 102, 101, 114, 98, 114, 101, 97, 107, 99, 111, 110, 116, 105, 110, 117,
-    101, 100, 101, 102, 97, 117, 108, 116, 101, 110, 117, 109, 101, 108, 115, 101, 102, 97, 108,
-    108, 116, 104, 114, 111, 117, 103, 104, 102, 111, 114, 105, 110, 116, 101, 114, 102, 97, 99,
-    101, 105, 102, 103, 111, 105, 109, 112, 111, 114, 116, 105, 110, 115, 101, 108, 101, 99, 116,
-    114, 101, 116, 117, 114, 110, 115, 119, 105, 116, 99, 104, 115, 121, 109, 98, 111, 108, 116,
-    121, 112, 101
+    103, 111, 100, 101, 102, 101, 114, 98, 114, 101, 97, 107, 99, 111, 110, 116, 105, 110, 117, 101,
+    100, 101, 102, 97, 117, 108, 116, 101, 110, 117, 109, 101, 108, 115, 101, 102, 97, 108, 108,
+    116, 104, 114, 111, 117, 103, 104, 102, 111, 114, 102, 117, 110, 114, 101, 116, 117, 114, 110,
+    105, 109, 112, 111, 114, 116, 105, 102, 105, 110, 105, 110, 116, 101, 114, 102, 97, 99, 101,
+    115, 119, 105, 116, 99, 104, 115, 101, 108, 101, 99, 116, 115, 121, 109, 98, 111, 108, 116,
+    121, 112, 101, 119, 104, 105, 108, 101
 ]);
-const keywords = new BTree({ k: cdat.subarray(0, 3), v: token.FUN,
-    L: { k: cdat.subarray(3, 8), v: token.DEFER,
-        L: { k: cdat.subarray(8, 13), v: token.BREAK,
-            R: { k: cdat.subarray(13, 21), v: token.CONTINUE,
-                R: { k: cdat.subarray(21, 28), v: token.DEFAULT } } },
-        R: { k: cdat.subarray(28, 32), v: token.ENUM,
-            L: { k: cdat.subarray(32, 36), v: token.ELSE },
-            R: { k: cdat.subarray(36, 47), v: token.FALLTHROUGH,
-                R: { k: cdat.subarray(47, 50), v: token.FOR } } } },
-    R: { k: cdat.subarray(50, 59), v: token.INTERFACE,
-        L: { k: cdat.subarray(59, 61), v: token.IF,
-            L: { k: cdat.subarray(61, 63), v: token.GO },
-            R: { k: cdat.subarray(63, 69), v: token.IMPORT,
-                R: { k: cdat.subarray(69, 71), v: token.IN } } },
-        R: { k: cdat.subarray(71, 77), v: token.SELECT,
-            L: { k: cdat.subarray(77, 83), v: token.RETURN },
-            R: { k: cdat.subarray(83, 89), v: token.SWITCH,
-                R: { k: cdat.subarray(89, 95), v: token.SYMBOL,
-                    R: { k: cdat.subarray(95, 99), v: token.TYPE } } } } } });
+const keywords = new BTree({ k: cdat.subarray(0, 2), v: token.GO,
+    L: { k: cdat.subarray(2, 7), v: token.DEFER,
+        L: { k: cdat.subarray(7, 12), v: token.BREAK,
+            R: { k: cdat.subarray(12, 20), v: token.CONTINUE,
+                R: { k: cdat.subarray(20, 27), v: token.DEFAULT } } },
+        R: { k: cdat.subarray(27, 31), v: token.ENUM,
+            L: { k: cdat.subarray(31, 35), v: token.ELSE },
+            R: { k: cdat.subarray(35, 46), v: token.FALLTHROUGH,
+                R: { k: cdat.subarray(46, 49), v: token.FOR,
+                    R: { k: cdat.subarray(49, 52), v: token.FUN } } } } },
+    R: { k: cdat.subarray(52, 58), v: token.RETURN,
+        L: { k: cdat.subarray(58, 64), v: token.IMPORT,
+            L: { k: cdat.subarray(64, 66), v: token.IF },
+            R: { k: cdat.subarray(66, 68), v: token.IN,
+                R: { k: cdat.subarray(68, 77), v: token.INTERFACE } } },
+        R: { k: cdat.subarray(77, 83), v: token.SWITCH,
+            L: { k: cdat.subarray(83, 89), v: token.SELECT },
+            R: { k: cdat.subarray(89, 95), v: token.SYMBOL,
+                R: { k: cdat.subarray(95, 99), v: token.TYPE,
+                    R: { k: cdat.subarray(99, 104), v: token.WHILE } } } } } });
 function lookupKeyword(ident) {
     return keywords.get(ident) || token.NAME;
 }
-//# sourceMappingURL=token.js.map
 
 function search(n, f) {
     let i = 0, j = n;
@@ -454,7 +448,6 @@ const debuglog = DEBUG ? function (...v) {
     v.splice(0, 0, prefix);
     console.log.apply(console, v);
 } : function (...v) { };
-//# sourceMappingURL=util.js.map
 
 const UniError = 0xFFFD;
 const UniSelf = 0x80;
@@ -571,7 +564,6 @@ function encodeAsString(cp) {
     cp -= 0x10000;
     return String.fromCharCode((cp >> 10) + surrogateMin, (cp % rune2Max) + 0xDC00);
 }
-//# sourceMappingURL=utf8.js.map
 
 const MaxRune = 0x10FFFF;
 const InvalidChar = 0xFFFD;
@@ -927,7 +919,6 @@ function isEmojiModifierBase(c) {
 function isEmojiModifier(c) {
     return ((0x1F3FB <= c && c <= 0x1F3FF));
 }
-//# sourceMappingURL=unicode.js.map
 
 const TERM = typeof process != 'undefined' && process.env.TERM || '';
 function sfn(open, close) {
@@ -1005,8 +996,6 @@ const stdoutStyle = (typeof process != 'undefined' && streamStyle(process.stdout
 const stderrStyle = (typeof process != 'undefined' && streamStyle(process.stderr) || noStyle);
 const stdoutSupportsStyle = stdoutStyle !== noStyle;
 
-//# sourceMappingURL=termstyle.js.map
-
 class ErrorReporter {
     constructor(defaultErrCode, errh = null) {
         this.defaultErrCode = defaultErrCode;
@@ -1044,7 +1033,6 @@ class ErrorReporter {
         }
     }
 }
-//# sourceMappingURL=error.js.map
 
 const SL = 0x2F;
 const DOT = 0x2E;
@@ -1202,7 +1190,6 @@ TEST("path.join", () => {
     t(["a", ""], "a");
     t(["", "a"], "a");
 });
-//# sourceMappingURL=path.js.map
 
 var Mode;
 (function (Mode) {
@@ -2401,7 +2388,6 @@ const asciiFeats = new Uint8Array([
     0,
     0,
 ]);
-//# sourceMappingURL=scanner.js.map
 
 function strtou(b, base, offs = 0) {
     assert(base >= 2);
@@ -2465,7 +2451,6 @@ TEST("strtou", () => {
     t("x123", 10, -1);
     t("-123", 10, -1);
 });
-//# sourceMappingURL=strtou.js.map
 
 let nextgid = 0;
 class Group {
@@ -2592,6 +2577,13 @@ class ReturnStmt extends Stmt {
         super(pos, scope);
         this.result = result;
         this.type = type;
+    }
+}
+class WhileStmt extends Stmt {
+    constructor(pos, scope, cond, body) {
+        super(pos, scope);
+        this.cond = cond;
+        this.body = body;
     }
 }
 class Decl extends Stmt {
@@ -3112,7 +3104,6 @@ class Package {
         return `Package(${this.name})`;
     }
 }
-//# sourceMappingURL=ast.js.map
 
 const kEmptyByteArray = new Uint8Array(0);
 const kBytes__ = new Uint8Array([0x5f]);
@@ -3280,7 +3271,7 @@ class Parser extends Scanner {
         if (ident.value === p._id__) {
             return;
         }
-        assert(ident.ent == null);
+        assert(ident.ent == null, `redeclaration of ${ident}`);
         const ent = new Ent(ident.value, decl, x);
         if (!scope.declareEnt(ent)) {
             p.syntaxError(`${ident} redeclared`, ident.pos);
@@ -3745,6 +3736,7 @@ class Parser extends Scanner {
                 maybeConvRVal(typ, rval, i);
                 continue;
             }
+            id.ent = null;
             const rval = rhs ? rhs[i] : null;
             if (reqt) {
                 id.type = reqt;
@@ -3892,6 +3884,8 @@ class Parser extends Scanner {
             case token.LBRACKET:
             case token.INTERFACE:
                 return p.simpleStmt(p.exprList(null));
+            case token.WHILE:
+                return p.whileStmt();
             case token.IF:
                 return p.ifExpr(null);
             case token.RETURN:
@@ -3903,32 +3897,41 @@ class Parser extends Scanner {
         }
         return null;
     }
-    ifExpr(ctx, hasIfScope = false) {
+    whileStmt() {
+        const p = this;
+        const pos = p.pos;
+        const scope = p.scope;
+        p.want(token.WHILE);
+        const cond = p.expr(null);
+        p.types.resolve(cond);
+        const body = p.expr(null);
+        return new WhileStmt(pos, scope, cond, body);
+    }
+    ifExpr(ctx) {
+        const p = this;
+        p.pushScope();
+        const s = p.ifExpr2(ctx);
+        p.popScope();
+        return s;
+    }
+    ifExpr2(ctx) {
         const p = this;
         const pos = p.pos;
         const scope = p.scope;
         p.want(token.IF);
-        if (!hasIfScope) {
-            p.pushScope();
-        }
         const cond = p.expr(ctx);
         p.types.resolve(cond);
-        p.pushScope();
         const then = p.expr(ctx);
-        p.popScope();
         const s = new IfExpr(pos, scope, cond, then, null);
         if (p.got(token.ELSE)) {
             if (p.tok == token.IF) {
-                s.els_ = p.ifExpr(ctx, true);
+                s.els_ = p.ifExpr2(ctx);
             }
             else {
                 p.pushScope();
                 s.els_ = p.expr(ctx);
                 p.popScope();
             }
-        }
-        if (!hasIfScope) {
-            p.popScope();
         }
         return s;
     }
@@ -3999,7 +4002,6 @@ class Parser extends Scanner {
             p.next();
             x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx));
         }
-        p.types.resolve(x);
         return x;
     }
     unaryExpr(ctx) {
@@ -4362,7 +4364,6 @@ class Parser extends Scanner {
 function isEmptyFunExpr(d) {
     return d instanceof FunExpr && !d.body;
 }
-//# sourceMappingURL=parser.js.map
 
 class pkgBinder extends ErrorReporter {
     constructor(pkg, fset, importer, types, errh) {
@@ -4483,7 +4484,6 @@ function bindpkg(pkg, fset, importer, typeres, errh) {
     const b = new pkgBinder(pkg, fset, importer, typeres, errh);
     return b.bind().then(() => b.errorCount != 0);
 }
-//# sourceMappingURL=bind.js.map
 
 const NoPos = 0;
 
@@ -4650,7 +4650,6 @@ function searchInts(a, x) {
     }
     return i - 1;
 }
-//# sourceMappingURL=pos.js.map
 
 let _nextId = 0;
 class ByteStr {
@@ -4705,7 +4704,6 @@ function asciiByteStr(s) {
     let b = asciibuf(s);
     return new ByteStr(hashBytes(b, 0, b.length), b);
 }
-//# sourceMappingURL=bytestr.js.map
 
 class TypeSet {
     constructor() {
@@ -4728,7 +4726,6 @@ class TypeSet {
         return t;
     }
 }
-//# sourceMappingURL=typeset.js.map
 
 class ReprCtx {
     constructor() {
@@ -4867,14 +4864,18 @@ function repr1(n, newline, c, flag = 0) {
     }
     if (n instanceof Block) {
         return (n.list.length ?
-            newline + '{' +
+            newline + '(' + reprt(n.type, newline, c) + 'block ' +
                 n.list.map(n => nl2 + repr1(n, nl2, c).trim()).join('') +
-                newline + '}' :
-            '{}');
+                newline + ')' :
+            '(block)');
+    }
+    if (n instanceof WhileStmt) {
+        return ('(while ' + repr1(n.cond, nl2, c) + ' ' +
+            repr1(n.body, nl2, c) + newline + ')');
     }
     if (n instanceof ReturnStmt) {
         if (n.result) {
-            return newline + `(${reprcons(n, c)} ${repr1(n.result, nl2, c)})`;
+            return newline + `(return ${repr1(n.result, nl2, c)})`;
         }
         return newline + reprcons(n, c);
     }
@@ -4936,6 +4937,20 @@ function repr1(n, newline, c, flag = 0) {
     if (n instanceof Expr && !c.typedepth) {
         s += reprt(n.type, newline, c);
     }
+    if (n instanceof FunExpr) {
+        s += 'fun ';
+        if (n.isInit) {
+            s += 'init ';
+        }
+        else if (n.name) {
+            s += reprid(n.name, c) + ' ';
+        }
+        s += repr1(n.sig, newline, c);
+        if (n.body) {
+            s += ' ' + repr1(n.body, nl2, c);
+        }
+        return s + ')';
+    }
     s += reprcons(n, c);
     if (n instanceof ImportDecl) {
         s += ' path: ' + repr1(n.path, nl2, c);
@@ -4981,20 +4996,6 @@ function repr1(n, newline, c, flag = 0) {
     if (n instanceof TypeConvExpr) {
         return s + ' ' + repr1(n.expr, newline, c) + ')';
     }
-    if (n instanceof FunExpr) {
-        s += ' ';
-        if (n.isInit) {
-            s += 'init ';
-        }
-        else if (n.name) {
-            s += repr1(n.name, newline, c) + ' ';
-        }
-        s += repr1(n.sig, newline, c);
-        if (n.body) {
-            s += ' ' + repr1(n.body, nl2, c);
-        }
-        return s + ')';
-    }
     if (n instanceof TupleExpr) {
         return s + ' ' + reprv(n.exprs, nl2, c, '') + ')';
     }
@@ -5003,7 +5004,6 @@ function repr1(n, newline, c, flag = 0) {
     }
     return '(???' + reprcons(n, c) + ' ' + repr(n) + ')';
 }
-//# sourceMappingURL=ast-repr.js.map
 
 const universeTypes = new Map();
 const universeValues = new Map();
@@ -5702,7 +5702,6 @@ class Universe {
         return this.typeSet.intern(t);
     }
 }
-//# sourceMappingURL=universe.js.map
 
 class EvalConst {
 }
@@ -6195,169 +6194,170 @@ function intEvaluator(op, x, y) {
     }
     return null;
 }
-//# sourceMappingURL=resolve.js.map
 
 const byteStr__ = asciiByteStr("_");
 const byteStr_anonfun = asciiByteStr('anonfun');
 var Op;
 (function (Op) {
     Op[Op["None"] = 0] = "None";
-    Op[Op["Param"] = 1] = "Param";
-    Op[Op["Copy"] = 2] = "Copy";
-    Op[Op["Phi"] = 3] = "Phi";
-    Op[Op["i32Const"] = 4] = "i32Const";
-    Op[Op["i64Const"] = 5] = "i64Const";
-    Op[Op["f32Const"] = 6] = "f32Const";
-    Op[Op["f64Const"] = 7] = "f64Const";
-    Op[Op["i32Load"] = 8] = "i32Load";
-    Op[Op["i32load8_s"] = 9] = "i32load8_s";
-    Op[Op["i32load8_u"] = 10] = "i32load8_u";
-    Op[Op["i32load16_s"] = 11] = "i32load16_s";
-    Op[Op["i32load16_u"] = 12] = "i32load16_u";
-    Op[Op["i64Load"] = 13] = "i64Load";
-    Op[Op["i64load8_s"] = 14] = "i64load8_s";
-    Op[Op["i64load8_u"] = 15] = "i64load8_u";
-    Op[Op["i64load16_s"] = 16] = "i64load16_s";
-    Op[Op["i64load16_u"] = 17] = "i64load16_u";
-    Op[Op["i64load32_s"] = 18] = "i64load32_s";
-    Op[Op["i64load32_u"] = 19] = "i64load32_u";
-    Op[Op["f32Load"] = 20] = "f32Load";
-    Op[Op["f64Load"] = 21] = "f64Load";
-    Op[Op["i32Store"] = 22] = "i32Store";
-    Op[Op["i32Store8"] = 23] = "i32Store8";
-    Op[Op["i32Store16"] = 24] = "i32Store16";
-    Op[Op["i64Store"] = 25] = "i64Store";
-    Op[Op["i64Store8"] = 26] = "i64Store8";
-    Op[Op["i64Store16"] = 27] = "i64Store16";
-    Op[Op["i64Store32"] = 28] = "i64Store32";
-    Op[Op["f32Store"] = 29] = "f32Store";
-    Op[Op["f64Store"] = 30] = "f64Store";
-    Op[Op["i32Add"] = 31] = "i32Add";
-    Op[Op["i32Sub"] = 32] = "i32Sub";
-    Op[Op["i32Mul"] = 33] = "i32Mul";
-    Op[Op["i32Div_s"] = 34] = "i32Div_s";
-    Op[Op["i32Div_u"] = 35] = "i32Div_u";
-    Op[Op["i32Rem_s"] = 36] = "i32Rem_s";
-    Op[Op["i32Rem_u"] = 37] = "i32Rem_u";
-    Op[Op["i32Neg"] = 38] = "i32Neg";
-    Op[Op["i32And"] = 39] = "i32And";
-    Op[Op["i32Or"] = 40] = "i32Or";
-    Op[Op["i32Xor"] = 41] = "i32Xor";
-    Op[Op["i32Shl"] = 42] = "i32Shl";
-    Op[Op["i32Shr_u"] = 43] = "i32Shr_u";
-    Op[Op["i32Shr_s"] = 44] = "i32Shr_s";
-    Op[Op["i32Rotl"] = 45] = "i32Rotl";
-    Op[Op["i32Rotr"] = 46] = "i32Rotr";
-    Op[Op["i32Eq"] = 47] = "i32Eq";
-    Op[Op["i32Ne"] = 48] = "i32Ne";
-    Op[Op["i32Lt_s"] = 49] = "i32Lt_s";
-    Op[Op["i32Lt_u"] = 50] = "i32Lt_u";
-    Op[Op["i32Le_s"] = 51] = "i32Le_s";
-    Op[Op["i32Le_u"] = 52] = "i32Le_u";
-    Op[Op["i32Gt_s"] = 53] = "i32Gt_s";
-    Op[Op["i32Gt_u"] = 54] = "i32Gt_u";
-    Op[Op["i32Ge_s"] = 55] = "i32Ge_s";
-    Op[Op["i32Ge_u"] = 56] = "i32Ge_u";
-    Op[Op["i32Clz"] = 57] = "i32Clz";
-    Op[Op["i32Ctz"] = 58] = "i32Ctz";
-    Op[Op["i32Popcnt"] = 59] = "i32Popcnt";
-    Op[Op["i32Eqz"] = 60] = "i32Eqz";
-    Op[Op["i64Add"] = 61] = "i64Add";
-    Op[Op["i64Sub"] = 62] = "i64Sub";
-    Op[Op["i64Mul"] = 63] = "i64Mul";
-    Op[Op["i64Div_s"] = 64] = "i64Div_s";
-    Op[Op["i64Div_u"] = 65] = "i64Div_u";
-    Op[Op["i64Rem_s"] = 66] = "i64Rem_s";
-    Op[Op["i64Rem_u"] = 67] = "i64Rem_u";
-    Op[Op["i64And"] = 68] = "i64And";
-    Op[Op["i64Neg"] = 69] = "i64Neg";
-    Op[Op["i64Or"] = 70] = "i64Or";
-    Op[Op["i64Xor"] = 71] = "i64Xor";
-    Op[Op["i64Shl"] = 72] = "i64Shl";
-    Op[Op["i64Shr_u"] = 73] = "i64Shr_u";
-    Op[Op["i64Shr_s"] = 74] = "i64Shr_s";
-    Op[Op["i64Rotl"] = 75] = "i64Rotl";
-    Op[Op["i64Rotr"] = 76] = "i64Rotr";
-    Op[Op["i64Eq"] = 77] = "i64Eq";
-    Op[Op["i64Ne"] = 78] = "i64Ne";
-    Op[Op["i64Lt_s"] = 79] = "i64Lt_s";
-    Op[Op["i64Lt_u"] = 80] = "i64Lt_u";
-    Op[Op["i64Le_s"] = 81] = "i64Le_s";
-    Op[Op["i64Le_u"] = 82] = "i64Le_u";
-    Op[Op["i64Gt_s"] = 83] = "i64Gt_s";
-    Op[Op["i64Gt_u"] = 84] = "i64Gt_u";
-    Op[Op["i64Ge_s"] = 85] = "i64Ge_s";
-    Op[Op["i64Ge_u"] = 86] = "i64Ge_u";
-    Op[Op["i64Clz"] = 87] = "i64Clz";
-    Op[Op["i64Ctz"] = 88] = "i64Ctz";
-    Op[Op["i64Popcnt"] = 89] = "i64Popcnt";
-    Op[Op["i64Eqz"] = 90] = "i64Eqz";
-    Op[Op["f32Add"] = 91] = "f32Add";
-    Op[Op["f32Sub"] = 92] = "f32Sub";
-    Op[Op["f32Mul"] = 93] = "f32Mul";
-    Op[Op["f32Div"] = 94] = "f32Div";
-    Op[Op["f32Abs"] = 95] = "f32Abs";
-    Op[Op["f32Neg"] = 96] = "f32Neg";
-    Op[Op["f32Cps"] = 97] = "f32Cps";
-    Op[Op["f32Ceil"] = 98] = "f32Ceil";
-    Op[Op["f32Floor"] = 99] = "f32Floor";
-    Op[Op["f32Trunc"] = 100] = "f32Trunc";
-    Op[Op["f32Near"] = 101] = "f32Near";
-    Op[Op["f32Eq"] = 102] = "f32Eq";
-    Op[Op["f32Ne"] = 103] = "f32Ne";
-    Op[Op["f32Lt"] = 104] = "f32Lt";
-    Op[Op["f32Le"] = 105] = "f32Le";
-    Op[Op["f32Gt"] = 106] = "f32Gt";
-    Op[Op["f32Ge"] = 107] = "f32Ge";
-    Op[Op["f32Sqrt"] = 108] = "f32Sqrt";
-    Op[Op["f32Min"] = 109] = "f32Min";
-    Op[Op["f32Max"] = 110] = "f32Max";
-    Op[Op["f64Add"] = 111] = "f64Add";
-    Op[Op["f64Sub"] = 112] = "f64Sub";
-    Op[Op["f64Mul"] = 113] = "f64Mul";
-    Op[Op["f64Div"] = 114] = "f64Div";
-    Op[Op["f64Abs"] = 115] = "f64Abs";
-    Op[Op["f64Neg"] = 116] = "f64Neg";
-    Op[Op["f64Cps"] = 117] = "f64Cps";
-    Op[Op["f64Ceil"] = 118] = "f64Ceil";
-    Op[Op["f64Floor"] = 119] = "f64Floor";
-    Op[Op["f64Trunc"] = 120] = "f64Trunc";
-    Op[Op["f64Near"] = 121] = "f64Near";
-    Op[Op["f64Eq"] = 122] = "f64Eq";
-    Op[Op["f64Ne"] = 123] = "f64Ne";
-    Op[Op["f64Lt"] = 124] = "f64Lt";
-    Op[Op["f64Le"] = 125] = "f64Le";
-    Op[Op["f64Gt"] = 126] = "f64Gt";
-    Op[Op["f64Ge"] = 127] = "f64Ge";
-    Op[Op["f64Sqrt"] = 128] = "f64Sqrt";
-    Op[Op["f64Min"] = 129] = "f64Min";
-    Op[Op["f64Max"] = 130] = "f64Max";
-    Op[Op["i32Wrap_i64"] = 131] = "i32Wrap_i64";
-    Op[Op["i32Trunc_s_f32"] = 132] = "i32Trunc_s_f32";
-    Op[Op["i32Trunc_s_f64"] = 133] = "i32Trunc_s_f64";
-    Op[Op["i32Trunc_u_f32"] = 134] = "i32Trunc_u_f32";
-    Op[Op["i32Trunc_u_f64"] = 135] = "i32Trunc_u_f64";
-    Op[Op["i32Rein_f32"] = 136] = "i32Rein_f32";
-    Op[Op["i64Extend_s_i32"] = 137] = "i64Extend_s_i32";
-    Op[Op["i64Extend_u_i32"] = 138] = "i64Extend_u_i32";
-    Op[Op["i64Trunc_s_f32"] = 139] = "i64Trunc_s_f32";
-    Op[Op["i64Trunc_s_f64"] = 140] = "i64Trunc_s_f64";
-    Op[Op["i64Trunc_u_f32"] = 141] = "i64Trunc_u_f32";
-    Op[Op["i64Trunc_u_f64"] = 142] = "i64Trunc_u_f64";
-    Op[Op["i64Rein_f64"] = 143] = "i64Rein_f64";
-    Op[Op["f32Demote_f64"] = 144] = "f32Demote_f64";
-    Op[Op["f32Convert_s_i32"] = 145] = "f32Convert_s_i32";
-    Op[Op["f32Convert_s_i64"] = 146] = "f32Convert_s_i64";
-    Op[Op["f32Convert_u_i32"] = 147] = "f32Convert_u_i32";
-    Op[Op["f32Convert_u_i64"] = 148] = "f32Convert_u_i64";
-    Op[Op["f32Rein_i32"] = 149] = "f32Rein_i32";
-    Op[Op["f64Promote_f32"] = 150] = "f64Promote_f32";
-    Op[Op["f64Convert_s_i32"] = 151] = "f64Convert_s_i32";
-    Op[Op["f64Convert_s_i64"] = 152] = "f64Convert_s_i64";
-    Op[Op["f64Convert_u_i32"] = 153] = "f64Convert_u_i32";
-    Op[Op["f64Convert_u_i64"] = 154] = "f64Convert_u_i64";
-    Op[Op["f64Rein_i64"] = 155] = "f64Rein_i64";
-    Op[Op["Trap"] = 156] = "Trap";
+    Op[Op["Copy"] = 1] = "Copy";
+    Op[Op["Phi"] = 2] = "Phi";
+    Op[Op["LoadParam"] = 3] = "LoadParam";
+    Op[Op["PushParam"] = 4] = "PushParam";
+    Op[Op["Call"] = 5] = "Call";
+    Op[Op["i32Const"] = 6] = "i32Const";
+    Op[Op["i64Const"] = 7] = "i64Const";
+    Op[Op["f32Const"] = 8] = "f32Const";
+    Op[Op["f64Const"] = 9] = "f64Const";
+    Op[Op["i32Load"] = 10] = "i32Load";
+    Op[Op["i32load8_s"] = 11] = "i32load8_s";
+    Op[Op["i32load8_u"] = 12] = "i32load8_u";
+    Op[Op["i32load16_s"] = 13] = "i32load16_s";
+    Op[Op["i32load16_u"] = 14] = "i32load16_u";
+    Op[Op["i64Load"] = 15] = "i64Load";
+    Op[Op["i64load8_s"] = 16] = "i64load8_s";
+    Op[Op["i64load8_u"] = 17] = "i64load8_u";
+    Op[Op["i64load16_s"] = 18] = "i64load16_s";
+    Op[Op["i64load16_u"] = 19] = "i64load16_u";
+    Op[Op["i64load32_s"] = 20] = "i64load32_s";
+    Op[Op["i64load32_u"] = 21] = "i64load32_u";
+    Op[Op["f32Load"] = 22] = "f32Load";
+    Op[Op["f64Load"] = 23] = "f64Load";
+    Op[Op["i32Store"] = 24] = "i32Store";
+    Op[Op["i32Store8"] = 25] = "i32Store8";
+    Op[Op["i32Store16"] = 26] = "i32Store16";
+    Op[Op["i64Store"] = 27] = "i64Store";
+    Op[Op["i64Store8"] = 28] = "i64Store8";
+    Op[Op["i64Store16"] = 29] = "i64Store16";
+    Op[Op["i64Store32"] = 30] = "i64Store32";
+    Op[Op["f32Store"] = 31] = "f32Store";
+    Op[Op["f64Store"] = 32] = "f64Store";
+    Op[Op["i32Add"] = 33] = "i32Add";
+    Op[Op["i32Sub"] = 34] = "i32Sub";
+    Op[Op["i32Mul"] = 35] = "i32Mul";
+    Op[Op["i32Div_s"] = 36] = "i32Div_s";
+    Op[Op["i32Div_u"] = 37] = "i32Div_u";
+    Op[Op["i32Rem_s"] = 38] = "i32Rem_s";
+    Op[Op["i32Rem_u"] = 39] = "i32Rem_u";
+    Op[Op["i32Neg"] = 40] = "i32Neg";
+    Op[Op["i32And"] = 41] = "i32And";
+    Op[Op["i32Or"] = 42] = "i32Or";
+    Op[Op["i32Xor"] = 43] = "i32Xor";
+    Op[Op["i32Shl"] = 44] = "i32Shl";
+    Op[Op["i32Shr_u"] = 45] = "i32Shr_u";
+    Op[Op["i32Shr_s"] = 46] = "i32Shr_s";
+    Op[Op["i32Rotl"] = 47] = "i32Rotl";
+    Op[Op["i32Rotr"] = 48] = "i32Rotr";
+    Op[Op["i32Eq"] = 49] = "i32Eq";
+    Op[Op["i32Ne"] = 50] = "i32Ne";
+    Op[Op["i32Lt_s"] = 51] = "i32Lt_s";
+    Op[Op["i32Lt_u"] = 52] = "i32Lt_u";
+    Op[Op["i32Le_s"] = 53] = "i32Le_s";
+    Op[Op["i32Le_u"] = 54] = "i32Le_u";
+    Op[Op["i32Gt_s"] = 55] = "i32Gt_s";
+    Op[Op["i32Gt_u"] = 56] = "i32Gt_u";
+    Op[Op["i32Ge_s"] = 57] = "i32Ge_s";
+    Op[Op["i32Ge_u"] = 58] = "i32Ge_u";
+    Op[Op["i32Clz"] = 59] = "i32Clz";
+    Op[Op["i32Ctz"] = 60] = "i32Ctz";
+    Op[Op["i32Popcnt"] = 61] = "i32Popcnt";
+    Op[Op["i32Eqz"] = 62] = "i32Eqz";
+    Op[Op["i64Add"] = 63] = "i64Add";
+    Op[Op["i64Sub"] = 64] = "i64Sub";
+    Op[Op["i64Mul"] = 65] = "i64Mul";
+    Op[Op["i64Div_s"] = 66] = "i64Div_s";
+    Op[Op["i64Div_u"] = 67] = "i64Div_u";
+    Op[Op["i64Rem_s"] = 68] = "i64Rem_s";
+    Op[Op["i64Rem_u"] = 69] = "i64Rem_u";
+    Op[Op["i64And"] = 70] = "i64And";
+    Op[Op["i64Neg"] = 71] = "i64Neg";
+    Op[Op["i64Or"] = 72] = "i64Or";
+    Op[Op["i64Xor"] = 73] = "i64Xor";
+    Op[Op["i64Shl"] = 74] = "i64Shl";
+    Op[Op["i64Shr_u"] = 75] = "i64Shr_u";
+    Op[Op["i64Shr_s"] = 76] = "i64Shr_s";
+    Op[Op["i64Rotl"] = 77] = "i64Rotl";
+    Op[Op["i64Rotr"] = 78] = "i64Rotr";
+    Op[Op["i64Eq"] = 79] = "i64Eq";
+    Op[Op["i64Ne"] = 80] = "i64Ne";
+    Op[Op["i64Lt_s"] = 81] = "i64Lt_s";
+    Op[Op["i64Lt_u"] = 82] = "i64Lt_u";
+    Op[Op["i64Le_s"] = 83] = "i64Le_s";
+    Op[Op["i64Le_u"] = 84] = "i64Le_u";
+    Op[Op["i64Gt_s"] = 85] = "i64Gt_s";
+    Op[Op["i64Gt_u"] = 86] = "i64Gt_u";
+    Op[Op["i64Ge_s"] = 87] = "i64Ge_s";
+    Op[Op["i64Ge_u"] = 88] = "i64Ge_u";
+    Op[Op["i64Clz"] = 89] = "i64Clz";
+    Op[Op["i64Ctz"] = 90] = "i64Ctz";
+    Op[Op["i64Popcnt"] = 91] = "i64Popcnt";
+    Op[Op["i64Eqz"] = 92] = "i64Eqz";
+    Op[Op["f32Add"] = 93] = "f32Add";
+    Op[Op["f32Sub"] = 94] = "f32Sub";
+    Op[Op["f32Mul"] = 95] = "f32Mul";
+    Op[Op["f32Div"] = 96] = "f32Div";
+    Op[Op["f32Abs"] = 97] = "f32Abs";
+    Op[Op["f32Neg"] = 98] = "f32Neg";
+    Op[Op["f32Cps"] = 99] = "f32Cps";
+    Op[Op["f32Ceil"] = 100] = "f32Ceil";
+    Op[Op["f32Floor"] = 101] = "f32Floor";
+    Op[Op["f32Trunc"] = 102] = "f32Trunc";
+    Op[Op["f32Near"] = 103] = "f32Near";
+    Op[Op["f32Eq"] = 104] = "f32Eq";
+    Op[Op["f32Ne"] = 105] = "f32Ne";
+    Op[Op["f32Lt"] = 106] = "f32Lt";
+    Op[Op["f32Le"] = 107] = "f32Le";
+    Op[Op["f32Gt"] = 108] = "f32Gt";
+    Op[Op["f32Ge"] = 109] = "f32Ge";
+    Op[Op["f32Sqrt"] = 110] = "f32Sqrt";
+    Op[Op["f32Min"] = 111] = "f32Min";
+    Op[Op["f32Max"] = 112] = "f32Max";
+    Op[Op["f64Add"] = 113] = "f64Add";
+    Op[Op["f64Sub"] = 114] = "f64Sub";
+    Op[Op["f64Mul"] = 115] = "f64Mul";
+    Op[Op["f64Div"] = 116] = "f64Div";
+    Op[Op["f64Abs"] = 117] = "f64Abs";
+    Op[Op["f64Neg"] = 118] = "f64Neg";
+    Op[Op["f64Cps"] = 119] = "f64Cps";
+    Op[Op["f64Ceil"] = 120] = "f64Ceil";
+    Op[Op["f64Floor"] = 121] = "f64Floor";
+    Op[Op["f64Trunc"] = 122] = "f64Trunc";
+    Op[Op["f64Near"] = 123] = "f64Near";
+    Op[Op["f64Eq"] = 124] = "f64Eq";
+    Op[Op["f64Ne"] = 125] = "f64Ne";
+    Op[Op["f64Lt"] = 126] = "f64Lt";
+    Op[Op["f64Le"] = 127] = "f64Le";
+    Op[Op["f64Gt"] = 128] = "f64Gt";
+    Op[Op["f64Ge"] = 129] = "f64Ge";
+    Op[Op["f64Sqrt"] = 130] = "f64Sqrt";
+    Op[Op["f64Min"] = 131] = "f64Min";
+    Op[Op["f64Max"] = 132] = "f64Max";
+    Op[Op["i32Wrap_i64"] = 133] = "i32Wrap_i64";
+    Op[Op["i32Trunc_s_f32"] = 134] = "i32Trunc_s_f32";
+    Op[Op["i32Trunc_s_f64"] = 135] = "i32Trunc_s_f64";
+    Op[Op["i32Trunc_u_f32"] = 136] = "i32Trunc_u_f32";
+    Op[Op["i32Trunc_u_f64"] = 137] = "i32Trunc_u_f64";
+    Op[Op["i32Rein_f32"] = 138] = "i32Rein_f32";
+    Op[Op["i64Extend_s_i32"] = 139] = "i64Extend_s_i32";
+    Op[Op["i64Extend_u_i32"] = 140] = "i64Extend_u_i32";
+    Op[Op["i64Trunc_s_f32"] = 141] = "i64Trunc_s_f32";
+    Op[Op["i64Trunc_s_f64"] = 142] = "i64Trunc_s_f64";
+    Op[Op["i64Trunc_u_f32"] = 143] = "i64Trunc_u_f32";
+    Op[Op["i64Trunc_u_f64"] = 144] = "i64Trunc_u_f64";
+    Op[Op["i64Rein_f64"] = 145] = "i64Rein_f64";
+    Op[Op["f32Demote_f64"] = 146] = "f32Demote_f64";
+    Op[Op["f32Convert_s_i32"] = 147] = "f32Convert_s_i32";
+    Op[Op["f32Convert_s_i64"] = 148] = "f32Convert_s_i64";
+    Op[Op["f32Convert_u_i32"] = 149] = "f32Convert_u_i32";
+    Op[Op["f32Convert_u_i64"] = 150] = "f32Convert_u_i64";
+    Op[Op["f32Rein_i32"] = 151] = "f32Rein_i32";
+    Op[Op["f64Promote_f32"] = 152] = "f64Promote_f32";
+    Op[Op["f64Convert_s_i32"] = 153] = "f64Convert_s_i32";
+    Op[Op["f64Convert_s_i64"] = 154] = "f64Convert_s_i64";
+    Op[Op["f64Convert_u_i32"] = 155] = "f64Convert_u_i32";
+    Op[Op["f64Convert_u_i64"] = 156] = "f64Convert_u_i64";
+    Op[Op["f64Rein_i64"] = 157] = "f64Rein_i64";
+    Op[Op["Trap"] = 158] = "Trap";
 })(Op || (Op = {}));
 function getop(tok, t) {
     switch (tok) {
@@ -6519,6 +6519,7 @@ class Value {
     }
     appendArg(v) {
         assert(this.op == Op.Phi, "appendArg on non-phi value");
+        assert(v !== this, `using self as arg to self`);
         if (!this.args) {
             this.args = [v];
         }
@@ -6529,11 +6530,26 @@ class Value {
         v.users.add(this);
     }
     replaceBy(v) {
-        assert(this.users.size == 0, "TODO users");
+        assert(v !== this, 'trying to replace V with V');
+        for (let user of this.users) {
+            if (user !== v && user.args) {
+                for (let i = 0; i < user.args.length; i++) {
+                    if (user.args[i] === this) {
+                        debuglog(`replace ${this} in user ${user} with ${v}`);
+                        user.args[i] = v;
+                        v.users.add(user);
+                        v.uses++;
+                        this.uses--;
+                    }
+                }
+            }
+            else if (user === v) {
+                assert(false, `TODO user==v (v=${v} this=${this}) -- CYCLIC USE!`);
+            }
+        }
         let i = this.b.values.indexOf(this);
         assert(i != -1, "not in parent block but still references block");
-        this.b.values[i] = v;
-        v.uses++;
+        this.b.values.splice(i, 1);
         if (DEBUG) {
             
             this.b = null;
@@ -6678,7 +6694,7 @@ class IRBuilder {
         r.diagh = diagh;
         r.vars = new Map();
         r.defvars = [];
-        r.pendphis = null;
+        r.incompletePhis = null;
     }
     startBlock(b) {
         const r = this;
@@ -6693,13 +6709,14 @@ class IRBuilder {
         const s = this;
         assert(!b.sealed, `block ${b} already sealed`);
         debuglog(`${b}`);
-        if (s.pendphis) {
-            let entries = s.pendphis.get(b);
+        if (s.incompletePhis) {
+            let entries = s.incompletePhis.get(b);
             if (entries) {
                 for (let [name, phi] of entries) {
+                    debuglog(`complete pending phi ${phi} (${name})`);
                     s.addPhiOperands(name, phi);
                 }
-                s.pendphis.delete(b);
+                s.incompletePhis.delete(b);
             }
         }
         b.sealed = true;
@@ -6714,9 +6731,6 @@ class IRBuilder {
         r.defvars[b.id] = r.vars;
         r.vars = new Map();
         r.b = null;
-        if (!b.sealed) {
-            r.sealBlock(b);
-        }
         return b;
     }
     startFun(f) {
@@ -6783,7 +6797,7 @@ class IRBuilder {
             if (p.name) {
                 let t = funtype.inputs[i];
                 let name = p.name.value;
-                let v = entryb.newValue0(Op.Param, t, name);
+                let v = entryb.newValue0(Op.LoadParam, t, name);
                 r.vars.set(name, v);
             }
         }
@@ -6810,6 +6824,7 @@ class IRBuilder {
             let lasti = end - 1;
             for (let i = 0; i != end; ++i) {
                 if (!r.b) {
+                    debuglog('block ended early');
                     r.diag('warn', `unreachable code`, x.list[i].pos);
                     break;
                 }
@@ -6829,12 +6844,36 @@ class IRBuilder {
         else if (s instanceof ReturnStmt) {
             r.ret(r.expr(s.result));
         }
+        else if (s instanceof WhileStmt) {
+            r.while_(s);
+        }
         else if (s instanceof Expr) {
             if (!isLast && s instanceof Ident) {
                 r.diag('warn', `unused expression`, s.pos);
             }
             else {
                 r.expr(s);
+            }
+        }
+        else if (s instanceof VarDecl) {
+            if (s.values) {
+                for (let i = 0; i < s.idents.length; i++) {
+                    let id = s.idents[i];
+                    let v = r.expr(s.values[i]);
+                    assert(!r.vars.has(id.value), `redeclaration of var ${id.value}`);
+                    r.vars.set(id.value, v);
+                }
+            }
+            else {
+                assert(s.type, 'var decl without type or values');
+                let t = s.type.type;
+                assert(t, 'unresolved type');
+                assert(t instanceof BasicType, 'non-basic type not yet supported');
+                let v = r.f.constVal(t, 0);
+                for (let id of s.idents) {
+                    assert(!r.vars.has(id.value), `redeclaration of var ${id.value}`);
+                    r.vars.set(id.value, v);
+                }
             }
         }
         else {
@@ -6846,6 +6885,35 @@ class IRBuilder {
         let b = r.endBlock();
         b.kind = BlockKind.Ret;
         b.control = val;
+    }
+    while_(n) {
+        const s = this;
+        let entryb = s.endBlock();
+        debuglog(`>>>>>>>>> ${entryb} "entry"`);
+        assert(entryb.kind == BlockKind.Plain);
+        let ifb = s.f.newBlock(BlockKind.If);
+        debuglog(`>>>>>>>>> ${ifb} "if"`);
+        entryb.succs = [ifb];
+        ifb.preds = [entryb];
+        s.startBlock(ifb);
+        let control = s.expr(n.cond);
+        ifb = s.endBlock();
+        ifb.control = control;
+        let thenb = s.f.newBlock(BlockKind.Plain);
+        debuglog(`>>>>>>>>> ${thenb} "then"`);
+        thenb.preds = [ifb];
+        s.startSealedBlock(thenb);
+        s.block(n.body);
+        thenb = s.endBlock();
+        thenb.succs = [ifb];
+        ifb.preds = [entryb, thenb];
+        s.sealBlock(ifb);
+        let nextb = s.f.newBlock(BlockKind.Plain);
+        debuglog(`>>>>>>>>> ${nextb} "next"`);
+        nextb.preds = [ifb];
+        ifb.succs = [thenb, nextb];
+        debuglog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• nextb start`);
+        s.startSealedBlock(nextb);
     }
     if_(s) {
         const r = this;
@@ -6974,7 +7042,7 @@ class IRBuilder {
             return r.f.constVal(t, c);
         }
         if (s instanceof Ident) {
-            let v = r.readVariable(s.value, s.type);
+            let v = r.readVariable(s.value, s.type, null);
             return v;
         }
         if (s instanceof Assignment) {
@@ -7008,7 +7076,7 @@ class IRBuilder {
                 assert(t.equals(right.type), "operands have different types");
                 contb.preds = [ifb, rightb];
                 r.startSealedBlock(contb);
-                return r.readVariable(tmpname, u_t_bool);
+                return r.readVariable(tmpname, u_t_bool, null);
             }
             else {
                 let left = r.expr(s.x);
@@ -7024,12 +7092,33 @@ class IRBuilder {
                 }
             }
         }
+        if (s instanceof CallExpr) {
+            return r.funcall(s);
+        }
         debuglog(`TODO: handle ${s.constructor.name}`);
         return r.nilValue();
     }
+    funcall(x) {
+        const s = this;
+        if (x.hasDots) {
+            debuglog(`TODO: handle call with hasDots`);
+        }
+        let argvals = [];
+        for (let arg of x.args) {
+            argvals.push(s.expr(arg));
+        }
+        for (let v of argvals) {
+            s.b.newValue1(Op.PushParam, v.type, v);
+        }
+        assert(x.fun instanceof Ident, "non-id callee not yet supported");
+        let funid = x.fun;
+        assert(funid.ent, "unresolved callee");
+        let ft = funid.type;
+        assert(ft, "unresolved function type");
+        return s.b.newValue0(Op.Call, ft.result, funid.value);
+    }
     readVariable(name, t, b) {
         const s = this;
-        debuglog(`${name} ${b || s.b}`);
         if (!b || b === s.b) {
             let v = s.vars.get(name);
             if (v) {
@@ -7046,18 +7135,23 @@ class IRBuilder {
                 }
             }
         }
-        debuglog(`${name} not local; readVariableRecursive`);
-        let v = s.readVariableRecursive(name, t, b);
-        return v;
+        return s.readVariableRecursive(name, t, b);
+    }
+    readGlobal(name) {
+        const s = this;
+        debuglog(`TODO readGlobal ${name}`);
+        return s.nilValue();
     }
     writeVariable(name, v, b) {
         const s = this;
-        debuglog(`${name} ${b || s.b} ${Op[v.op]} ${v}`);
+        debuglog(`${b || s.b} ${name} = ${Op[v.op]} ${v}`);
         if (!b || b === s.b) {
             s.vars.set(name, v);
         }
         else {
-            assert(s.defvars.length >= b.id);
+            while (s.defvars.length <= b.id) {
+                s.defvars.push(null);
+            }
             let m = s.defvars[b.id];
             if (m) {
                 m.set(name, v);
@@ -7067,28 +7161,38 @@ class IRBuilder {
             }
         }
     }
+    addIncompletePhi(phi, name, b) {
+        const s = this;
+        debuglog(`${b} ${phi} var=${name}`);
+        let names = s.incompletePhis ? s.incompletePhis.get(b) : null;
+        if (!names) {
+            names = new Map();
+            if (!s.incompletePhis) {
+                s.incompletePhis = new Map();
+            }
+            s.incompletePhis.set(b, names);
+        }
+        names.set(name, phi);
+    }
     readVariableRecursive(name, t, b) {
         const s = this;
         let val;
         if (!b.sealed) {
-            debuglog(`${b} not yet sealed`);
+            debuglog(`${b} ${name} not yet sealed`);
             val = b.newPhi(t);
-            let names = s.pendphis ? s.pendphis.get(b) : null;
-            if (!names) {
-                names = new Map();
-                if (!s.pendphis) {
-                    s.pendphis = new Map();
-                }
-                s.pendphis.set(b, names);
-            }
-            names.set(name, val);
+            s.addIncompletePhi(val, name, b);
         }
         else if (b.preds.length == 1) {
-            debuglog(`${name} ${b} common case: single predecessor`);
+            debuglog(`${b} ${name} common case: single predecessor ${b.preds[0]}`);
             val = s.readVariable(name, t, b.preds[0]);
+            debuglog(`found ${name} : ${val}`);
+        }
+        else if (b.preds.length == 0) {
+            debuglog(`${b} ${name} uncommon case: outside of function`);
+            val = s.readGlobal(name);
         }
         else {
-            debuglog(`${name} ${b} uncommon case: multiple predecessors`);
+            debuglog(`${b} ${name} uncommon case: multiple predecessors`);
             val = b.newPhi(t);
             s.writeVariable(name, val, b);
             val = s.addPhiOperands(name, val);
@@ -7099,25 +7203,14 @@ class IRBuilder {
     addPhiOperands(name, phi) {
         const s = this;
         assert(phi.op == Op.Phi);
-        let trivialValue = null;
+        debuglog(`${name} phi=${phi}`);
         for (let pred of phi.b.preds) {
+            debuglog(`  ${pred}`);
             let v = s.readVariable(name, phi.type, pred);
-            debuglog(`v ${v} ${v.constructor.name} ${Op[v.op]}`);
-            if (phi.args && phi.args.length == 1 && phi.args[0] === v) {
-                trivialValue = v;
-            }
-            else {
+            if (v !== phi) {
+                debuglog(`  ${pred} ${v}<${Op[v.op]}>`);
                 phi.appendArg(v);
-                trivialValue = null;
             }
-        }
-        if (trivialValue) {
-            debuglog(`isTrivial!`);
-            let i = phi.b.values.indexOf(phi);
-            assert(i != -1, "not in parent block but still references block");
-            phi.b.values.splice(i, 1);
-            trivialValue.uses++;
-            return trivialValue;
         }
         return s.tryRemoveTrivialPhi(phi);
     }
@@ -7125,27 +7218,28 @@ class IRBuilder {
         const s = this;
         assert(phi.op == Op.Phi);
         let same = null;
-        debuglog(`${phi}`);
+        debuglog(`${phi.b} ${phi}`);
         assert(phi.args != null, "phi without operands");
         for (let operand of phi.args) {
             if (operand === same || operand === phi) {
                 continue;
             }
             if (same != null) {
-                debuglog(`${phi} not trivial (keep)`);
+                debuglog(`${phi.b} ${phi} not trivial (keep)`);
                 return phi;
             }
             same = operand;
         }
-        debuglog(`${phi} is trivial (remove)`);
+        debuglog(`${phi.b} ${phi} is trivial (remove)`);
         if (same == null) {
-            debuglog(`${phi} unreachable or in the start block`);
+            debuglog(`${phi.b} ${phi} unreachable or in the start block`);
             same = new Value(0, Op.None, u_t_nil, phi.b, null);
         }
         phi.users.delete(phi);
         let users = phi.users;
+        debuglog(`${phi.b} replace ${phi} with ${same} (aux = ${same.aux})`);
         phi.replaceBy(same);
-        debuglog(`replace ${phi} with ${same}`, same.aux);
+        assert(phi.uses == 0, `still used even after Value.replaceBy`);
         for (let use of users) {
             if (use.op == Op.Phi) {
                 s.tryRemoveTrivialPhi(use);
@@ -7162,7 +7256,6 @@ class IRBuilder {
         }
     }
 }
-//# sourceMappingURL=ir.js.map
 
 class IRFmt {
     constructor(types, style$$1, println) {
@@ -7286,7 +7379,6 @@ function fmtir(v, options) {
     printir(v, w, options);
     return str;
 }
-//# sourceMappingURL=ir-repr.js.map
 
 let readFileSync;
 let isNodeJsLikeEnv = false;
@@ -7404,6 +7496,9 @@ function main(sources, noIR) {
             return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg };
         }
         catch (error) {
+            if (isNodeJsLikeEnv) {
+                throw error;
+            }
             return { success: false, error, diagnostics, ast: r.pkg };
         }
     });
