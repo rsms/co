@@ -1257,8 +1257,14 @@ export class IRBuilder {
     rightb.preds = [ifb] // rightb <- if
     s.startSealedBlock(rightb)
     let right = s.expr(n.y as ast.Expr)
+
+    // TODO: do we really need a "copy" here? Can't we just do this instead
+    //   s.writeVariable(tmpname, right)
+    // and then navigate the resulting Phi when lowering to target code?
+    //
     let tmpv = s.b.newValue1(Op.Copy, right.type, right)
     s.writeVariable(tmpname, tmpv)
+
     rightb = s.endBlock()
     rightb.succs = [contb] // rightb -> contb
 
@@ -1285,9 +1291,23 @@ export class IRBuilder {
       argvals.push(s.expr(arg))
     }
 
-    // then push params
-    for (let v of argvals) {
-      s.b.newValue1(Op.PushParam, v.type, v)
+    // push params
+    if (s.flags & IRFlags.Comments && x.fun instanceof ast.Ident && x.fun.ent) {
+      // include comment with name of parameter, when available
+      let fx = x.fun.ent.decl as ast.FunExpr
+      let funstr = x.fun.toString() + '/'
+      for (let i = 0; i < argvals.length; i++) {
+        let v = argvals[i]
+        let v2 = s.b.newValue1(Op.PushParam, v.type, v)
+        let param = fx.sig.params[i]
+        if (param.name) {
+          v2.comment = funstr + param.name.toString()
+        }
+      }
+    } else {
+      for (let v of argvals) {
+        s.b.newValue1(Op.PushParam, v.type, v)
+      }
     }
 
     // TODO: handle any function by
