@@ -477,24 +477,32 @@ var pkg = {
     this.isCompiling = true
     this.needsCompile = false
     let startTime = monotime()
-    compilePkg(sources, /*skipIR=*/false).then(r => {
-      let endTime = monotime()
-      let duration = (endTime - startTime).toFixed(1) + 'ms'
-      if (r.success) {
-        cons.success(`completed in ${duration}`)
-      } else {
-        cons.log(`failed after ${duration}`)
-      }
+    try {
+      compilePkg(sources, /*skipIR=*/false).then(r => {
+        let endTime = monotime()
+        let duration = (endTime - startTime).toFixed(1) + 'ms'
+        if (r.success) {
+          cons.success(`completed in ${duration}`)
+        } else {
+          cons.log(`failed after ${duration}`)
+        }
 
+        this.isCompiling = false
+        this.onCompiled(r)
+        if (this.needsCompile) {
+          // another compilation was requested
+          this.compile().catch(err => {
+            console.error('EXC', err.stack || err)
+          })
+        }
+      }).catch(err => {
+        this.isCompiling = false
+        console.error(err.stack || err)
+      })
+    } catch(err) {
       this.isCompiling = false
-      this.onCompiled(r)
-      if (this.needsCompile) {
-        // another compilation was requested
-        this.compile().catch(err => {
-          console.error('EXC', err.stack || err)
-        })
-      }
-    })
+      console.error(err.stack || err)
+    }
   },
 
   resetResults() {

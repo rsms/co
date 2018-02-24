@@ -881,7 +881,11 @@ class File {
   _onInput(ev) {
     // console.log('input', ev, repr(ev, 1))
     // this.view.onInput(ev)
-    this._onChange()
+    try {
+      this._onChange()
+    } catch (err) {
+      console.error(err.stack || err)
+    }
   }
 
   _onChange() {
