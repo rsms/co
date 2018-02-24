@@ -8,9 +8,9 @@ body {
   color: #22222f;
   font-family: 'Inter UI', -system-ui, system-ui, sans-serif;
   font-size: 14px;
-  line-height:1.4;
-  letter-spacing:0.009em;
-  margin-bottom:4em;
+  line-height: 1.4;
+  letter-spacing: 0.001em;
+  margin-bottom: 4em;
 
   width: 100%;
   -webkit-text-size-adjust: 100%;
@@ -35,6 +35,7 @@ pre, code, tt {
   font-family: Inconsolata, 
     "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
   font-size:1.03em;
+  letter-spacing: 0.01em;
 }
 img { display: block; border: none; vertical-align: bottom; }
 hr { height:1px; border:none; background-color:#ddd; }
@@ -67,11 +68,11 @@ h2 + h3, h3 + h4, h4 + h5 { margin-top:1em; }
 .anchor:hover { color: rgb(0,100,255); }
 
 /* type scale */
-h1 { font-size: 2.2em;  font-weight: 600; letter-spacing: -0.02em; }
-h2 { font-size: 1.4em;  font-weight: 600; letter-spacing:  0.00em; }
-h3 { font-size: 1.2em;  font-weight: 600; letter-spacing:  0.01em; }
-h4 { font-size: 1.05em; font-weight: 600; letter-spacing:  0.01em; }
-small { font-size: 0.833em; letter-spacing:0.01em; }
+h1 { font-size: 2.2em;  font-weight: 600; letter-spacing: -0.01em; }
+h2 { font-size: 1.4em;  font-weight: 600; letter-spacing: -0.01em; }
+h3 { font-size: 1.2em;  font-weight: 600; }
+h4 { font-size: 1.05em; font-weight: 600; }
+small { font-size: 0.833em; letter-spacing: 0.01em; }
 
 h1 > a, h2 > a, h3 > a, h4 > a {
   color: inherit;
@@ -109,11 +110,10 @@ section {
   height: 80px;
   background:#fff; color:#999;
   box-shadow: 0 1px 0 rgba(0,0,0,0.1); /* x y blur color */
-}
 
-/* fixed header */
-/*.header { position: fixed; left:0; top:0; right:0; z-index:2; }
-body { margin-top: 80px; }*/
+  /*position: sticky;
+  left:0; top:0; right:0; z-index:2;*/
+}
 
 .header > div {
   display: flex;
@@ -128,8 +128,8 @@ body { margin-top: 80px; }*/
     display: flex;
     flex-direction: column;
     justify-content: center;
-    font-size: 15px;
-    font-weight: 600;
+    font-size: inherit;
+    font-weight: 500;
     color: #111;
     line-height: 32px; /* should match icon height */
     margin-left:-5px;

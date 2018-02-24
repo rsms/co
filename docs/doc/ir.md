@@ -46,22 +46,21 @@ And here is the IR generated for that function's AST:
 ```go
 foo (int int)->int
   b0:                          // function's entry block
-    v1 = Param <int> [x]       // load parameter x
-    v2 = Param <int> [y]       // load parameter y
+    v1 = LoadParam <int> [0]   // load parameter x
+    v2 = LoadParam <int> [1]   // load parameter y
     v3 = i32Const <int> [3]    // load constant 3
     v4 = i32Gt_u <bool> v1 v3  // x > 3
     v5 = i32Const <int> [1]    // load constant 1
   if v4 —> b1 b2               // if ... then goto b1, else goto b2
 
-  b1: <— b0                    // then-branch of "if"
+  b1: <— b0                    // "then" branch of "if"
     v6 = i32Add <int> v2 v5    // y + 1
-    v7 = Copy <int> v6         // store to variable y
   cont —> b2                   // unconditionally continue to block 2
 
-  b2: <— b0, b1                // else/next branch of "if"
-    v9 = Phi <int> v2 v7       // note that y varies with entry branch
-    v10 = i32Add <int> v1 v9   // x + y
-  ret v10                      // return from function
+  b2: <— b0, b1                // end "if" ("else" branch)
+    v8 = Phi <int> v2 v6       // note that y varies with entry branch
+    v9 = i32Add <int> v1 v8    // x + y
+  ret v9                       // return x from function
 ```
 
 We can observe a few things about this process:

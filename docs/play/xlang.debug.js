@@ -139,7 +139,6 @@ function bufcmp(a, b) {
         bL < aL ? 1 :
             0);
 }
-//# sourceMappingURL=btree.js.map
 
 function tokstr(t) {
     return tokenStrings.get(t) || token[t].toLowerCase();
@@ -341,7 +340,6 @@ const keywords = new BTree({ k: cdat.subarray(0, 2), v: token.GO,
 function lookupKeyword(ident) {
     return keywords.get(ident) || token.NAME;
 }
-//# sourceMappingURL=token.js.map
 
 function search(n, f) {
     let i = 0, j = n;
@@ -450,7 +448,6 @@ const debuglog = DEBUG ? function (...v) {
     v.splice(0, 0, prefix);
     console.log.apply(console, v);
 } : function (...v) { };
-//# sourceMappingURL=util.js.map
 
 const UniError = 0xFFFD;
 const UniSelf = 0x80;
@@ -567,7 +564,6 @@ function encodeAsString(cp) {
     cp -= 0x10000;
     return String.fromCharCode((cp >> 10) + surrogateMin, (cp % rune2Max) + 0xDC00);
 }
-//# sourceMappingURL=utf8.js.map
 
 const MaxRune = 0x10FFFF;
 const InvalidChar = 0xFFFD;
@@ -923,7 +919,6 @@ function isEmojiModifierBase(c) {
 function isEmojiModifier(c) {
     return ((0x1F3FB <= c && c <= 0x1F3FF));
 }
-//# sourceMappingURL=unicode.js.map
 
 const TERM = typeof process != 'undefined' && process.env.TERM || '';
 function sfn(open, close) {
@@ -1001,8 +996,6 @@ const stdoutStyle = (typeof process != 'undefined' && streamStyle(process.stdout
 const stderrStyle = (typeof process != 'undefined' && streamStyle(process.stderr) || noStyle);
 const stdoutSupportsStyle = stdoutStyle !== noStyle;
 
-//# sourceMappingURL=termstyle.js.map
-
 class ErrorReporter {
     constructor(defaultErrCode, errh = null) {
         this.defaultErrCode = defaultErrCode;
@@ -1040,7 +1033,6 @@ class ErrorReporter {
         }
     }
 }
-//# sourceMappingURL=error.js.map
 
 const SL = 0x2F;
 const DOT = 0x2E;
@@ -1198,7 +1190,6 @@ TEST("path.join", () => {
     t(["a", ""], "a");
     t(["", "a"], "a");
 });
-//# sourceMappingURL=path.js.map
 
 var Mode;
 (function (Mode) {
@@ -2397,7 +2388,6 @@ const asciiFeats = new Uint8Array([
     0,
     0,
 ]);
-//# sourceMappingURL=scanner.js.map
 
 function strtou(b, base, offs = 0) {
     assert(base >= 2);
@@ -2461,7 +2451,6 @@ TEST("strtou", () => {
     t("x123", 10, -1);
     t("-123", 10, -1);
 });
-//# sourceMappingURL=strtou.js.map
 
 let nextgid = 0;
 class Group {
@@ -3115,7 +3104,6 @@ class Package {
         return `Package(${this.name})`;
     }
 }
-//# sourceMappingURL=ast.js.map
 
 const kEmptyByteArray = new Uint8Array(0);
 const kBytes__ = new Uint8Array([0x5f]);
@@ -4376,7 +4364,6 @@ class Parser extends Scanner {
 function isEmptyFunExpr(d) {
     return d instanceof FunExpr && !d.body;
 }
-//# sourceMappingURL=parser.js.map
 
 class pkgBinder extends ErrorReporter {
     constructor(pkg, fset, importer, types, errh) {
@@ -4497,7 +4484,6 @@ function bindpkg(pkg, fset, importer, typeres, errh) {
     const b = new pkgBinder(pkg, fset, importer, typeres, errh);
     return b.bind().then(() => b.errorCount != 0);
 }
-//# sourceMappingURL=bind.js.map
 
 const NoPos = 0;
 
@@ -4664,7 +4650,6 @@ function searchInts(a, x) {
     }
     return i - 1;
 }
-//# sourceMappingURL=pos.js.map
 
 let _nextId = 0;
 class ByteStr {
@@ -4719,7 +4704,6 @@ function asciiByteStr(s) {
     let b = asciibuf(s);
     return new ByteStr(hashBytes(b, 0, b.length), b);
 }
-//# sourceMappingURL=bytestr.js.map
 
 class TypeSet {
     constructor() {
@@ -4742,7 +4726,6 @@ class TypeSet {
         return t;
     }
 }
-//# sourceMappingURL=typeset.js.map
 
 class ReprCtx {
     constructor() {
@@ -5021,7 +5004,6 @@ function repr1(n, newline, c, flag = 0) {
     }
     return '(???' + reprcons(n, c) + ' ' + repr(n) + ')';
 }
-//# sourceMappingURL=ast-repr.js.map
 
 const universeTypes = new Map();
 const universeValues = new Map();
@@ -5720,7 +5702,6 @@ class Universe {
         return this.typeSet.intern(t);
     }
 }
-//# sourceMappingURL=universe.js.map
 
 class EvalConst {
 }
@@ -6213,7 +6194,6 @@ function intEvaluator(op, x, y) {
     }
     return null;
 }
-//# sourceMappingURL=resolve.js.map
 
 const byteStr_anonfun = asciiByteStr('anonfun');
 var Op;
@@ -7147,8 +7127,22 @@ class IRBuilder {
         for (let arg of x.args) {
             argvals.push(s.expr(arg));
         }
-        for (let v of argvals) {
-            s.b.newValue1(Op.PushParam, v.type, v);
+        if (s.flags & IRFlags.Comments && x.fun instanceof Ident && x.fun.ent) {
+            let fx = x.fun.ent.decl;
+            let funstr = x.fun.toString() + '/';
+            for (let i = 0; i < argvals.length; i++) {
+                let v = argvals[i];
+                let v2 = s.b.newValue1(Op.PushParam, v.type, v);
+                let param = fx.sig.params[i];
+                if (param.name) {
+                    v2.comment = funstr + param.name.toString();
+                }
+            }
+        }
+        else {
+            for (let v of argvals) {
+                s.b.newValue1(Op.PushParam, v.type, v);
+            }
         }
         assert(x.fun instanceof Ident, "non-id callee not yet supported");
         let funid = x.fun;
@@ -7296,7 +7290,6 @@ class IRBuilder {
         }
     }
 }
-//# sourceMappingURL=ir.js.map
 
 class IRFmt {
     constructor(types, style$$1, println) {
@@ -7424,7 +7417,6 @@ function fmtir(v, options) {
     printir(v, w, options);
     return str;
 }
-//# sourceMappingURL=ir-repr.js.map
 
 let readFileSync;
 let isNodeJsLikeEnv = false;
@@ -7579,5 +7571,4 @@ else {
         printir,
     };
 }
-//# sourceMappingURL=main.js.map
 //# sourceMappingURL=xlang.debug.js.map
