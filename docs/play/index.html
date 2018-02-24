@@ -528,12 +528,17 @@ var pkg = {
 
   onCompiled(r) {
     console.log('compilation result:', r)
+
     // errors first
+    if (r.error) {
+      cons.error(r.error.message)
+    }
     for (let d of r.diagnostics) {
       if (d.type == 'error') {
         this.presentDiag(d)
       }
     }
+
     // then warnings and info
     for (let d of r.diagnostics) {
       if (d.type != 'error') {
@@ -565,7 +570,7 @@ fun foo(x, y int) int {
   while x > 0 {
     x--
   }
-  y
+  bar(y)
 }
 
 fun bar(x int) bool {
