@@ -492,16 +492,16 @@ var pkg = {
         if (this.needsCompile) {
           // another compilation was requested
           this.compile().catch(err => {
-            console.error('EXC', err.stack || err)
+            throw err
           })
         }
       }).catch(err => {
         this.isCompiling = false
-        console.error(err.stack || err)
+        throw err
       })
     } catch(err) {
       this.isCompiling = false
-      console.error(err.stack || err)
+      throw err
     }
   },
 
