@@ -554,10 +554,10 @@ var pkg = {
 // create a FileView with some default code
 let f = new ted.File('hello.co', `
 fun foo(x, y int) int {
-\tif x > 3 {
-\t\ty++
-\t}
-\tx + y
+  while x > 0 {
+    x--
+  }
+  y
 }
 
 fun bar(x int) bool {
