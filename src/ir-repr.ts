@@ -1,8 +1,5 @@
 import { Pkg, Fun, Block, BlockKind, Value, Op } from './ir'
-import { tokstr } from './token'
 import { Style, stdoutStyle, style, noStyle } from './termstyle'
-import { asciistr } from './util'
-import * as ast from './ast'
 
 export type LineWriter = (s :string) => any
 
@@ -32,6 +29,9 @@ function fmtval(f :IRFmt, v :Value) :string {
   if (v.aux !== null) {
     s += ' [' + v.aux + ']'
   }
+  if (v.comment) {
+    s += '  // ' + v.comment
+  }
   return s
 }
 
@@ -48,7 +48,8 @@ function printblock(f :IRFmt, b :Block, indent :string) {
     preds = f.larr + b.preds.map(b => 
       f.style.lightyellow(b.toString()) ).join(', ')
   }
-  f.println(indent + f.style.lightyellow(label + ':') + preds)
+  let comment = b.comment ? '  // ' + b.comment : ''
+  f.println(indent + f.style.lightyellow(label + ':') + preds + comment)
 
   let valindent = indent + '  '
   for (let v of b.values) {

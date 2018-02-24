@@ -9,7 +9,7 @@ import { Package, Scope, Ent } from './ast'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
-import { IRBuilder } from './ir'
+import { IRBuilder, IRFlags } from './ir'
 import * as ir from './ir'
 import { printir, fmtir } from './ir-repr'
 
@@ -175,7 +175,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
     }
 
     const irb = new IRBuilder()
-    irb.init(diagh)
+    irb.init(diagh, IRFlags.Comments)
 
     // print AST & build IR
     try {

@@ -1,4 +1,4 @@
-import { debuglog as dlog, asciistr } from './util'
+import { debuglog as dlog } from './util'
 import { ByteStr, asciiByteStr } from './bytestr'
 import { Pos, SrcFile } from './pos'
 import { token } from './token'
@@ -7,7 +7,7 @@ import * as ast from './ast'
 import { Type, FunType, BasicType, IntType, RegType } from './ast'
 
 
-const byteStr__ = asciiByteStr("_")
+// const byteStr__ = asciiByteStr("_")
 const byteStr_anonfun = asciiByteStr('anonfun')
 
 // operators
@@ -254,45 +254,45 @@ function getop(tok :token, t :BasicType) :Op {
 }
 
 
-// storeop maps value type to store operator
-//
-function storeop(t :BasicType) :Op {
-  // select store operation
-  // i32Store,    // store 4 bytes (no conversion)
-  // i32Store8,   // wrap i32 to i8 and store 1 byte
-  // i32Store16,  // wrap i32 to i16 and store 2 bytes
-  // i64Store,    // store 8 bytes (no conversion)
-  // i64Store8,   // wrap i64 to i8 and store 1 byte
-  // i64Store16,  // wrap i64 to i16 and store 2 bytes
-  // i64Store32,  // wrap i64 to i32 and store 4 bytes
-  // f32Store,    // store 4 bytes (no conversion)
-  // f64Store,    // store 8 bytes (no conversion)
-  let bz :int
-  switch (t.regtype) {
+// // storeop maps value type to store operator
+// //
+// function storeop(t :BasicType) :Op {
+//   // select store operation
+//   // i32Store,    // store 4 bytes (no conversion)
+//   // i32Store8,   // wrap i32 to i8 and store 1 byte
+//   // i32Store16,  // wrap i32 to i16 and store 2 bytes
+//   // i64Store,    // store 8 bytes (no conversion)
+//   // i64Store8,   // wrap i64 to i8 and store 1 byte
+//   // i64Store16,  // wrap i64 to i16 and store 2 bytes
+//   // i64Store32,  // wrap i64 to i32 and store 4 bytes
+//   // f32Store,    // store 4 bytes (no conversion)
+//   // f64Store,    // store 8 bytes (no conversion)
+//   let bz :int
+//   switch (t.regtype) {
 
-    case RegType.i32:
-      bz = (t as IntType).bitsize
-      if (bz <= 8) { return Op.i32Store8 }
-      if (bz <= 16) { return Op.i32Store16 }
-      assert(bz <= 32)
-      return Op.i32Store
+//     case RegType.i32:
+//       bz = (t as IntType).bitsize
+//       if (bz <= 8) { return Op.i32Store8 }
+//       if (bz <= 16) { return Op.i32Store16 }
+//       assert(bz <= 32)
+//       return Op.i32Store
 
-    case RegType.i64:
-      bz = (t as IntType).bitsize
-      if (bz <= 8) { return Op.i64Store8 }
-      if (bz <= 16) { return Op.i64Store16 }
-      if (bz <= 32) { return Op.i64Store32 }
-      assert(bz <= 64)
-      return Op.i64Store
+//     case RegType.i64:
+//       bz = (t as IntType).bitsize
+//       if (bz <= 8) { return Op.i64Store8 }
+//       if (bz <= 16) { return Op.i64Store16 }
+//       if (bz <= 32) { return Op.i64Store32 }
+//       assert(bz <= 64)
+//       return Op.i64Store
 
-    case RegType.f32:
-      return Op.f32Store
+//     case RegType.f32:
+//       return Op.f32Store
     
-    case RegType.f64:
-      return Op.f64Store
-  }
-  return Op.None
-}
+//     case RegType.f64:
+//       return Op.f64Store
+//   }
+//   return Op.None
+// }
 
 
 export type Aux = ByteStr | Uint8Array | number
@@ -300,12 +300,13 @@ export type Aux = ByteStr | Uint8Array | number
 // Value is a three-address-code operation
 //
 export class Value {
-  id   :int   // unique identifier
-  op   :Op    // operation that computes this value
-  type :Type
-  b    :Block // containing block
-  aux  :Aux|null // auxiliary info for this value. Type depends on op and type.
-  args :Value[]|null = null // arguments of this value
+  id      :int   // unique identifier
+  op      :Op    // operation that computes this value
+  type    :Type
+  b       :Block // containing block
+  aux     :Aux|null // auxiliary info for this value. Type depends on op & type.
+  args    :Value[]|null = null // arguments of this value
+  comment :string = '' // human readable short comment for IR formatting
 
   // use count. Each appearance in args and Block.control counts once
   uses :int = 0
@@ -409,6 +410,7 @@ export class Block {
   f        :Fun // containing function
   sealed   :bool = false
     // true if no further predecessors will be added
+  comment  :string = '' // human readable short comment for IR formatting
 
   constructor(kind :BlockKind, id :int, f :Fun) {
     this.kind = kind
@@ -556,19 +558,29 @@ export class Pkg {
 }
 
 
+export enum IRFlags {
+  Default = 0,
+  Comments,     // include comments in some values, for formatting
+}
+
+
+// IRBuilder produces SSA IR for functions, taking AST as the input.
+//
+// The "inline"/"single-pass" Phi placement heuristic is based on the paper
+// "Simple and Efficient Construction of Static Single Assignment Form"
+// https://pp.info.uni-karlsruhe.de/uploads/publikationen/braun13cc.pdf
+//
 export class IRBuilder {
   pkg   :Pkg
   sfile :SrcFile|null = null
   diagh :DiagHandler|null = null
   b     :Block       // current block
   f     :Fun         // current function
+  flags :IRFlags = IRFlags.Default
   
   vars :Map<ByteStr,Value>
     // variable assignments in the current block (map from variable symbol
     // to ssa value)
-  // fwdVars :Map<ByteStr,Value>
-    // Op.FwdRef which records a value that's live on block input.
-    // Used for phi resolution.
 
   defvars :(Map<ByteStr,Value>|null)[]
     // all defined variables at the end of each block. Indexed by block id.
@@ -580,15 +592,15 @@ export class IRBuilder {
     // are not known at the time a block starts, but is known and registered
     // before the block ends.
 
-  init(diagh :DiagHandler|null = null) {
+  init(diagh :DiagHandler|null = null, flags :IRFlags=IRFlags.Default) {
     const r = this
     r.pkg = new Pkg()
     r.sfile = null
     r.diagh = diagh
     r.vars = new Map<ByteStr,Value>()
-    // r.fwdVars = new Map<ByteStr,Value>()
     r.defvars = []
     r.incompletePhis = null
+    r.flags = flags
   }
 
   // startBlock sets the current block we're generating code in
@@ -597,7 +609,6 @@ export class IRBuilder {
     const r = this
     assert(r.b == null, "starting block without ending block")
     r.b = b
-    // Note vars and fwdVars are reset in endBlock
   }
 
   // startSealedBlock is a convenience for sealBlock followed by startBlock
@@ -641,11 +652,7 @@ export class IRBuilder {
     }
     r.defvars[b.id] = r.vars
     r.vars = new Map<ByteStr,Value>()
-    // r.fwdVars.clear()
     ;(r as any).b = null
-    // if (!b.sealed) {
-    //   r.sealBlock(b)
-    // }
     return b
   }
 
@@ -733,7 +740,10 @@ export class IRBuilder {
       if (p.name) {
         let t = funtype.inputs[i] as Type
         let name = p.name.value
-        let v = entryb.newValue0(Op.LoadParam, t, name)
+        let v = entryb.newValue0(Op.LoadParam, t, i)
+        if (r.flags & IRFlags.Comments) {
+          v.comment = name.toString()
+        }
         r.vars.set(name, v)
       }
     }
@@ -850,39 +860,11 @@ export class IRBuilder {
   while_(n: ast.WhileStmt) {
     const s = this
 
-
-    // let entryb = s.endBlock()
-    // let nextb = s.f.newBlock(BlockKind.Plain)
-    // entryb.kind = BlockKind.Plain
-    // entryb.succs = [nextb] // entry -> if
-
-    // nextb.preds = [entryb] // next <- if
-    // s.startSealedBlock(nextb)
-
-
-    // let entryb = s.endBlock()
-    // assert(entryb.kind == BlockKind.Plain)
-    // let ifb = s.f.newBlock(BlockKind.Plain) // BlockKind.If
-    // entryb.succs = [ifb] // entry -> if
-    
-    // ifb.preds = [entryb] // if <- entry
-    // s.startSealedBlock(ifb)
-    // ifb = s.endBlock()
-
-    // let nextb = s.f.newBlock(BlockKind.Plain)
-    // ifb.succs = [nextb]
-
-    // nextb.preds = [ifb] // next <- if
-    // s.startSealedBlock(nextb)
-
-
     // end "entry" block (whatever block comes before "while")
     let entryb = s.endBlock()
-    dlog(`>>>>>>>>> ${entryb} "entry"`)
     assert(entryb.kind == BlockKind.Plain)
     // create "if" block, for testing the while condition
     let ifb = s.f.newBlock(BlockKind.If)
-    dlog(`>>>>>>>>> ${ifb} "if"`)
     entryb.succs = [ifb] // entry -> if
     ifb.preds = [entryb] // if <- entry[, then]
     // start "if" block
@@ -895,7 +877,6 @@ export class IRBuilder {
 
     // create "then" block, to be visited on each loop iteration
     let thenb = s.f.newBlock(BlockKind.Plain)
-    dlog(`>>>>>>>>> ${thenb} "then"`)
     thenb.preds = [ifb]
     // start "then" block (seal as well; preds are complete)
     s.startSealedBlock(thenb)
@@ -910,51 +891,16 @@ export class IRBuilder {
 
     // create "next" block, for whatever comes after the "while"
     let nextb = s.f.newBlock(BlockKind.Plain)
-    dlog(`>>>>>>>>> ${nextb} "next"`)
     nextb.preds = [ifb] // next <- if, then
     ifb.succs = [thenb, nextb] // if -> next, then
     // start "next" block and return
-    dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• nextb start`)
     s.startSealedBlock(nextb)
 
-
-    // // create block for "if", "then" and "next"
-    // // we need "if" to be a separate block since it has multiple predecessors
-    // // let ifb = s.f.newBlock(BlockKind.If)
-    // // let thenb = s.f.newBlock(BlockKind.Plain)
-    // let nextb = s.f.newBlock(BlockKind.Plain)
-
-    // // end predecessor block (leading up to "while")
-    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• entryb end`)
-    // let entryb = s.endBlock()
-    // entryb.kind = BlockKind.Plain
-    // entryb.succs = [ifb] // entry -> if
-
-    // // start "if" block and generate control condition (in "if" block)
-    // ifb.preds = [entryb, thenb] // if <- entry, then
-    // ifb.succs = [thenb, nextb] // if -> then, next
-    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• ifb start`)
-    // s.startSealedBlock(ifb)
-    // let control = s.expr(n.cond) // condition
-    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• ifb end`)
-    // ifb = s.endBlock()
-    // ifb.control = control
-    // entryb.succs = [ifb] // [update] entry -> if
-
-    // // start "then" block and generate body
-    // thenb.preds = [ifb] // then <- if
-    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• thenb start`)
-    // s.startSealedBlock(thenb)
-    // let bv = s.block(n.body)
-    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• thenb end`)
-    // thenb = s.endBlock()
-
-    // // start "next" block
-    // thenb.succs = [ifb] // then -> if (because "while")
-    // nextb.succs = null
-    // nextb.preds = [ifb, thenb] // next <- if, then
-    // dlog(`•••••••••••••••••••••••••••••••••••••••••••••••••••• nextb start`)
-    // s.startSealedBlock(nextb)
+    if (s.flags & IRFlags.Comments) {
+      ifb.comment = 'while'
+      thenb.comment = 'then'
+      nextb.comment = 'endwhile'
+    }
   }
 
 
@@ -1021,12 +967,23 @@ export class IRBuilder {
       thenb.succs = [contb] // then -> cont
       contb.preds = [thenb, elseb] // cont <- then, else
       r.startSealedBlock(contb)
+
+      if (r.flags & IRFlags.Comments) {
+        thenb.comment = 'then'
+        elseb.comment = 'else'
+        contb.comment = 'endif'
+      }
     } else {
       // if cond then A end
       thenb.succs = [elseb] // then -> else
       elseb.preds = [ifb, thenb] // else <- if, then
       elseb.succs = null
       r.startSealedBlock(elseb)
+
+      if (r.flags & IRFlags.Comments) {
+        thenb.comment = 'then'
+        elseb.comment = 'endif'
+      }
     }
   }
 
@@ -1035,14 +992,17 @@ export class IRBuilder {
   // Right has already been evaluated to ssa, left has not.
   assign(left :ast.Expr, right :Value) :Value {
     const s = this
-    let t = left.type as Type; assert(left.type)
+    // let t = left.type as Type; assert(left.type)
     assert(left instanceof ast.Ident, `${left.constructor.name} not supported`)
     // Update variable assignment.
     let name = (left as ast.Ident).value
     
     let v = s.b.newValue1(Op.Copy, right.type, right)
-    dlog(`assign "${name}" ${left} <— ${right}`)
+    if (s.flags & IRFlags.Comments) {
+      v.comment = name.toString()
+    }
 
+    // dlog(`assign "${name}" ${left} <— ${right}`)
     s.writeVariable(name, v)
 
     return v
@@ -1180,14 +1140,7 @@ export class IRBuilder {
     }
 
     if (s instanceof ast.Ident) {
-      let v = r.readVariable(s.value, s.type as Type, null)
-      // if (v.b !== r.b) {
-      //   // defined in a different block -- copy
-      //   let v1 = v // for dlog
-      //   v = r.b.newValue1(Op.Copy, v.type, v)
-      //   dlog(`issue Copy ${s} ${v1} -> ${v}`)
-      // }
-      return v
+      return r.readVariable(s.value, s.type as Type, null)
     }
 
     if (s instanceof ast.Assignment) {
@@ -1196,99 +1149,8 @@ export class IRBuilder {
 
     if (s instanceof ast.Operation) {
       // "x op y" => "tmp = x op y" -> tmp
-
       if (s.op == token.OROR || s.op == token.ANDAND) {
-        // high-level "&&" or "||" operation, lowered to branching.
-        //
-        // We implement "||" and "&&" via a temporary var and "if" branch.
-        // E.g. source code
-        //    x && y
-        // is converted to
-        //    t = x
-        //    if t {
-        //      t = y
-        //    }
-        // and t is unsed in place.
-        // OROR is converted in a similar manner:
-        //    x || y
-        // is converted to
-        //    t = x
-        //    if !t {
-        //      t = y
-        //    }
-        //
-        // Reference of Go AST -> IR for OROR and ANDAND:
-        //   https://github.com/golang/go/blob/
-        //   10d096fec2fe8f3e88f847fd0ac17c0601bf6442/src/cmd/compile/internal/
-        //   gc/ssa.go#L1957
-        //
-        // -------------------------------------------------------------------
-        // Note on WASM:
-        // WebAssembly provides a "select" operator with these semantics:
-        //   t1 = A<T>
-        //   t2 = B<T>
-        //   select C<i32> t1 t2 => D<T>
-        // Where if C is not zero, value of A is used, otherwise value of B is
-        // used, resulting in D. A and B must be of the same type and both A
-        // and B are evaluated prior to the operator (not short-circuiting.)
-        // This would make sense to use only for special cases where both A
-        // and B are constants.
-        // In order to target this operator in WASM, we need a higher-level
-        // construct to represent ANDAND and OROR. After this (current)
-        // if-construction, it won't be easy to later "revert" to ANDAND and
-        // OROR.
-        // Idea 1: Include target information when generating IR and only
-        //         unroll into "if" branches if the target doesn't support
-        //         something like WASM's "select".
-        // Idea 2: Perform this step later 
-        //
-        // However, for now, since it's a possibly small-RoI optimization
-        // opportunity, we're ignoring this.
-        // -------------------------------------------------------------------
-        //
-        assert(s.y != null)
-
-        let tmpname = asciiByteStr('tmp') // TODO: use `s` (just need a ref)
-
-        let left = r.expr(s.x)
-        // r.vars.set(tmpname, left)
-        r.writeVariable(tmpname, left)
-        // let t0 = r.b.newValue1(Op.Copy, t, x)  // t = x
-
-        let t = left.type
-
-        let rightb = r.f.newBlock(BlockKind.Plain)  // y
-        let contb = r.f.newBlock(BlockKind.Plain) // t
-
-        // end entry "if" block
-        let ifb = r.endBlock()
-        ifb.kind = BlockKind.If
-        ifb.control = left
-
-        if (s.op == token.OROR) {
-          // flip branches; equivalent to "ifFalse"/"ifz"
-          ifb.succs = [contb, rightb] // if -> contb, rightb
-        } else {
-          ifb.succs = [rightb, contb] // if -> rightb, contb
-        }
-
-        // gen "right" block
-        rightb.preds = [ifb] // rightb <- if
-        r.startSealedBlock(rightb)
-        let right = r.expr(s.y as ast.Expr)
-        let tmpv = r.b.newValue1(Op.Copy, right.type, right)
-        r.writeVariable(tmpname, tmpv)
-        rightb = r.endBlock()
-        rightb.succs = [contb] // rightb -> contb
-
-        assert(t.equals(right.type), "operands have different types")
-
-        // start continuation block
-        contb.preds = [ifb, rightb] // contb <- ifb, rightb
-        r.startSealedBlock(contb)
-
-        return r.readVariable(tmpname, ast.u_t_bool, null)
-
+        return r.opAndAnd(s)
       } else {
         // Basic operation
         let left = r.expr(s.x)
@@ -1312,6 +1174,101 @@ export class IRBuilder {
     dlog(`TODO: handle ${s.constructor.name}`)
     return r.nilValue()
   }
+
+
+  opAndAnd(n :ast.Operation) :Value {
+    // high-level "&&" or "||" operation, lowered to branching.
+    //
+    // We implement "||" and "&&" via a temporary var and "if" branch.
+    // E.g. source code
+    //    x && y
+    // is converted to
+    //    t = x
+    //    if t {
+    //      t = y
+    //    }
+    // and t is unsed in place.
+    // OROR is converted in a similar manner:
+    //    x || y
+    // is converted to
+    //    t = x
+    //    if !t {
+    //      t = y
+    //    }
+    //
+    // Reference of Go AST -> IR for OROR and ANDAND:
+    //   https://github.com/golang/go/blob/
+    //   10d096fec2fe8f3e88f847fd0ac17c0601bf6442/src/cmd/compile/internal/
+    //   gc/ssa.go#L1957
+    //
+    // -------------------------------------------------------------------
+    // Note on WASM:
+    // WebAssembly provides a "select" operator with these semantics:
+    //   t1 = A<T>
+    //   t2 = B<T>
+    //   select C<i32> t1 t2 => D<T>
+    // Where if C is not zero, value of A is used, otherwise value of B is
+    // used, resulting in D. A and B must be of the same type and both A
+    // and B are evaluated prior to the operator (not short-circuiting.)
+    // This would make sense to use only for special cases where both A
+    // and B are constants.
+    // In order to target this operator in WASM, we need a higher-level
+    // construct to represent ANDAND and OROR. After this (current)
+    // if-construction, it won't be easy to later "revert" to ANDAND and
+    // OROR.
+    // Idea 1: Include target information when generating IR and only
+    //         unroll into "if" branches if the target doesn't support
+    //         something like WASM's "select".
+    // Idea 2: Perform this step later 
+    //
+    // However, for now, since it's a possibly-small RoI optimization
+    // opportunity, we're ignoring this.
+    // -------------------------------------------------------------------
+    //
+    const s = this
+    assert(n.y != null)
+
+    let tmpname = asciiByteStr('tmp') // TODO: use `s` (just need a ref)
+
+    let left = s.expr(n.x)
+    s.writeVariable(tmpname, left)
+
+    let t = left.type
+
+    let rightb = s.f.newBlock(BlockKind.Plain)  // y
+    let contb = s.f.newBlock(BlockKind.Plain) // t
+
+    // end entry "if" block
+    let ifb = s.endBlock()
+    ifb.kind = BlockKind.If
+    ifb.control = left
+
+    if (n.op == token.OROR) {
+      // flip branches; equivalent to "ifFalse"/"ifz"
+      ifb.succs = [contb, rightb] // if -> contb, rightb
+    } else {
+      assert(n.op == token.ANDAND)
+      ifb.succs = [rightb, contb] // if -> rightb, contb
+    }
+
+    // gen "right" block
+    rightb.preds = [ifb] // rightb <- if
+    s.startSealedBlock(rightb)
+    let right = s.expr(n.y as ast.Expr)
+    let tmpv = s.b.newValue1(Op.Copy, right.type, right)
+    s.writeVariable(tmpname, tmpv)
+    rightb = s.endBlock()
+    rightb.succs = [contb] // rightb -> contb
+
+    assert(t.equals(right.type), "operands have different types")
+
+    // start continuation block
+    contb.preds = [ifb, rightb] // contb <- ifb, rightb
+    s.startSealedBlock(contb)
+
+    return s.readVariable(tmpname, ast.u_t_bool, null)
+  }
+
 
   funcall(x :ast.CallExpr) :Value {
     const s = this
@@ -1345,10 +1302,9 @@ export class IRBuilder {
     return s.b.newValue0(Op.Call, ft.result, funid.value)
   }
 
+
   readVariable(name :ByteStr, t :Type, b :Block|null) :Value {
     const s = this
-
-    // dlog(`${name} ${b || s.b}`)
 
     if (!b || b === s.b) {
       let v = s.vars.get(name)
@@ -1366,24 +1322,17 @@ export class IRBuilder {
       }
     }
 
-    // dlog(`${name} not local; readVariableRecursive`)
-
-    // let v = s.fwdVars.get(name)
-    // if (!v) {
-    //   // return v
-    //   v = b.newValue0(Op.FwdRef, t, name)
-    //   s.fwdVars.set(name, v)
-    // }
-
     // global value numbering
     return s.readVariableRecursive(name, t, b)
   }
+
 
   readGlobal(name :ByteStr) :Value {
     const s = this
     dlog(`TODO readGlobal ${name}`)
     return s.nilValue() // FIXME
   }
+
 
   writeVariable(name :ByteStr, v :Value, b? :Block) {
     const s = this
@@ -1417,6 +1366,7 @@ export class IRBuilder {
     }
     names.set(name, phi)
   }
+
 
   readVariableRecursive(name :ByteStr, t :Type, b :Block) :Value {
     const s = this
@@ -1452,6 +1402,7 @@ export class IRBuilder {
     return val
   }
 
+
   addPhiOperands(name :ByteStr, phi :Value) :Value {
     const s = this
     assert(phi.op == Op.Phi)
@@ -1467,6 +1418,7 @@ export class IRBuilder {
     }
     return s.tryRemoveTrivialPhi(phi)
   }
+
 
   tryRemoveTrivialPhi(phi :Value) :Value {
     const s = this

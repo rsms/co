@@ -69,13 +69,16 @@ dist (int int)->int
 */
 
 fun dist(x, y int) int {
-  if x > 3 {
-    y++
-  }
+  // if x > 3 {
+  //   y++
+  // }
 
-  while x > 0 { x-- } // bug
-  // while x > 0 { x--; y-- } // fix
+  while x > 0 {
+    x--
+  }
   y
+
+  // y && 8
 
   // while x < 10 {
   //   x++

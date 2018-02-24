@@ -182,19 +182,19 @@ function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :st
 }
 
 
-function subscriptnum(n :int) :string {
-  // ASCII 0-9 Unicode range: [U+0030 .. U+0039]
-  // superscript 0-9 Unicode range: [U+2070 .. U+2079]
-  // subscript 0-9 Unicode range: [U+2080 .. U+2089]
-  let s = n.toString(10)
-  let r = ''
-  let ss0 = 0x2080 - 0x30
-  for (let i = 0; i < s.length; ++i) {
-    let c = s.charCodeAt(i) + ss0
-    r += String.fromCharCode(c)
-  }
-  return r
-}
+// function subscriptnum(n :int) :string {
+//   // ASCII 0-9 Unicode range: [U+0030 .. U+0039]
+//   // superscript 0-9 Unicode range: [U+2070 .. U+2079]
+//   // subscript 0-9 Unicode range: [U+2080 .. U+2089]
+//   let s = n.toString(10)
+//   let r = ''
+//   let ss0 = 0x2080 - 0x30
+//   for (let i = 0; i < s.length; ++i) {
+//     let c = s.charCodeAt(i) + ss0
+//     r += String.fromCharCode(c)
+//   }
+//   return r
+// }
 
 
 function reprid(id :Ident, c :ReprCtx) :string {
