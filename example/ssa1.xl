@@ -5,69 +5,6 @@
 
 fun isqrt(x, y int) -> x * y
 
-/* gossa
-
-b1:
-  v1 = InitMem <mem>
-  v2 = SP <uintptr>
-  v3 = SB <uintptr>
-  v4 = Addr <*int> {x} v2
-  v5 = Addr <*int> {y} v2
-  v6 = Addr <*int> {~r2} v2
-  v7 = Arg <int> {x}
-  v8 = Arg <int> {y}
-  v9 = Const64 <int> [0]
-  v13 = Const64 <int> [1]
-Plain → b2
-
-b2: ← b1 b4
-  v10 = Phi <int> v7 v14
-  v11 = Greater64 <bool> v10 v9
-  v19 = Copy <mem> v1
-  v20 = Copy <int> v8
-If v11 → b3 b5 (likely)
-
-b3: ← b2
-  v12 = Copy <int> v10
-  v14 = Sub64 <int> v10 v13
-Plain → b4
-
-b4: ← b3
-Plain → b2
-
-b5: ← b2
-  v15 = Copy <int> v8
-  v16 = Copy <mem> v1
-  v17 = VarDef <mem> {~r2} v1
-  v18 = Store <mem> {int} v6 v8 v17
-Ret v18
-
-
-
-
-dist (int int)->int
-  b0:
-    v1 = LoadParam <int> [x]
-    v2 = LoadParam <int> [y]
-    v4 = i32Const <int> [0]
-    v6 = i32Const <int> [1]
-  cont —> b1
-
-  b1: <— b0, b2
-    v3 = Phi <int> v1 v8
-    v5 = i32Gt_u <bool> v3 v4
-  if v5 —> b2 b3
-
-  b2: <— b1
-    v7 = i32Sub <int> v3 v6
-    v8 = Copy <int> v7
-  cont —> b1
-
-  b3: <— b1
-  ret v3
-
-*/
-
 fun dist(x, y int) int {
   // if x > 3 {
   //   y++
@@ -75,6 +12,7 @@ fun dist(x, y int) int {
 
   while x > 0 {
     x--
+    y--
   }
   y
 
@@ -146,12 +84,5 @@ fun dist(x, y int) int {
   //   x = x / 2
   // }
   // x * y
-  // isqrt(x + y)
+  isqrt(x + y)
 }
-
-/* TODO *
-
-- convert all variable access to load and stores
-- use value numbering instead of locals (change Value)
-
-*/
