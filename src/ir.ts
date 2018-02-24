@@ -992,28 +992,30 @@ export class IRBuilder {
   // Right has already been evaluated to ssa, left has not.
   assign(left :ast.Expr, right :Value) :Value {
     const s = this
-    // let t = left.type as Type; assert(left.type)
+
     assert(left instanceof ast.Ident, `${left.constructor.name} not supported`)
-    // Update variable assignment.
     let name = (left as ast.Ident).value
     
-    let v = s.b.newValue1(Op.Copy, right.type, right)
-    if (s.flags & IRFlags.Comments) {
-      v.comment = name.toString()
-    }
-
-    // dlog(`assign "${name}" ${left} <— ${right}`)
-    s.writeVariable(name, v)
-
-    return v
+    // // Issue a "copy" to indicate "store to variable"
+    // let v = s.b.newValue1(Op.Copy, right.type, right)
+    // if (s.flags & IRFlags.Comments) {
+    //   v.comment = name.toString()
+    // }
+    //
+    // // dlog(`assign "${name}" ${left} <— ${right}`)
+    // s.writeVariable(name, v)
 
     // s.addNamedValue(left, right)
-
     // let t = rhs.type as BasicType
     // assert(t instanceof BasicType, "not a basic type")
     // let op = storeop(t)
     // v = r.b.newValue1(op, t, src, dst)
     // return right
+
+    // instead of issuing an intermediate "store", simply associate variable
+    // name with the value on the right-hand side.
+    s.writeVariable(name, right)
+    return right
   }
 
 
