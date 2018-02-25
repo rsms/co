@@ -30,7 +30,7 @@ function fmtval(f :IRFmt, v :Value) :string {
     s += ' [' + v.aux + ']'
   }
   if (v.comment) {
-    s += '  // ' + v.comment
+    s += f.style.grey('  // ' + v.comment)
   }
   return s
 }
@@ -44,16 +44,21 @@ function printval(f :IRFmt, v :Value, indent :string) {
 function printblock(f :IRFmt, b :Block, indent :string) {
   let label = b.toString()
   let preds = ''
+
   if (b.preds && b.preds.length) {
     preds = f.larr + b.preds.map(b => 
       f.style.lightyellow(b.toString()) ).join(', ')
-  }
-  let comment = b.comment ? '  // ' + b.comment : ''
+    f.println('')
+  } // else: entry block
+
+  let comment = b.comment ? f.style.grey('  // ' + b.comment) : ''
   f.println(indent + f.style.lightyellow(label + ':') + preds + comment)
 
   let valindent = indent + '  '
-  for (let v of b.values) {
+  let v = b.vhead
+  while (v) {
     printval(f, v, valindent)
+    v = v.nextv
   }
 
   switch (b.kind) {
@@ -105,6 +110,10 @@ function printblock(f :IRFmt, b :Block, indent :string) {
     default:
       assert(false, `unexpected block kind ${BlockKind[b.kind]}`)
   }
+
+  if (b.nextb) {
+    printblock(f, b.nextb, indent)
+  }
 }
 
 
@@ -113,15 +122,7 @@ function printfun(f :IRFmt, fn :Fun) {
     f.style.white(fn.toString()) +
     ' (' + fn.type.inputs.join(' ') + ')->' + fn.type.result
   )
-  let first = true
-  for (let b of fn.blocks) {
-    if (first) {
-      first = false
-    } else {
-      f.println('')
-    }
-    printblock(f, b, /*indent*/'  ')
-  }
+  printblock(f, fn.entryb, /*indent*/'  ')
 }
 
 

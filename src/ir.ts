@@ -1,10 +1,12 @@
-import { debuglog as dlog } from './util'
 import { ByteStr, asciiByteStr } from './bytestr'
 import { Pos, SrcFile } from './pos'
 import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
 import { Type, FunType, BasicType, IntType, RegType } from './ast'
+import { debuglog as dlog } from './util'
+
+// const dlog = function(..._ :any[]){} // silence dlog
 
 
 // const byteStr__ = asciiByteStr("_")
@@ -307,11 +309,11 @@ export class Value {
   aux     :Aux|null // auxiliary info for this value. Type depends on op & type.
   args    :Value[]|null = null // arguments of this value
   comment :string = '' // human readable short comment for IR formatting
+  prevv   :Value|null = null // previous value (list link)
+  nextv   :Value|null = null // next value (list link)
 
-  // use count. Each appearance in args and Block.control counts once
-  uses :int = 0
-
-  users = new Set<Value>() // WIP
+  uses :int = 0  // use count. Each appearance in args or b.control counts once
+  users :Value[] = []
 
   constructor(id :int, op :Op, type :Type, b :Block, aux :Aux|null) {
     this.id = id
@@ -336,43 +338,33 @@ export class Value {
       this.args.push(v)
     }
     v.uses++
-    v.users.add(this)
+    v.users.push(this)
   }
 
   // replaceBy replaces all uses of this value with v
   //
   replaceBy(v :Value) {
-    // FIXME link values using a doubly-linked list
-    // instead of an array owned by the block. Will
-    // make these operations a lot easier.
-
     assert(v !== this, 'trying to replace V with V')
 
     for (let user of this.users) {
-      // TODO FIXME linked-list instead of this complex & slow approach
-      if (user !== v && user.args) {
-        for (let i = 0; i < user.args.length; i++) {
-          if (user.args[i] === this) {
-            dlog(`replace ${this} in user ${user} with ${v}`)
-            user.args[i] = v
-            v.users.add(user)
-            v.uses++
-            this.uses--
-          }
+      assert(user !== v,
+        `TODO user==v (v=${v} this=${this}) -- CYCLIC USE!`)
+
+      if (user.args) for (let i = 0; i < user.args.length; i++) {
+        if (user.args[i] === this) {
+          dlog(`replace ${this} in user ${user} with ${v}`)
+          user.args[i] = v
+          v.users.push(user)
+          v.uses++
+          this.uses--
         }
-      } else if (user === v) {
-        assert(false,
-          `TODO user==v (v=${v} this=${this}) -- CYCLIC USE!`)
-        // this.uses--
       }
     }
 
     // Remove self.
     // Note that we don't decrement this.uses since the definition
     // site doesn't count toward "uses".
-    let i = this.b.values.indexOf(this)
-    assert(i != -1, "not in parent block but still references block")
-    this.b.values.splice(i,1)
+    this.b.removeValue(this)
 
     // Note: "uses" does not count for the value's ref to its block, so
     // we don't decrement this.uses here.
@@ -399,15 +391,20 @@ export enum BlockKind {
 export class Block {
   id       :int
   kind     :BlockKind = BlockKind.Invalid // The kind of block
-  succs    :Block[]|null  // Subsequent blocks, if any; depends on kind
-  preds    :Block[] = []  // Predecessors
+  nextb    :Block|null = null  // Logical successor (code generation order)
+  succs    :Block[]|null  // Successor/subsequent blocks (CFG); depends on kind
+  preds    :Block[] = []  // Predecessors (CFG)
   control  :Value|null = null
     // A value that determines how the block is exited. Its value depends
     // on the kind of the block. For instance, a BlockKind.If has a boolean
     // control value and BlockKind.Exit has a memory control value.
 
-  values   :Value[] = [] // three-address code
   f        :Fun // containing function
+
+  // three-address code values
+  vhead    :Value|null = null  // first value (linked list)
+  vtail    :Value|null = null  // last value (linked list)
+
   sealed   :bool = false
     // true if no further predecessors will be added
   comment  :string = '' // human readable short comment for IR formatting
@@ -418,16 +415,49 @@ export class Block {
     this.f = f
   }
 
+  pushValue(v :Value) {
+    let tv = this.vtail
+    if (tv) {
+      tv.nextv = v
+      v.prevv = tv
+    } else {
+      this.vhead = v
+    }
+    this.vtail = v
+  }
+
+  removeValue(v :Value) {
+    dlog(`${this} ${v}`)
+    
+    let prevv = v.prevv
+    let nextv = v.nextv
+    if (prevv) {
+      prevv.nextv = nextv
+    } else {
+      this.vhead = nextv
+    }
+    if (nextv) {
+      nextv.prevv = prevv
+    } else {
+      this.vtail = prevv
+    }
+
+    if (DEBUG) {
+      v.prevv = null
+      v.nextv = null
+    }
+  }
+
   newPhi(t :Type) :Value {
     let v = this.f.newValue(Op.Phi, t, this, null)
-    this.values.push(v)
+    this.pushValue(v)
     return v
   }
 
   // newValue0 return a value with no args
   newValue0(op :Op, t :Type, aux :Aux|null = null) :Value {
     let v = this.f.newValue(op, t, this, aux)
-    this.values.push(v)
+    this.pushValue(v)
     return v
   }
 
@@ -435,8 +465,8 @@ export class Block {
   newValue1(op :Op, t :Type, arg0 :Value, aux :Aux|null = null) :Value {
     let v = this.f.newValue(op, t, this, aux)
     v.args = [arg0]
-    arg0.uses++ ; arg0.users.add(v)
-    this.values.push(v)
+    arg0.uses++ ; arg0.users.push(v)
+    this.pushValue(v)
     return v
   }
 
@@ -451,9 +481,9 @@ export class Block {
   ) :Value {
     let v = this.f.newValue(op, t, this, aux)
     v.args = [arg0, arg1]
-    arg0.uses++ ; arg0.users.add(v)
-    arg1.uses++ ; arg1.users.add(v)
-    this.values.push(v)
+    arg0.uses++ ; arg0.users.push(v)
+    arg1.uses++ ; arg1.users.push(v)
+    this.pushValue(v)
     return v
   }
 
@@ -464,7 +494,8 @@ export class Block {
 
 
 export class Fun {
-  blocks :Block[]  // blocks in generation order
+  entryb :Block    // entry block
+  tailb  :Block    // exit block (current block during construction)
   type   :FunType
   name   :ByteStr
   bid    :int = 0  // block ID allocator
@@ -474,9 +505,8 @@ export class Fun {
     // Op and Type
 
   constructor(type :FunType, name :ByteStr) {
-    this.blocks = [
-      new Block(BlockKind.Plain, 0, this)
-    ]
+    this.entryb = new Block(BlockKind.Plain, 0, this)
+    this.tailb = this.entryb
     this.type = type
     this.name = name
   }
@@ -484,7 +514,8 @@ export class Fun {
   newBlock(k :BlockKind) :Block {
     assert(this.bid < 0xFFFFFFFF, "too many block IDs generated")
     let b = new Block(k, ++this.bid, this)
-    this.blocks.push(b)
+    this.tailb.nextb = b
+    this.tailb = b
     return b
   }
 
@@ -494,14 +525,9 @@ export class Fun {
     return new Value(++this.vid, op, t, b, aux)
   }
 
-  // newPhi(t :Type, b :Block) :Phi {
-  //   assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
-  //   return new Phi(++this.vid, t, b)
-  // }
-
   // constVal returns a constant value for c
-  // c must be smaller than Number.MAX_SAFE_INTEGER
-  // FIXME: work around the Number.MAX_SAFE_INTEGER limitation somehow
+  //
+  // Limitation: c must be smaller than Number.MAX_SAFE_INTEGER
   //
   constVal(t :BasicType, c :int) :Value {
     let f = this
@@ -530,7 +556,7 @@ export class Fun {
     }
 
     // create new const value in function's entry block
-    let v = f.blocks[0].newValue0(op, t, c)
+    let v = f.entryb.newValue0(op, t, c)
 
     // put into cache
     if (!vv) {
@@ -548,11 +574,7 @@ export class Fun {
 
 
 export class Pkg {
-  nI32 :int = 0         // number of 32-bit integer globals
-  nI64 :int = 0         // number of 64-bit integer globals
-  nF32 :int = 0         // number of 32-bit floating-point globals
-  nF64 :int = 0         // number of 64-bit floating-point globals
-  data :Uint8Array      // data  TODO wrap into some simple linear allocator
+  // data :Uint8Array   // data  TODO wrap into some simple linear allocator
   funs :Fun[] = []      // functions
   init :Fun|null = null // init functions (merged into one)
 }
@@ -732,7 +754,7 @@ export class IRBuilder {
 
     let funtype = x.type as FunType
     let f = new Fun(funtype, x.name ? x.name.value : byteStr_anonfun)
-    let entryb = f.blocks[0]
+    let entryb = f.entryb
 
     // initialize locals
     for (let i = 0; i < x.sig.params.length; i++) {
@@ -769,7 +791,7 @@ export class IRBuilder {
     }
 
     assert((r as any).b == null, "function exit block not ended")
-    assert(f.blocks[f.blocks.length - 1].kind == BlockKind.Ret,
+    assert(f.tailb.kind == BlockKind.Ret,
       "last block in function is not BlockKind.Ret")
     r.endFun()
 
@@ -1468,16 +1490,15 @@ export class IRBuilder {
       // same = new Undef() // The phi is unreachable or in the start block
     }
 
-    phi.users.delete(phi) // Remember all users except the phi itself
-    let users = phi.users
+    let users = phi.users  // Remember all users
     dlog(`${phi.b} replace ${phi} with ${same} (aux = ${same.aux})`)
     phi.replaceBy(same) // Reroute all uses of phi to same and remove phi
     assert(phi.uses == 0, `still used even after Value.replaceBy`)
 
     // Try to recursively remove all phi users, which might have become trivial
-    for (let use of users) {
-      if (use.op == Op.Phi) {
-        s.tryRemoveTrivialPhi(use)
+    for (let user of users) {
+      if (user.op == Op.Phi && user !== phi) {
+        s.tryRemoveTrivialPhi(user)
       }
     }
 

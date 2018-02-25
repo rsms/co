@@ -12,6 +12,7 @@ import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 import { IRBuilder, IRFlags } from './ir'
 import * as ir from './ir'
 import { printir, fmtir } from './ir-repr'
+import { VMCodeGenerator } from './codegen-vm'
 
 
 // fs
@@ -179,7 +180,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
 
     // print AST & build IR
     try {
-      for (const file of r.pkg.files) {
+      for (let file of r.pkg.files) {
 
         if (isNodeJsLikeEnv) {
           banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
@@ -203,7 +204,20 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
         }
       }
 
-      return { success: true, diagnostics, ast: r.pkg, ir: irb.pkg }
+      // codegen for VM
+      const codegen = new VMCodeGenerator()
+      codegen.init(diagh)
+      for (let fn of irb.pkg.funs) {
+        codegen.genfun(fn)
+      }
+
+      return {
+        success: true,
+        diagnostics,
+        ast: r.pkg,
+        ir: irb.pkg,
+        // code: codegen.something
+      }
     } catch (error) {
       if (isNodeJsLikeEnv) {
         throw error
