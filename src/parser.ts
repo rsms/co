@@ -593,7 +593,7 @@ export class Parser extends scanner.Scanner {
     // it will use that instead. Whenever we encounter a return statement, we
     // will check the expected return type with the actual return type.
     //
-    const sig = p.funSig(isInitFun ? u_t_nil/*u_t_void*/ : u_t_auto)
+    const sig = p.funSig(isInitFun ? u_t_nil : u_t_auto)
 
     const f = new FunExpr(pos, p.scope, name, sig, isInitFun)
 
@@ -652,21 +652,24 @@ export class Parser extends scanner.Scanner {
       // definitions.
       p.popScope()
 
-      // handle implicit return
       if (f.body instanceof Block) {
-        let lastindex = f.body.list.length - 1
-        let result = f.body.list[lastindex]
-        if (result instanceof Expr) {
-          let rettype = p.types.resolve(result)
-          let ret = new ReturnStmt(result.pos, result.scope, result, rettype)
-          f.body.list[lastindex] = ret
+        if (sig.result === u_t_auto) {
+          // functions with block bodies that lack result type
+          // produces no result.
+          sig.result = u_t_nil
+        }
+
+        // handle implicit return
+        if (!isInitFun && sig.result !== u_t_nil) {
+          let lastindex = f.body.list.length - 1
+          let result = f.body.list[lastindex]
+          if (result instanceof Expr) {
+            let rettype = p.types.resolve(result)
+            let ret = new ReturnStmt(result.pos, result.scope, result, rettype)
+            f.body.list[lastindex] = ret
+          }
         }
       }
-      // else if (!(f.body instanceof ReturnExpr)) {
-      //   let ret = new ReturnExpr(f.body.pos, f.body.scope, f.body)
-      //   ret.type = p.types.resolve(f.body)
-      //   f.body = ret
-      // }
 
       if (sig.result === u_t_auto) {
         // inferred result type
