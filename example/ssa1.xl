@@ -5,84 +5,101 @@
 
 fun isqrt(x, y int) -> x * y
 
-fun dist(x, y int) int {
-  // if x > 3 {
-  //   y++
-  // }
-
-  while x > 0 {
-    x--
-    y--
+fun main {
+  x = 4
+  x = 8
+  y = 5
+  if x > 0 {
+    y = 6
   }
-  y
-
-  // y && 8
-
-  // while x < 10 {
-  //   x++
-  // }
-  // x
-
-  // while x > 0 {
-  //   x--
-  // }
-  // y
-
-  // if x > 3 {
-  //   y++
-  // }
-  // x = isqrt(x, x + y)
-  // return x
-
-  // a = x + y
-  // b = 1 + a * (a / (5 - 8))
-  // b || y
-  // a += 5
-  // b++
-  // a - b // warn: unused operation
-  // return a + b
-  // // a
-
-  // x, y = y, x
-
-  // a = x + y
-  // a, x, y = x, y, a
-
-  // b = x < 0 || y < 0
-  // b = x || y
-  // b = x && y
-  // b
-
-  // isqrt = isqrt2
-
-  // x = y + 2
-
-  // if x > 3 {
-  //   x = 3
-  // } else if x > 2 {
-  //   x = 2
-  // } else if x > 1 {
-  //   x = 1
-  // } else {
-  //   x = 0
-  // }
-
-  // if x > 0 || x < 0 {
-  //   x = x * 2
-  // }
-  // if y > 0 {
-  //   y = y - 3
-  // }
-  // y
-
-  // x = x * x
-  // y = y * y
-  // if x > 0 || x < 0 {
-  //   x = x * 2
-  // }
-  // else {
-  //   x = x / 2
-  // }
-  // x * y
-  isqrt(x + y)
+  // z = x + y
+  z = isqrt(x, y)
 }
+
+// fun dist(x, y int) int {
+//   if x > 3 {
+//     y++
+//   }
+
+//   // x || y
+
+//   // while x > 0 {
+//   //   x--
+//   //   y--
+//   // }
+
+//   y
+
+//   // curl -s -o
+
+
+//   // y && 8
+
+//   // while x < 10 {
+//   //   x++
+//   // }
+//   // x
+
+//   // while x > 0 {
+//   //   x--
+//   // }
+//   // y
+
+//   // if x > 3 {
+//   //   y++
+//   // }
+//   // x = isqrt(x, x + y)
+//   // return x
+
+//   // a = x + y
+//   // b = 1 + a * (a / (5 - 8))
+//   // b || y
+//   // a += 5
+//   // b++
+//   // a - b // warn: unused operation
+//   // return a + b
+//   // // a
+
+//   // x, y = y, x
+
+//   // a = x + y
+//   // a, x, y = x, y, a
+
+//   // b = x < 0 || y < 0
+//   // b = x || y
+//   // b = x && y
+//   // b
+
+//   // isqrt = isqrt2
+
+//   // x = y + 2
+
+//   // if x > 3 {
+//   //   x = 3
+//   // } else if x > 2 {
+//   //   x = 2
+//   // } else if x > 1 {
+//   //   x = 1
+//   // } else {
+//   //   x = 0
+//   // }
+
+//   // if x > 0 || x < 0 {
+//   //   x = x * 2
+//   // }
+//   // if y > 0 {
+//   //   y = y - 3
+//   // }
+//   // y
+
+//   // x = x * x
+//   // y = y * y
+//   // if x > 0 || x < 0 {
+//   //   x = x * 2
+//   // }
+//   // else {
+//   //   x = x / 2
+//   // }
+//   // x * y
+//   isqrt(x + y)
+// }

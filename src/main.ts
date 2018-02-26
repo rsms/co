@@ -12,7 +12,7 @@ import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 import { IRBuilder, IRFlags } from './ir'
 import * as ir from './ir'
 import { printir, fmtir } from './ir-repr'
-import { VMCodeGenerator } from './codegen-vm'
+import { IRVirtualMachine } from './irvm'
 
 
 // fs
@@ -194,21 +194,24 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
         // build IR
         let sfile = file.sfile
         for (let d of file.decls) {
-          let n = irb.addTopLevel(sfile, d)
+          let fn = irb.addTopLevel(sfile, d)
           if (isNodeJsLikeEnv) {
-            if (n) {
+            if (fn) {
               console.log(`\n-----------------------\n`)
-              printir(n)
+              printir(fn)
             }
           }
         }
       }
 
-      // codegen for VM
-      const codegen = new VMCodeGenerator()
-      codegen.init(diagh)
-      for (let fn of irb.pkg.funs) {
-        codegen.genfun(fn)
+      // Run in development VM
+      banner(`vm`)
+      const vm = new IRVirtualMachine(irb.pkg, diagh)
+      let mainfun = irb.pkg.mainFun() || null
+      if (mainfun) {
+        vm.execFun(mainfun)
+      } else {
+        console.warn('no main function found in package -- not executing')
       }
 
       return {

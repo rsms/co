@@ -130,9 +130,12 @@ function printpkg(f :IRFmt, pkg :Pkg) {
   // data :Uint8Array      // data  TODO wrap into some simple linear allocator
   // funs :Fun[] = []      // functions
   // init :Fun|null = null // init functions (merged into one)
-  for (let i = 0; i < pkg.funs.length; i++) {
-    printfun(f, pkg.funs[i])
-    if (i+1 < pkg.funs.length) {
+  let isFirst = true
+  for (let fn of pkg.funs.values()) {
+    printfun(f, fn)
+    if (isFirst) {
+      isFirst = false
+    } else {
       f.println('')
     }
   }
@@ -173,5 +176,5 @@ export function fmtir(v :Fun|Block|Value, options? :Options) :string {
   let str = ''
   let w = (s :string) => { str += s + '\n' }
   printir(v, w, options)
-  return str
+  return str.replace(/\r?\n$/, '')
 }

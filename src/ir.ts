@@ -4,12 +4,11 @@ import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
 import { Type, FunType, BasicType, IntType, RegType } from './ast'
-import { debuglog as dlog } from './util'
+// import { debuglog as dlog } from './util'
+const dlog = function(..._ :any[]){} // silence dlog
 
-// const dlog = function(..._ :any[]){} // silence dlog
 
-
-// const byteStr__ = asciiByteStr("_")
+const byteStr_main = asciiByteStr("main")
 const byteStr_anonfun = asciiByteStr('anonfun')
 
 // operators
@@ -22,6 +21,7 @@ export enum Op {
   LoadParam,   // read function parameter (inside callee)
   PushParam,   // push a parameter for a function call
   Call,        // call a function
+  TailCall,    // call a function just before returning
 
   // constants
   i32Const, // load an integer as i32
@@ -391,9 +391,9 @@ export enum BlockKind {
 export class Block {
   id       :int
   kind     :BlockKind = BlockKind.Invalid // The kind of block
-  nextb    :Block|null = null  // Logical successor (code generation order)
-  succs    :Block[]|null  // Successor/subsequent blocks (CFG); depends on kind
-  preds    :Block[] = []  // Predecessors (CFG)
+  nextb    :Block|null = null    // Logical successor (code generation order)
+  succs    :Block[]|null = null  // Successor/subsequent blocks (CFG)
+  preds    :Block[]|null = null  // Predecessors (CFG)
   control  :Value|null = null
     // A value that determines how the block is exited. Its value depends
     // on the kind of the block. For instance, a BlockKind.If has a boolean
@@ -575,8 +575,19 @@ export class Fun {
 
 export class Pkg {
   // data :Uint8Array   // data  TODO wrap into some simple linear allocator
-  funs :Fun[] = []      // functions
+  funs = new Map<ByteStr,Fun>()   // functions mapped by name
   init :Fun|null = null // init functions (merged into one)
+
+  // mainFun returns the main function of the package, if any
+  //
+  mainFun() :Fun|null {
+    for (let fn of this.funs.values()) {
+      if (byteStr_main.equals(fn.name)) {
+        return fn
+      }
+    }
+    return null
+  }
 }
 
 
@@ -669,12 +680,28 @@ export class IRBuilder {
     const r = this
     let b = r.b
     assert(b != null, "no current block")
+
+    // move block-local vars to long-term definition data
+    // first we fill any holes in defvars
     while (r.defvars.length <= b.id) {
       r.defvars.push(null)
     }
     r.defvars[b.id] = r.vars
+
+    // reset block-local vars
     r.vars = new Map<ByteStr,Value>()
-    ;(r as any).b = null
+
+    if (DEBUG) {
+      // make sure we crash if we try to use b before a new block is started
+      ;(r as any).b = null
+    }
+
+    // [optimization] change last value to TailCall when block returns
+    // and last value is Call
+    if (b.kind == BlockKind.Ret && b.vtail && b.vtail.op == Op.Call) {
+      b.vtail.op = Op.TailCall
+    }
+
     return b
   }
 
@@ -795,7 +822,7 @@ export class IRBuilder {
       "last block in function is not BlockKind.Ret")
     r.endFun()
 
-    r.pkg.funs.push(f)
+    r.pkg.funs.set(f.name, f)
     return f
   }
 
@@ -1017,15 +1044,6 @@ export class IRBuilder {
 
     assert(left instanceof ast.Ident, `${left.constructor.name} not supported`)
     let name = (left as ast.Ident).value
-    
-    // // Issue a "copy" to indicate "store to variable"
-    // let v = s.b.newValue1(Op.Copy, right.type, right)
-    // if (s.flags & IRFlags.Comments) {
-    //   v.comment = name.toString()
-    // }
-    //
-    // // dlog(`assign "${name}" ${left} <— ${right}`)
-    // s.writeVariable(name, v)
 
     // s.addNamedValue(left, right)
     // let t = rhs.type as BasicType
@@ -1033,6 +1051,19 @@ export class IRBuilder {
     // let op = storeop(t)
     // v = r.b.newValue1(op, t, src, dst)
     // return right
+
+    // // Issue a "copy" to indicate "store to variable"
+    // let v = s.b.newValue1(Op.Copy, right.type, right)
+    // if (s.flags & IRFlags.Comments) {
+    //   v.comment = name.toString()
+    // }
+    // s.writeVariable(name, v)
+    // return v
+    // //
+    // // TODO: when we implement register allocation and stack allocation,
+    // // we can remove the "Copy" op and just do the following to track the
+    // // assignment:
+    // //
 
     // instead of issuing an intermediate "store", simply associate variable
     // name with the value on the right-hand side.
@@ -1422,13 +1453,13 @@ export class IRBuilder {
       val = b.newPhi(t)
       s.addIncompletePhi(val, name, b)
 
-    } else if (b.preds.length == 1) {
+    } else if (b.preds && b.preds.length == 1) {
       dlog(`${b} ${name} common case: single predecessor ${b.preds[0]}`)
       // Optimize the common case of one predecessor: No phi needed
       val = s.readVariable(name, t, b.preds[0])
       dlog(`found ${name} : ${val}`)
 
-    } else if (b.preds.length == 0) {
+    } else if (!b.preds || b.preds.length == 0) {
       dlog(`${b} ${name} uncommon case: outside of function`)
       // entry block
       val = s.readGlobal(name)
@@ -1450,9 +1481,10 @@ export class IRBuilder {
   addPhiOperands(name :ByteStr, phi :Value) :Value {
     const s = this
     assert(phi.op == Op.Phi)
+    assert(phi.b.preds, 'phi in block without predecessors')
     // Determine operands from predecessors
     dlog(`${name} phi=${phi}`)
-    for (let pred of phi.b.preds) {
+    for (let pred of phi.b.preds as Block[]) {
       dlog(`  ${pred}`)
       let v = s.readVariable(name, phi.type, pred)
       if (v !== phi) {
