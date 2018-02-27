@@ -4,8 +4,10 @@ import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
 import { Type, FunType, BasicType, IntType, RegType } from './ast'
-// import { debuglog as dlog } from './util'
-const dlog = function(..._ :any[]){} // silence dlog
+import { optdce } from './ir-opt-dce'
+import { optcf_op1, optcf_op2 } from './ir-opt-cf'
+import { debuglog as dlog } from './util'
+// const dlog = function(..._ :any[]){} // silence dlog
 
 
 const byteStr_main = asciiByteStr("main")
@@ -24,10 +26,12 @@ export enum Op {
   TailCall,    // call a function just before returning
 
   // constants
+  const_begin,
   i32Const, // load an integer as i32
   i64Const, // load an integer as i64
   f32Const, // load a number as f32
   f64Const, // load a number as f64
+  const_end,
 
   // memory load
   i32Load,     // load 4 bytes as i32
@@ -304,9 +308,9 @@ export type Aux = ByteStr | Uint8Array | number
 export class Value {
   id      :int   // unique identifier
   op      :Op    // operation that computes this value
-  type    :Type
+  type    :BasicType
   b       :Block // containing block
-  aux     :Aux|null // auxiliary info for this value. Type depends on op & type.
+  aux     :Aux|null // auxiliary info for this value. Type depends on op & type
   args    :Value[]|null = null // arguments of this value
   comment :string = '' // human readable short comment for IR formatting
   prevv   :Value|null = null // previous value (list link)
@@ -315,10 +319,10 @@ export class Value {
   uses :int = 0  // use count. Each appearance in args or b.control counts once
   users :Value[] = []
 
-  constructor(id :int, op :Op, type :Type, b :Block, aux :Aux|null) {
+  constructor(id :int, op :Op, type :BasicType, b :Block, aux :Aux|null) {
     this.id = id
     this.op = op
-    this.type = type
+    this.type = type ; assert(type instanceof BasicType)
     this.b = b
     this.aux = aux
   }
@@ -370,6 +374,13 @@ export class Value {
     // we don't decrement this.uses here.
     if (DEBUG) { ;(this as any).b = null }
   }
+
+  // remove removes this value from its block
+  // returns its previous sibling, if any
+  //
+  remove() :Value|null {
+    return this.b.removeValue(this)
+  }
 }
 
 
@@ -391,7 +402,8 @@ export enum BlockKind {
 export class Block {
   id       :int
   kind     :BlockKind = BlockKind.Invalid // The kind of block
-  nextb    :Block|null = null    // Logical successor (code generation order)
+  parent   :Block|null = null    // Logical parent
+  next     :Block|null = null    // Logical successor (code generation order)
   succs    :Block[]|null = null  // Successor/subsequent blocks (CFG)
   preds    :Block[]|null = null  // Predecessors (CFG)
   control  :Value|null = null
@@ -426,7 +438,10 @@ export class Block {
     this.vtail = v
   }
 
-  removeValue(v :Value) {
+  // removeValue removes v from this block
+  // returns the previous sibling, if any.
+  //
+  removeValue(v :Value) :Value|null {
     dlog(`${this} ${v}`)
     
     let prevv = v.prevv
@@ -446,23 +461,25 @@ export class Block {
       v.prevv = null
       v.nextv = null
     }
+
+    return prevv
   }
 
-  newPhi(t :Type) :Value {
+  newPhi(t :BasicType) :Value {
     let v = this.f.newValue(Op.Phi, t, this, null)
     this.pushValue(v)
     return v
   }
 
   // newValue0 return a value with no args
-  newValue0(op :Op, t :Type, aux :Aux|null = null) :Value {
+  newValue0(op :Op, t :BasicType, aux :Aux|null = null) :Value {
     let v = this.f.newValue(op, t, this, aux)
     this.pushValue(v)
     return v
   }
 
   // newValue1 returns a new value in the block with one argument
-  newValue1(op :Op, t :Type, arg0 :Value, aux :Aux|null = null) :Value {
+  newValue1(op :Op, t :BasicType, arg0 :Value, aux :Aux|null = null) :Value {
     let v = this.f.newValue(op, t, this, aux)
     v.args = [arg0]
     arg0.uses++ ; arg0.users.push(v)
@@ -474,7 +491,7 @@ export class Block {
   // aux values.
   newValue2(
     op :Op,
-    t :Type,
+    t :BasicType,
     arg0 :Value,
     arg1 :Value,
     aux :Aux|null = null,
@@ -514,12 +531,13 @@ export class Fun {
   newBlock(k :BlockKind) :Block {
     assert(this.bid < 0xFFFFFFFF, "too many block IDs generated")
     let b = new Block(k, ++this.bid, this)
-    this.tailb.nextb = b
+    this.tailb.next = b
+    b.parent = this.tailb
     this.tailb = b
     return b
   }
 
-  newValue(op :Op, t :Type, b :Block, aux :Aux|null) :Value {
+  newValue(op :Op, t :BasicType, b :Block, aux :Aux|null) :Value {
     assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
     // TODO we could use a free list and return values when they die
     return new Value(++this.vid, op, t, b, aux)
@@ -592,8 +610,9 @@ export class Pkg {
 
 
 export enum IRFlags {
-  Default = 0,
-  Comments,     // include comments in some values, for formatting
+  Default  = 0,
+  Optimize = 1 << 0,  // apply early inline optimizations
+  Comments = 1 << 1,  // include comments in some values, for formatting
 }
 
 
@@ -706,15 +725,21 @@ export class IRBuilder {
   }
 
   startFun(f :Fun) {
-    const r = this
-    assert(r.f == null, "starting function with existing function")
-    r.f = f
+    const s = this
+    assert(s.f == null, "starting function with existing function")
+    s.f = f
   }
 
   endFun() {
-    const r = this
-    assert(r.f, "ending function without a current function")
-    ;(r as any).f = null
+    const s = this
+    assert(s.f, "ending function without a current function")
+    if (s.flags & IRFlags.Optimize) {
+      // perform early dead-code elimination
+      optdce(s.f)
+    }
+    if (DEBUG) {
+      ;(s as any).f = null
+    }
   }
 
   // nilValue returns a placeholder value.
@@ -787,7 +812,7 @@ export class IRBuilder {
     for (let i = 0; i < x.sig.params.length; i++) {
       let p = x.sig.params[i]
       if (p.name) {
-        let t = funtype.inputs[i] as Type
+        let t = funtype.inputs[i] as BasicType
         let name = p.name.value
         let v = entryb.newValue0(Op.LoadParam, t, i)
         if (r.flags & IRFlags.Comments) {
@@ -1195,7 +1220,8 @@ export class IRBuilder {
     }
 
     if (s instanceof ast.Ident) {
-      return r.readVariable(s.value, s.type as Type, null)
+      assert(s.type instanceof BasicType)
+      return r.readVariable(s.value, s.type as BasicType, null)
     }
 
     if (s instanceof ast.Assignment) {
@@ -1214,9 +1240,27 @@ export class IRBuilder {
         if (s.y) {
           // Basic binary operation
           let right = r.expr(s.y)
+
+          if (r.flags & IRFlags.Optimize) {
+            // attempt to evaluate constant expression
+            let v = optcf_op2(r.b, op, left, right)
+            if (v) {
+              return v
+            }
+          }
+
           return r.b.newValue2(op, t, left, right)
         } else {
           // Basic unary operation
+
+          if (r.flags & IRFlags.Optimize) {
+            // attempt to evaluate constant expression
+            let v = optcf_op1(r.b, op, left)
+            if (v) {
+              return v
+            }
+          }
+
           return r.b.newValue1(op, t, left)
         }
       }
@@ -1345,7 +1389,11 @@ export class IRBuilder {
     }
 
     // push params
-    if (s.flags & IRFlags.Comments && x.fun instanceof ast.Ident && x.fun.ent) {
+    if (
+      s.flags & IRFlags.Comments &&
+      x.fun instanceof ast.Ident &&
+      x.fun.ent
+    ) {
       // include comment with name of parameter, when available
       let fx = x.fun.ent.decl as ast.FunExpr
       let funstr = x.fun.toString() + '/'
@@ -1374,11 +1422,14 @@ export class IRBuilder {
     let ft = funid.type as FunType
     assert(ft, "unresolved function type")
 
-    return s.b.newValue0(Op.Call, ft.result, funid.value)
+    let rt = ft.result as BasicType
+    assert(ft.result instanceof BasicType,
+      `non-basic type ${ft.result.constructor.name} not yet supported`)
+    return s.b.newValue0(Op.Call, rt, funid.value)
   }
 
 
-  readVariable(name :ByteStr, t :Type, b :Block|null) :Value {
+  readVariable(name :ByteStr, t :BasicType, b :Block|null) :Value {
     const s = this
 
     if (!b || b === s.b) {
@@ -1443,7 +1494,7 @@ export class IRBuilder {
   }
 
 
-  readVariableRecursive(name :ByteStr, t :Type, b :Block) :Value {
+  readVariableRecursive(name :ByteStr, t :BasicType, b :Block) :Value {
     const s = this
     let val :Value
 

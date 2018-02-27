@@ -202,7 +202,11 @@ export class IRVirtualMachine {
       }
       m.breakOn = false
       m.retval = retval
-      dlog(`END`)
+      if (b.control) {
+        dlog(`END return value: ${retval} (0x${retval.toString(16)})`)
+      } else {
+        dlog(`END return value: nil`)
+      }
     }
   }
 

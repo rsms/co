@@ -111,8 +111,8 @@ function printblock(f :IRFmt, b :Block, indent :string) {
       assert(false, `unexpected block kind ${BlockKind[b.kind]}`)
   }
 
-  if (b.nextb) {
-    printblock(f, b.nextb, indent)
+  if (b.next) {
+    printblock(f, b.next, indent)
   }
 }
 

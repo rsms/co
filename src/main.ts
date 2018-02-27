@@ -176,7 +176,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
     }
 
     const irb = new IRBuilder()
-    irb.init(diagh, IRFlags.Comments)
+    irb.init(diagh, IRFlags.Comments | IRFlags.Optimize)
 
     // print AST & build IR
     try {

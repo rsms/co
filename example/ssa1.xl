@@ -3,18 +3,48 @@
 // fun c {}
 // fun d { 4 }
 
-fun isqrt(x, y int) -> x * y
+// fun isqrt(x, y int) -> x * y
 
-fun main {
-  x = 4
-  x = 8
-  y = 5
-  if x > 0 {
-    y = 6
-  }
-  // z = x + y
-  z = isqrt(x, y)
+// fun main {
+//   x = 4
+//   y = 5
+//   // z = x + y
+//   x = 8
+//   if x > 0 {
+//     y = 6
+//   }
+//   z = isqrt(x, y)
+// }
+
+// fun foo(x, y int) int {
+//   a = x
+//   b = y * 1
+//   c = b + b
+//   d = a + y
+//   if x > 3 {
+//     d = a + 1
+//     h = a + b
+//   }
+//   d
+// }
+
+fun foo() int {
+  k = 2
+  a = 1 + k
+  a * 9
 }
+
+// fun foo(x, y int) int {
+//   a = x     // alias-only
+//   b = y * 1 // unused
+//   c = b + b + 8 // unused
+//   d = a + y
+//   if x > 30 / 10 {
+//     d = a + 2
+//     h = a + d // unused
+//   }
+//   d
+// }
 
 // fun dist(x, y int) int {
 //   if x > 3 {
