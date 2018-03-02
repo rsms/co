@@ -1,5 +1,5 @@
 import { ByteStr } from './bytestr'
-import { DiagKind, DiagHandler } from './diag'
+import { DiagHandler } from './diag'
 import { Pkg, Fun, Block, BlockKind, Value, Op } from './ir'
 import { fmtir } from './ir-repr'
 import { debuglog as dlog } from './util'
@@ -361,7 +361,7 @@ export class IRVirtualMachine {
         let pred = preds[i]
         if (pred === prevblock) {          
           let args = v.args as Value[]
-          let op = (v.args as Value[])[i].id
+          let op = args[i].id
           let r = f.regget(op)
           f.regset(v.id, r)
           ok = true

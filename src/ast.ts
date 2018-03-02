@@ -495,7 +495,7 @@ export class BasicLit extends LiteralExpr {
       case token.INT_OCT: base = 8; b = b.subarray(2); break
       case token.INT:     base = 10; break
       case token.INT_HEX: base = 16; b = b.subarray(2); break
-      default: return -1
+      default: return NaN
     }
     var v = parseInt(String.fromCharCode.apply(null, b), base)
     return (
@@ -513,17 +513,17 @@ export class BasicLit extends LiteralExpr {
       return -1
     }
 
-    let base = 0, offs = 0
+    let base = 0, start = 0
 
     switch (this.kind) {
-      case token.INT_BIN: base = 2; offs = 2; break
-      case token.INT_OCT: base = 8; offs = 2; break
+      case token.INT_BIN: base = 2; start = 2; break
+      case token.INT_OCT: base = 8; start = 2; break
       case token.INT:     base = 10; break
-      case token.INT_HEX: base = 16; offs = 2; break
+      case token.INT_HEX: base = 16; start = 2; break
       default: return -1
     }
 
-    return strtou(this.value, base, offs)
+    return strtou(this.value, base, start, this.value.length)
   }
 
   parseFloat() :number {

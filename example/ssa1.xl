@@ -28,11 +28,19 @@
 //   d
 // }
 
-fun foo() int {
-  k = 2
-  a = 1 + k
-  a * 9
-}
+// IDEA
+// write number processing
+// as a WAMS module.
+// that way we can get around
+// the mess of JS numbers.
+// I.e. for CF.
+
+// fun constfold() int {
+//   k = 2
+//   a = 1 + k
+//   a * 9
+//   // becomes just "27"
+// }
 
 // fun foo(x, y int) int {
 //   a = x     // alias-only

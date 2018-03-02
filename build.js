@@ -98,7 +98,7 @@ const tsconfig = {
       // noUnusedParameters: true,
       preserveConstEnums: true,
       strictNullChecks: true,
-    })
+    }),
   },
   cacheRoot: pjoin(outdir, '.tscache-' + (debug ? 'g' : 'o')),
   clean:     clean || !debug,

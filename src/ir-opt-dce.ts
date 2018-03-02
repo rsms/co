@@ -1,4 +1,4 @@
-import { Pkg, Fun, Block, BlockKind, Value, Op } from './ir'
+import { Fun, Value } from './ir'
 // import { fmtir } from './ir-repr'
 // import { debuglog as dlog } from './util'
 

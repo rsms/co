@@ -13,6 +13,7 @@ import { IRBuilder, IRFlags } from './ir'
 import * as ir from './ir'
 import { printir, fmtir } from './ir-repr'
 import { IRVirtualMachine } from './irvm'
+import './all_tests'
 
 
 // fs
@@ -263,7 +264,11 @@ function banner(message :string) {
 
 
 if (isNodeJsLikeEnv) {
-  main()
+  if (process.argv.includes('-test-only')) {
+    console.log('only running unit tests')
+  } else {
+    main()
+  }
 } else {
   global['colang'] = {
     main,

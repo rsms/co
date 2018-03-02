@@ -41,7 +41,7 @@ function assert() {
       , msg = arguments[1]
       , cons = arguments[2] || assert
     if (!cond) {
-      if (typeof process != 'undefined') {
+      if (!assert.throws && typeof process != 'undefined') {
         var e, stack = _stackTrace(cons)
         console.error('assertion failure:', msg || cond)
         console.error(_stackTrace(cons))
@@ -49,6 +49,7 @@ function assert() {
       } else {
         var e = new Error('assertion failure: ' + (msg || cond))
         e.name = 'AssertionError'
+        e.stack = _stackTrace(cons)
         throw e
       }
     }
@@ -83,10 +84,29 @@ if (DEBUG) {
     allTests.push({ f, name, srcloc })
   }
   var runAllTests = function runAllTests() { // named for stack trace
-    for (let i = 0; i < allTests.length; ++i) {
-      let t = allTests[i];
-      console.log(`[TEST] ${t.name}${t.srcloc ? ' '+t.srcloc : ''}`);
-      t.f();
+    let throws = assert.throws
+    assert.throws = true
+    try {
+      for (let i = 0; i < allTests.length; ++i) {
+        let t = allTests[i];
+        console.log(`[TEST] ${t.name}${t.srcloc ? ' '+t.srcloc : ''}`);
+        t.f();
+      }
+      assert.throws = throws
+    } catch(err) {
+      assert.throws = throws
+      if (!throws && typeof process != 'undefined') {
+        console.error('assertion failure:', err.message)
+        if (err.stack) {
+          if (err.stack.indexOf('AssertionError:') == 0) {
+            err.stack = err.stack.split(/\n/).slice(1).join('\n')
+          }
+          console.error(err.stack)
+        }
+        exit(3)
+      } else {
+        throw err
+      }
     }
   }
   if (typeof process != 'undefined' && process.nextTick) {

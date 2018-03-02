@@ -5,16 +5,20 @@
 // Note on performance: In benchmarks with nodejs 8.1.3, this is roughly 2.5x
 // faster than parseInt(String.fromCharCode ...)
 //
-export function strtou(b :ArrayLike<byte>, base :int, offs :int = 0) :int {
+export function strtou(
+  b :ArrayLike<byte>,
+  base :int,
+  start :int,
+  end :int,
+) :int {
   assert(base >= 2)
   assert(base <= 36)
 
-  var end = b.length
   var acc = 0 // accumulator
   var any = 0
   var cutoff = Math.floor(Number.MAX_SAFE_INTEGER / base)
   var cutlim = Number.MAX_SAFE_INTEGER % base
-  var i = offs, c = 0
+  var i = start, c = 0
 
   while (i < end) {
     c = b[i]
@@ -56,7 +60,7 @@ TEST("strtou", () => {
       input as any as ArrayLike<number>,
       (v: number, k: number) => input.charCodeAt(k)
     )
-    let output = strtou(buf, base)
+    let output = strtou(buf, base, 0, buf.length)
     assert(
       output === expect,
       `strtou32("${input}", ${base}) => ${output}; expected ${expect}`

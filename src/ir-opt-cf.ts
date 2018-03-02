@@ -2,7 +2,6 @@ import { BasicType, IntType } from './ast'
 import { Block, Value, Op } from './ir'
 import { debuglog as dlog } from './util'
 
-
 export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
   // TODO implement unary operations
   return null
@@ -20,9 +19,11 @@ export function optcf_op2(b :Block, op :Op, x :Value, y :Value) :Value|null {
 
   let t = x.type
 
-  if (x.op !== y.op) {
+  if (x.type !== y.type) {
     // different types -- need to convert
-    dlog(`TODO convert types ${Op[x.op]}/${Op[y.op]}`)
+    // TODO: we should make sure this can't happen by doing any conversions
+    // as straight-line code before operations.
+    dlog(`TODO convert types ${Op[x.op]}/${Op[y.op]} (${x.type}/${y.type})`)
     return null
   }
   
@@ -45,65 +46,62 @@ export function optcf_op2(b :Block, op :Op, x :Value, y :Value) :Value|null {
 }
 
 
+// function eval_op1(op :Op, t :BasicType, x :number) :number {
+//   switch (op) {
+//   case Op.i32Clz: return Math.clz32(x)
+//   }
+//   return NaN
+// }
+
+
 function eval_op2(op :Op, t :BasicType, x :number, y :number) :number {
   //
-  // FIXME TODO use bigint or something like that so we can actually
-  // control the result. With this naïve JS-number-based implementation, we
-  // can easily end up producing numbers larger than int32 or even int64,
-  // which obviously is wrong.
+  // FIXME TODO use bigint or something for 64-bit integers.
   //
-  // Test case 1:
-  //   a, b u32 = 0xFFFFFFFF, 2
-  //   c u32 = a + b
-  //   // c should be 1
-  //
-  // Test case 2:
-  //   a, b i32 = 0x7FFFFFFF, 1
-  //   c i32 = a + b
-  //   // c should be -2147483648 (-0x80000000)
+  // JS tricks for 32-bit integers:
+  //   i32: n | 0
+  //   u32: n >>> 0
+  // Example:
+  //   add_i32 (a :i32, b :i32) :i32 => (a + b) | 0
+  //   add_u32 (a :u32, b :u32) :u32 => (a + b) >>> 0
   //
   switch (op) {
-  case Op.i32Add: return x + y
-  case Op.i32Sub: return x - y
-  case Op.i32Mul: return (
-    (t as IntType).signed ?
-    toi32(Math.round(x * y)) :
-    tou32(Math.round(x * y))
-  )
-  case Op.i32Div_s: return toi32(Math.round(x / y))
-  case Op.i32Div_u: return tou32(Math.round(x / y))
-  case Op.i32Rem_s: return toi32(Math.round(x % y))
-  case Op.i32Rem_u: return tou32(Math.round(x % y))
-  case Op.i32And: return (
-    (t as IntType).signed ?
-    toi32(Math.round(x & y)) :
-    tou32(Math.round(x & y))
-  )
-  case Op.i32Or: return (
-    (t as IntType).signed ?
-    toi32(Math.round(x | y)) :
-    tou32(Math.round(x | y))
-  )
-  case Op.i32Xor: return (
-    (t as IntType).signed ?
-    toi32(Math.round(x ^ y)) :
-    tou32(Math.round(x ^ y))
-  )
-  case Op.i32Shl: return (
-    (t as IntType).signed ?
-    toi32(Math.round(x << y)) :
-    tou32(Math.round(x << y))
-  )
+
+  // addition and subtraction
+  case Op.i32Add: return (t as IntType).signed ?
+    x + y | 0 :
+    x + y >>> 0
+  case Op.i32Sub: return (t as IntType).signed ?
+    x - y | 0 :
+    x - y >>> 0
+
+  // multiplication and division
+  case Op.i32Mul:   return Math.imul(x, y)
+  case Op.i32Div_s: return x / y | 0
+  case Op.i32Div_u: return x / y >>> 0
+  case Op.i32Rem_s: return x % y | 0
+  case Op.i32Rem_u: return x % y >>> 0
+
+  // bitwise operations are automatically cast to int32 by JS
+  case Op.i32And:   return x & y
+  case Op.i32Or:    return x | y
+  case Op.i32Xor:   return x ^ y
+  case Op.i32Shl:   return x << y
+  case Op.i32Shr_u: return x >>> y
+  case Op.i32Shr_s: return x >> y
+
+  // comparison
   case Op.i32Eq:   return x == y ? 1 : 0
   case Op.i32Ne:   return x != y ? 1 : 0
-  case Op.i32Lt_s:
-  case Op.i32Lt_u: return x <  y ? 1 : 0
-  case Op.i32Le_s:
-  case Op.i32Le_u: return x <= y ? 1 : 0
-  case Op.i32Gt_s:
-  case Op.i32Gt_u: return x >  y ? 1 : 0
-  case Op.i32Ge_s:
-  case Op.i32Ge_u: return x >= y ? 1 : 0
+  case Op.i32Lt_s: return x <  y ? 1 : 0
+  case Op.i32Lt_u: return x >>> 0 < y >>> 0 ? 1 : 0
+  case Op.i32Le_s: return x <= y ? 1 : 0
+  case Op.i32Le_u: return x >>> 0 <= y >>> 0 ? 1 : 0
+  case Op.i32Gt_s: return x >  y ? 1 : 0
+  case Op.i32Gt_u: return x >>> 0 > y >>> 0 ? 1 : 0
+  case Op.i32Ge_s: return x >= y ? 1 : 0
+  case Op.i32Ge_u: return x >>> 0 >= y >>> 0 ? 1 : 0
+
   default: {
     dlog(`TODO implement op ${Op[op]}`)
   }
@@ -118,11 +116,11 @@ function eval_op2(op :Op, t :BasicType, x :number, y :number) :number {
 }
 
 
-function toi32(n :number) {
-  return n < 0 ? Math.ceil(n) : Math.floor(n)
-}
+// function toi32(n :number) {
+//   return n < 0 ? Math.ceil(n) : Math.floor(n)
+// }
 
-function tou32(n :number) {
-  n = toi32(n)
-  return n - Math.floor(n / 0x100000000) * 0x100000000
-}
+// function tou32(n :number) {
+//   n = toi32(n)
+//   return n - Math.floor(n / 0x100000000) * 0x100000000
+// }

@@ -21,7 +21,17 @@ declare function panic(msg :any, ...v :any[]) :void
 // message, stack trace and exits the process.
 // assert is removed in release builds
 //
-declare function assert(cond :any, msg? :string, cons? :Function) :void
+// declare function assert(cond :any, msg? :string, cons? :Function) :void
+declare interface AssertFun {
+  (cond :any, msg? :string, cons? :Function) :void
+
+  // throws can be set to true to cause assertions to be thrown as exceptions,
+  // or set to false to cause the process to exit.
+  // Only has an effect in Nodejs-like environments.
+  // false by default.
+  throws :bool
+}
+declare var assert :AssertFun
 
 // repr resturns a detailed string representation of the input
 //
@@ -32,3 +42,25 @@ declare function repr(obj :any) :string
 //
 declare function TEST(name :string, testFn :()=>any) :void
 declare function TEST(testFn :()=>any) :void
+
+declare namespace WebAssembly {
+  interface Export {
+    kind: string
+    name: string
+  }
+  interface Import {
+    module: string
+    kind: string
+    name: string
+  }
+  class Module {
+    constructor (bufferSource: ArrayBuffer|Uint8Array)
+    static customSections(module: Module, sectionName: string): ArrayBuffer[]
+    static exports(module: Module): Export[]
+    static imports(module: Module): Import[]
+  }
+  class Instance {
+    readonly exports: { [name:string]: Function }
+    constructor (module: Module, importObject?: Object)
+  }
+}
