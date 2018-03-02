@@ -67,6 +67,7 @@ function repr(obj) {
 
 function TEST(){}
 if (DEBUG) {
+if (typeof process == 'undefined' || process.argv.indexOf('-no-test') == -1) {
   var allTests = []
   TEST = (name, f) => {
     if (f === undefined) {
@@ -114,4 +115,4 @@ if (DEBUG) {
   } else {
     setTimeout(runAllTests,0)
   }
-}
+}}
