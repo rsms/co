@@ -262,6 +262,9 @@ function banner(message :string) {
   }
 }
 
+if (typeof global.runAllTests == 'function') {
+  global.runAllTests()
+}
 
 if (isNodeJsLikeEnv) {
   if (process.argv.includes('-test-only')) {

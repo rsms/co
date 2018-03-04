@@ -1,4 +1,3 @@
-
 // strtou parses an unsigned integer from a byte array.
 // The maximum value this function can produce is Number.MAX_SAFE_INTEGER
 //
@@ -14,14 +13,14 @@ export function strtou(
   assert(base >= 2)
   assert(base <= 36)
 
-  var acc = 0 // accumulator
-  var any = 0
   var cutoff = Math.floor(Number.MAX_SAFE_INTEGER / base)
   var cutlim = Number.MAX_SAFE_INTEGER % base
+  var acc = 0 // accumulator
   var i = start, c = 0
 
   while (i < end) {
     c = b[i]
+
     if (c >= 0x30 && c <= 0x39) { // 0..9
       c -= 0x30
     } else if (c >= 0x41 && c <= 0x5A) { // A..Z
@@ -36,21 +35,16 @@ export function strtou(
       return -1
     }
 
-    if (any < 0 || acc > cutoff || (acc == cutoff && c > cutlim)) {
-      any = -1
+    if (acc > cutoff || (acc == cutoff && c > cutlim)) {
+      return -1 // overflow
     } else {
-      any = 1
       acc = (acc * base) + c
     }
 
     i++
   }
 
-  return (
-    ( any < 0 ||  // more digits than what fits in `max`
-      any == 0) ? -1 :
-    acc
-  )
+  return acc
 }
 
 
@@ -67,6 +61,7 @@ TEST("strtou", () => {
     )
   }
 
+  t("", 10, 0)
   t("0", 10, 0)
   t("000000000000", 10, 0)
   t("1", 10, 1)

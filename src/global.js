@@ -68,7 +68,7 @@ function repr(obj) {
 function TEST(){}
 if (DEBUG) {
 if (typeof process == 'undefined' || process.argv.indexOf('-no-test') == -1) {
-  var allTests = []
+  var allTests = global.allTests = global.allTests || []
   TEST = (name, f) => {
     if (f === undefined) {
       f = name
@@ -80,24 +80,39 @@ if (typeof process == 'undefined' || process.argv.indexOf('-no-test') == -1) {
       let m = /\s+\(.+\/(src\/.+)\)$/.exec(sf)
       if (m) {
         srcloc = m[1]
+        var p = srcloc.lastIndexOf('/')
+        var srcfile = p != -1 ? srcloc.substr(p + 1) : srcloc
+        p = srcfile.indexOf(':')
+        srcfile = p != -1 ? srcfile.substr(0, p) : srcfile
+        if ((p = srcfile.indexOf('_test.ts')) != -1) {
+          srcfile = p != -1 ? srcfile.substr(0, p) : srcfile
+        } else if ((p = srcfile.indexOf('.ts')) != -1) {
+          srcfile = p != -1 ? srcfile.substr(0, p) : srcfile
+        }
+        name = srcfile + '/' + name
       }
     }
     allTests.push({ f, name, srcloc })
   }
+  var hasRunAllTests = false
   var runAllTests = function runAllTests() { // named for stack trace
+    if (hasRunAllTests) {
+      return
+    }
+    hasRunAllTests = true
     let throws = assert.throws
     assert.throws = true
     try {
       for (let i = 0; i < allTests.length; ++i) {
         let t = allTests[i];
-        console.log(`[TEST] ${t.name}${t.srcloc ? ' '+t.srcloc : ''}`);
+        console.log(`[TEST] ${t.name}${t.srcloc ? '\t'+t.srcloc : ''}`);
         t.f();
       }
       assert.throws = throws
     } catch(err) {
       assert.throws = throws
       if (!throws && typeof process != 'undefined') {
-        console.error('assertion failure:', err.message)
+        console.error(err.message)
         if (err.stack) {
           if (err.stack.indexOf('AssertionError:') == 0) {
             err.stack = err.stack.split(/\n/).slice(1).join('\n')
@@ -110,6 +125,7 @@ if (typeof process == 'undefined' || process.argv.indexOf('-no-test') == -1) {
       }
     }
   }
+  global.runAllTests = runAllTests
   if (typeof process != 'undefined' && process.nextTick) {
     process.nextTick(runAllTests)
   } else {

@@ -57,6 +57,27 @@ export function asciistr(b :ArrayLike<byte>) :string {
 }
 
 
+// asciistrn is just like asciistr but implements efficient parsing of
+// subarrays and only works with Uint8Array
+//
+export var asciistrn :(b :Uint8Array, start :int, end :int)=>string = (
+  typeof Buffer == 'function' ?
+  function asciistrn(b :Uint8Array, start :int, end :int) :string {
+    // make use of faster nodejs Buffer implementation
+    return (new (Buffer as any)(
+      b.buffer,
+      b.byteOffset + start,
+      end - start,
+    )).toString('ascii')
+  } :
+  function asciistrn(b :Uint8Array, start :int, end :int) :string {
+    // fallback implementation
+    b = start > 0 && end < b.length ? b.subarray(start, end) : b
+    return String.fromCharCode.apply(null, b)
+  }
+)
+
+
 // bufcmp compares two arrays of bytes
 //
 export function bufcmp(

@@ -35,12 +35,12 @@
 // the mess of JS numbers.
 // I.e. for CF.
 
-// fun constfold() int {
-//   k = 2
-//   a = 1 + k
-//   a * 9
-//   // becomes just "27"
-// }
+fun constfold() int {
+  k = 2
+  a = 1 + k
+  a * 9
+  // becomes just "27"
+}
 
 // fun foo(x, y int) int {
 //   a = x     // alias-only

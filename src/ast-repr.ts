@@ -217,12 +217,12 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return c.style.purple(c.style.bold(n.name))
   }
 
-  if (n instanceof BasicLit || n instanceof StringLit) {
+  if (n instanceof BasicLit) {
+    return reprt(n.type, newline, c) + c.style.green(n.value.toString())
+  }
+
+  if (n instanceof StringLit) {
     let s = JSON.stringify(utf8.decodeToString(n.value))
-    if (!(n instanceof StringLit)) {
-      // trim "
-      s = s.substr(1, s.length-2)
-    }
     return reprt(n.type, newline, c) + c.style.green(s)
   }
 

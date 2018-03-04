@@ -3,7 +3,7 @@ d  1234
 h  0x9f
 o  0o67;
 b  0b1001
-r  22/7
+// r  22/7
 // 0x3fg7bh  invalid hex number
 
 0. // == 0.0

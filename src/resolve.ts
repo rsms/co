@@ -597,7 +597,11 @@ export class TypeResolver extends ErrorReporter {
       }
 
       // parse the integer; returns -1 on failure
-      x.indexv = index2.parseUInt()
+      // TODO: deal directly with int32 and Int64 values
+      x.indexv = (
+        typeof index2.value == 'number' ? index2.value :
+        index2.value.toFloat64()
+      )
       if (x.indexv == -1) {
         r.syntaxError(`invalid index ${index2}`, ix.pos)
         return
@@ -623,7 +627,7 @@ export class TypeResolver extends ErrorReporter {
         x.index.pos,
         x.index.scope,
         token.INT,
-        asciibuf(x.indexv.toString(10))
+        x.indexv
       )
       bl.type = r.universe.basicLitType(bl)
       x.index = bl
@@ -771,13 +775,18 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
     return null
   }
 
+  //
+  // TODO: rewrite this to deal with Int64 values in x and y
+  //
+
   // interpret x
-  const xs = x.isSignedInt()
-  let xv = xs ? x.parseSInt() : x.parseUInt()
-  // const xneg = x.op == token.SUB
-  if ((!xs && xv < 0) || isNaN(xv)) {
-    return null
-  }
+  // const xs = x.isSignedInt()
+  // let xv = xs ? x.parseSInt() : x.parseUInt()
+  // // const xneg = x.op == token.SUB
+  // if ((!xs && xv < 0) || isNaN(xv)) {
+  //   return null
+  // }
+  const xv = typeof x.value == 'number' ? x.value : x.value.toFloat64()
 
   if (y) {
     // binary operation
@@ -786,12 +795,16 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
     }
 
     // interpret y
-    const ys = y.isSignedInt()
-    let yv = ys ? y.parseSInt() : y.parseUInt()
-    // const yneg = y.op == token.SUB
-    if ((!ys && yv < 0) || isNaN(yv)) {
-      return null
-    }
+    // const ys = y.isSignedInt()
+    // let yv = ys ? y.parseSInt() : y.parseUInt()
+    // // const yneg = y.op == token.SUB
+    // if ((!ys && yv < 0) || isNaN(yv)) {
+    //   return null
+    // }
+    const yv = (
+      typeof y.value == 'number' ? y.value :
+      y.value.toFloat64()
+    )
 
     switch (op) {
       case token.ADD: return new IntEvalConst(xv + yv)
@@ -811,8 +824,8 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
     switch (op) {
       case token.ADD: return new IntEvalConst(+xv)
       case token.SUB: return new IntEvalConst(-xv)
-      case token.INC: return new IntEvalConst(++xv)
-      case token.DEC: return new IntEvalConst(--xv)
+      case token.INC: return new IntEvalConst(xv + 1)
+      case token.DEC: return new IntEvalConst(xv + 1)
       default:
         debuglog(`TODO eval unary op (${token[op]} ${x})`)
     }

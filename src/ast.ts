@@ -3,6 +3,7 @@ import { ByteStr } from './bytestr'
 import { token, tokstr } from './token'
 import * as utf8 from './utf8'
 import { strtou } from './strtou'
+import { Int64 } from './int64'
 
 // ——————————————————————————————————————————————————————————————————
 // AST type hierarchy
@@ -444,21 +445,29 @@ export class RestExpr extends Expr {
 
 export class LiteralExpr extends Expr {}
 
+
 export class BasicLit extends LiteralExpr {
+  //
+  // kind = INT | INT_BIN | INT_OCT | INT_HEX | FLOAT | RATIO | CHAR
+  // op = ADD | SUB
+  //
   type :BasicType
+
   constructor(pos :Pos, scope :Scope,
-    public kind  :token, // kind
-    public value :Uint8Array,
+    public kind  :token,
+    public value :Int64|number,
     public op    :token = token.ILLEGAL,
       // op: potential negation operation, e.g. "-3"
   ) {
     super(pos, scope)
+    assert(token.literal_basic_beg < kind && kind < token.literal_basic_end)
+    assert(op == token.ILLEGAL || op == token.ADD || op == token.SUB)
   }
 
   toString() :string {
     return (
       (this.op != token.ILLEGAL ? tokstr(this.op) : '') +
-      utf8.decodeToString(this.value)
+      this.value
     )
   }
 
@@ -485,57 +494,57 @@ export class BasicLit extends LiteralExpr {
     )
   }
 
-  // parseInt parses a signed value up to Number.MAX_SAFE_INTEGER
-  // Returns NaN on failure.
-  //
-  parseSInt() :int {
-    let base = 0, b = this.value
-    switch (this.kind) {
-      case token.INT_BIN: base = 2; b = b.subarray(2); break
-      case token.INT_OCT: base = 8; b = b.subarray(2); break
-      case token.INT:     base = 10; break
-      case token.INT_HEX: base = 16; b = b.subarray(2); break
-      default: return NaN
-    }
-    var v = parseInt(String.fromCharCode.apply(null, b), base)
-    return (
-      v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER ? NaN :
-      v
-    )
-  }
+  // // parseInt parses a signed value up to Number.MAX_SAFE_INTEGER
+  // // Returns NaN on failure.
+  // //
+  // parseSInt() :int {
+  //   let base = 0, b = this.value
+  //   switch (this.kind) {
+  //     case token.INT_BIN: base = 2; b = b.subarray(2); break
+  //     case token.INT_OCT: base = 8; b = b.subarray(2); break
+  //     case token.INT:     base = 10; break
+  //     case token.INT_HEX: base = 16; b = b.subarray(2); break
+  //     default: return NaN
+  //   }
+  //   var v = parseInt(String.fromCharCode.apply(null, b), base)
+  //   return (
+  //     v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER ? NaN :
+  //     v
+  //   )
+  // }
 
-  // parseUInt parses an unsigned value up to Number.MAX_SAFE_INTEGER
-  // -1 is returned to indicate failure.
-  //
-  parseUInt() :int {
-    assert(this.isInt(), "calling parseUInt on a non-integer")
-    if (this.op == token.SUB) {
-      return -1
-    }
+  // // parseUInt parses an unsigned value up to Number.MAX_SAFE_INTEGER
+  // // -1 is returned to indicate failure.
+  // //
+  // parseUInt() :int {
+  //   assert(this.isInt(), "calling parseUInt on a non-integer")
+  //   if (this.op == token.SUB) {
+  //     return -1
+  //   }
 
-    let base = 0, start = 0
+  //   let base = 0, start = 0
 
-    switch (this.kind) {
-      case token.INT_BIN: base = 2; start = 2; break
-      case token.INT_OCT: base = 8; start = 2; break
-      case token.INT:     base = 10; break
-      case token.INT_HEX: base = 16; start = 2; break
-      default: return -1
-    }
+  //   switch (this.kind) {
+  //     case token.INT_BIN: base = 2; start = 2; break
+  //     case token.INT_OCT: base = 8; start = 2; break
+  //     case token.INT:     base = 10; break
+  //     case token.INT_HEX: base = 16; start = 2; break
+  //     default: return -1
+  //   }
 
-    return strtou(this.value, base, start, this.value.length)
-  }
+  //   return strtou(this.value, base, start, this.value.length)
+  // }
 
-  parseFloat() :number {
-    assert(this.isFloat(), "called parseFloat on non-float")
-    let str = String.fromCharCode.apply(null, this.value)
-    let c = parseFloat(str)
-    assert(!isNaN(c), `failed to parse "${str}"`)
-    if (!isNaN(c) && this.op == token.SUB) {
-      c = -c
-    }
-    return c
-  }
+  // parseFloat() :number {
+  //   assert(this.isFloat(), "called parseFloat on non-float")
+  //   let str = String.fromCharCode.apply(null, this.value)
+  //   let c = parseFloat(str)
+  //   assert(!isNaN(c), `failed to parse "${str}"`)
+  //   if (!isNaN(c) && this.op == token.SUB) {
+  //     c = -c
+  //   }
+  //   return c
+  // }
 }
 
 // export const ImplicitOne = new BasicLit(
@@ -704,8 +713,8 @@ export class UnresolvedType extends Type {
   }
 }
 
-// register storage type needed for a basic type
-export enum RegType {
+// storage type needed for a basic type
+export enum MemType {
   i32,
   i64,
   f32,
@@ -715,8 +724,8 @@ export enum RegType {
 export class BasicType extends Type {
   constructor(
     public bitsize :int,
-    public regtype :RegType,
-    public name    :string, // only used for debugging and printing
+    public memtype :MemType,
+    public name :string, // only used for debugging and printing
   ) {
     super(0, nilScope)
   }
@@ -734,33 +743,33 @@ export class BasicType extends Type {
 
 
 export class IntType extends BasicType {
-  constructor(bitsize :int, regtype :RegType, name :string,
+  constructor(bitsize :int, memtype :MemType, name :string,
     public signed :bool, // true if type is signed
   ) {
-    super(bitsize, regtype, name)
+    super(bitsize, memtype, name)
   }
 }
 
 // basic type constants
 const uintz :number = 32 // TODO: target-dependant
-const uintregtype = uintz <= 32 ? RegType.i32 : RegType.i64
+const uintmemtype = uintz <= 32 ? MemType.i32 : MemType.i64
 
 export const
-  u_t_auto = new BasicType(0, RegType.i32, 'auto')  // special
-, u_t_nil  = new BasicType(0, RegType.i32, 'nil')   // special; aka "void"
-, u_t_bool = new BasicType(1, RegType.i32, 'bool')
-, u_t_u8  = new IntType(8,  RegType.i32, 'u8', false)
-, u_t_i8  = new IntType(7,  RegType.i32, 'i8', true)
-, u_t_u16 = new IntType(16, RegType.i32, 'u16', false)
-, u_t_i16 = new IntType(15, RegType.i32, 'i16', true)
-, u_t_u32 = new IntType(32, RegType.i32, 'u32', false)
-, u_t_i32 = new IntType(31, RegType.i32, 'i32', true)
-, u_t_u64 = new IntType(64, RegType.i64, 'u64', false)
-, u_t_i64 = new IntType(63, RegType.i64, 'i64', true)
-, u_t_f32 = new BasicType(32, RegType.f32, 'f32')
-, u_t_f64 = new BasicType(64, RegType.f64, 'f64')
-, u_t_uint = new IntType(uintz,  uintregtype, 'uint', false)
-, u_t_int  = new IntType(uintz-1,uintregtype, 'int', true)
+  u_t_auto = new BasicType(0,    MemType.i32, 'auto') // special
+, u_t_nil  = new BasicType(0,    MemType.i32, 'nil') // special, aka "void"
+, u_t_bool = new BasicType(1,    MemType.i32, 'bool')
+, u_t_u8  = new IntType(8,       MemType.i32, 'u8', false)
+, u_t_i8  = new IntType(7,       MemType.i32, 'i8', true)
+, u_t_u16 = new IntType(16,      MemType.i32, 'u16', false)
+, u_t_i16 = new IntType(15,      MemType.i32, 'i16', true)
+, u_t_u32 = new IntType(32,      MemType.i32, 'u32', false)
+, u_t_i32 = new IntType(31,      MemType.i32, 'i32', true)
+, u_t_u64 = new IntType(64,      MemType.i64, 'u64', false)
+, u_t_i64 = new IntType(63,      MemType.i64, 'i64', true)
+, u_t_f32 = new BasicType(32,    MemType.f32, 'f32')
+, u_t_f64 = new BasicType(64,    MemType.f64, 'f64')
+, u_t_uint = new IntType(uintz,  uintmemtype, 'uint', false)
+, u_t_int  = new IntType(uintz-1,uintmemtype, 'int', true)
 
 
 export class StrType extends Type {

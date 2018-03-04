@@ -22,7 +22,7 @@ export function dir(path :string) :string {
   )
 }
 
-TEST("path.dir", () => {
+TEST("dir", () => {
   assert(dir("/a/b/c") == "/a/b")
   assert(dir("a/b/c") == "a/b")
   assert(dir("a/b") == "a")
@@ -166,7 +166,7 @@ export function clean(path :string) :string {
   return out.toString()
 }
 
-TEST("path.clean", () => {
+TEST("clean", () => {
   function t(input :string, expect :string) {
     const result = clean(input)
     assert(result == expect,
@@ -192,7 +192,7 @@ export function isAbs(path :string) :bool {
   return path.charCodeAt(0) == SL
 }
 
-TEST("path.isAbs", () => {
+TEST("isAbs", () => {
   assert(isAbs("/foo/bar") === true)
   assert(isAbs("foo/bar") === false)
 })
@@ -210,7 +210,7 @@ export function join(...paths :string[]) :string {
   return s
 }
 
-TEST("path.join", () => {
+TEST("join", () => {
   function t(inputs :string[], expect :string) {
     const result = join.apply(null, inputs)
     assert(result == expect,

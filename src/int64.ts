@@ -467,13 +467,12 @@ function fromByteStr0(
   for (let i = start; i < end; i += 8) {
     let size = Math.min(8, end - i)
     let value = strtou(buf, radix, i, i + size)
-    // let value = parseInt(str.substring(i, i + size), radix)
     if (size < 8) {
       let power = I.fromFloat64(Math.pow(radix, size))
       result = result.mul(power).add(I.fromFloat64(value))
     } else {
       result = result.mul(radixToPower)
-      result = result.add(I.fromFloat64(value));
+      result = result.add(I.fromFloat64(value))
     }
   }
 

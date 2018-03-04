@@ -1,64 +1,9 @@
 import { SInt64, UInt64, Int64 } from './int64'
-import { asciibuf /*asciistr*/ } from './util'
-
-function assertEq(actual :any, expected :any, context? :string) {
-  assert(
-    actual === expected,
-    `expected ${JSON.stringify(expected)} `+
-    `but instead got ${JSON.stringify(actual)}` +
-    (context ? ' — ' + context : '')
-  )
-}
-
-function assertEqList(
-  actualList :ArrayLike<any>,
-  expectedList :ArrayLike<any>,
-) {
-  if (actualList.length !== expectedList.length) {
-    assert(false,
-      `expected list of length ${expectedList.length} ` +
-      `but got ${actualList.length}`
-    )
-  }
-  for (let i = 0; i < expectedList.length; i++) {
-    assert(actualList[i] === expectedList[i],
-       `expected list item #${i} to be ${JSON.stringify(expectedList[i])} ` +
-       `but got ${JSON.stringify(actualList[i])}`
-    )
-  }
-}
-
-function assertEqObj(
-  actualObj :{[k:string]:any},
-  expectedObj :{[k:string]:any},
-) {
-  let actualKeys = Object.keys(actualObj)
-  let expectedKeys = Object.keys(expectedObj)
-  if (actualKeys.length !== expectedKeys.length) {
-    assert(false,
-      `expected object with ${expectedKeys.length} properties ` +
-      `but got one with ${actualKeys.length} properties`
-    )
-  }
-  for (let i = 0; i < expectedKeys.length; i++) {
-    let k = expectedKeys[i]
-    assert(actualObj[k] === expectedObj[k],
-       `expected property ${k} to be ${JSON.stringify(expectedObj[k])} ` +
-       `but got ${JSON.stringify(actualObj[k])}`
-    )
-  }
-}
-
-function assertThrows(fn :()=>any) {
-  try {
-    fn()
-    assert(false, 'expected exception to be thrown')
-  } catch (e) {
-  }
-}
+import { asciibuf } from './util'
+import { assertEq, assertEqList, assertEqObj, assertThrows } from './test'
 
 
-TEST('Int64/basic', () => {
+TEST('basic', () => {
   let s, u
   
   s = new SInt64(0xFFFFFFFF | 0, 0x7FFFFFFF | 0)
@@ -74,7 +19,7 @@ TEST('Int64/basic', () => {
 })
 
 
-TEST('Int64/constants', () => {
+TEST('constants', () => {
   let s, u
   
   s = new SInt64(0xFFFFFFFF | 0, 0x7FFFFFFF | 0)
@@ -109,7 +54,7 @@ TEST('Int64/constants', () => {
 })
 
 
-TEST('Int64/toString', () => {
+TEST('toString', () => {
   let s, u
 
   s = SInt64.MAX
@@ -132,7 +77,7 @@ TEST('Int64/toString', () => {
 })
 
 
-TEST('Int64/fromStr', () => {
+TEST('fromStr', () => {
   function t(I :any, s :string, radix :int) {
     assertEq(I.fromStr(s, radix).toString(radix), s)
   }
@@ -155,7 +100,7 @@ TEST('Int64/fromStr', () => {
 })
 
 
-TEST('Int64/fromByteStr', () => {
+TEST('fromByteStr', () => {
   function t(I :any, str :string, radix :int) {
     let inbuf = asciibuf(str)
     let u = I.fromByteStr(inbuf, radix)
@@ -180,7 +125,7 @@ TEST('Int64/fromByteStr', () => {
 })
 
 
-TEST('Int64/fromByteStr0', () => {
+TEST('fromByteStr0', () => {
   function t(I :any, str :string, radix :int) {
     let expectstr = str
     if (str[0] == '-') {
@@ -209,7 +154,7 @@ TEST('Int64/fromByteStr0', () => {
 })
 
 
-TEST('Int64/toBytes', () => {
+TEST('toBytes', () => {
   let s
   s = new SInt64(0x01234567, 0x12345678)
   assertEqList(
@@ -225,7 +170,7 @@ TEST('Int64/toBytes', () => {
 })
 
 
-TEST('Int64/fromBytes', () => {
+TEST('fromBytes', () => {
   let s, u
   s = new SInt64(0x01234567, 0x12345678)
   u = new UInt64(0x01234567, 0x12345678)
@@ -247,7 +192,7 @@ TEST('Int64/fromBytes', () => {
 })
 
 
-TEST('Int64/fromInt32', () => {
+TEST('fromInt32', () => {
   let s, u
 
   s = SInt64.fromInt32(0x7FFFFFFF)
@@ -288,7 +233,7 @@ TEST('Int64/fromInt32', () => {
 })
 
 
-TEST('Int64/fromFloat64', () => {
+TEST('fromFloat64', () => {
   let s, u
 
   s = SInt64.fromFloat64(0x7FFFFFFF)
@@ -338,7 +283,7 @@ TEST('Int64/fromFloat64', () => {
 })
 
 
-TEST('Int64/sign-conv', () => {
+TEST('sign-conv', () => {
   let s, u
 
   s = SInt64.fromFloat64(-1)
@@ -355,7 +300,7 @@ TEST('Int64/sign-conv', () => {
 })
 
 
-TEST('Int64/sub-max-signed', () => {
+TEST('sub-max-signed', () => {
   let s, u
   //
   // UINT64_MAX - INT64_MAX - 1 == INT64_MAX
@@ -366,7 +311,7 @@ TEST('Int64/sub-max-signed', () => {
 })
 
 
-TEST('Int64/sub-max-unsigned', () => {
+TEST('sub-max-unsigned', () => {
   let s, u
   //
   // UINT64_MAX - UINT64_MAX == 0
@@ -379,7 +324,7 @@ TEST('Int64/sub-max-unsigned', () => {
 })
 
 
-TEST('Int64/sub-zero-cross-sign', () => {
+TEST('sub-zero-cross-sign', () => {
   let s, u
 
   // UINT64_MAX - uint64(1) == 0xFFFFFFFFFFFFFFFe
@@ -412,7 +357,7 @@ let js_mod_s = (SInt64.prototype as any)._js_mod as (x:Int64)=>SInt64
 let js_mod_u = (UInt64.prototype as any)._js_mod as (x:Int64)=>UInt64
 
 
-TEST('Int64/div-max', () => {
+TEST('div-max', () => {
   let s, u
 
   // UINT64_MAX / INT64_MAX == 2
@@ -425,7 +370,7 @@ TEST('Int64/div-max', () => {
   assertEq(u.toString(), '1')
 })
 
-if (js_div_u) TEST('Int64/div-max/js', () => {
+if (js_div_u) TEST('div-max/js', () => {
   let s, u
 
   // UINT64_MAX / INT64_MAX == 2
@@ -439,7 +384,7 @@ if (js_div_u) TEST('Int64/div-max/js', () => {
 })
 
 
-TEST('Int64/div-neg', () => {
+TEST('div-neg', () => {
   let s, u
 
   // uint64(int64(-1)) == UINT64_MAX - 1 == 0xFFFFFFFFFFFFFFFe
@@ -456,7 +401,7 @@ TEST('Int64/div-neg', () => {
   assertEq(s.toString(), SInt64.MIN.toString())
 })
 
-if (js_div_u) TEST('Int64/div-neg/js', () => {
+if (js_div_u) TEST('div-neg/js', () => {
   let s, u
 
   s = SInt64.fromInt32(-2)
@@ -472,7 +417,7 @@ if (js_div_u) TEST('Int64/div-neg/js', () => {
 })
 
 
-TEST('Int64/div-unsigned', () => {
+TEST('div-unsigned', () => {
   // make sure division with unsigned numbers yield unsigned results
   let a = new UInt64(0, 8)
   let b = UInt64.fromFloat64(2656901066)
@@ -481,7 +426,7 @@ TEST('Int64/div-unsigned', () => {
   assertEq(x.constructor, UInt64)
 })
 
-if (js_div_u) TEST('Int64/div-unsigned/js', () => {
+if (js_div_u) TEST('div-unsigned/js', () => {
   // make sure division with unsigned numbers yield unsigned results
   let a = new UInt64(0, 8)
   let b = UInt64.fromFloat64(2656901066)
@@ -491,7 +436,7 @@ if (js_div_u) TEST('Int64/div-unsigned/js', () => {
 })
 
 
-TEST('Int64/msb-unsigned', () => {
+TEST('msb-unsigned', () => {
   // most significant bit
   // 1 << 63 == 0x8000000000000000
   let u = UInt64.ONE.shiftLeft(63)
@@ -1785,7 +1730,7 @@ var TEST_STRINGS = [
 function setUp() {
 }
 
-TEST('Int64/ToFromBits', () => {
+TEST('ToFromBits', () => {
   for (var i = 0; i < TEST_BITS.length; i += 2) {
     let val = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     assertEq(val._low, TEST_BITS[i + 1])
@@ -1793,14 +1738,14 @@ TEST('Int64/ToFromBits', () => {
   }
 })
 
-TEST('Int64/ToFromInt32', () => {
+TEST('ToFromInt32', () => {
   for (var i = 0; i < TEST_BITS.length; i += 1) {
     let val = SInt64.fromInt32(TEST_BITS[i])
     assertEq(val.toInt32(), TEST_BITS[i])
   }
 })
 
-TEST('Int64/ToFromFloat64', () => {
+TEST('ToFromFloat64', () => {
   for (var i = 0; i < TEST_BITS.length; i += 2) {
     let num = TEST_BITS[i] * Math.pow(2, 32) + TEST_BITS[i + 1] >= 0 ?
         TEST_BITS[i + 1] :
@@ -1814,7 +1759,7 @@ TEST('Int64/ToFromFloat64', () => {
   assertEq(SInt64.fromFloat64(-Infinity), SInt64.MIN)
 })
 
-TEST('Int64/FromDecimalCachedValues', () => {
+TEST('FromDecimalCachedValues', () => {
   // Make sure we are not leaking longs by incorrect caching of decimal
   // numbers and failing-fast in debug mode.
   assertThrows(() => SInt64.fromInt32(0.1))
@@ -1822,28 +1767,28 @@ TEST('Int64/FromDecimalCachedValues', () => {
   assertThrows(() => SInt64.fromInt32(1.1))
 })
 
-TEST('Int64/egz', () => {
+TEST('egz', () => {
   for (var i = 0; i < TEST_BITS.length; i += 2) {
     let val = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     assertEq(val.eqz(), TEST_BITS[i] == 0 && TEST_BITS[i + 1] == 0)
   }
 })
 
-TEST('Int64/isNeg', () => {
+TEST('isNeg', () => {
   for (var i = 0; i < TEST_BITS.length; i += 2) {
     let val = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     assertEq(val.isNeg(), (TEST_BITS[i] >> 31) != 0)
   }
 })
 
-TEST('Int64/isOdd', () => {
+TEST('isOdd', () => {
   for (var i = 0; i < TEST_BITS.length; i += 2) {
     let val = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     assertEq(val.isOdd(), (TEST_BITS[i + 1] & 1) != 0)
   }
 })
 
-TEST('Int64/comparisons', () => {
+TEST('comparisons', () => {
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     for (let j = 0; j < TEST_BITS.length; j += 2) {
@@ -1857,7 +1802,7 @@ TEST('Int64/comparisons', () => {
   }
 })
 
-TEST('Int64/bitOperations', () => {
+TEST('bitOperations', () => {
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let actx = `bitOperations[i=${i}]`
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
@@ -1936,7 +1881,7 @@ TEST('Int64/bitOperations', () => {
   }
 })
 
-TEST('Int64/neg', () => {
+TEST('neg', () => {
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     if (TEST_BITS[i + 1] == 0) {
@@ -1949,7 +1894,7 @@ TEST('Int64/neg', () => {
   }
 })
 
-TEST('Int64/add', () => {
+TEST('add', () => {
   let count = 0
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
@@ -1962,7 +1907,7 @@ TEST('Int64/add', () => {
   }
 })
 
-TEST('Int64/sub', () => {
+TEST('sub', () => {
   let count = 0
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
@@ -1975,7 +1920,7 @@ TEST('Int64/sub', () => {
   }
 })
 
-TEST('Int64/mul', () => {
+TEST('mul', () => {
   let count = 0;
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
@@ -1988,7 +1933,7 @@ TEST('Int64/mul', () => {
   }
 })
 
-if (js_mul) TEST('Int64/mul/js', () => {
+if (js_mul) TEST('mul/js', () => {
   let count = 0;
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
@@ -2001,7 +1946,7 @@ if (js_mul) TEST('Int64/mul/js', () => {
   }
 })
 
-TEST('Int64/div-mod', () => {
+TEST('div-mod', () => {
   let countPerDivModCall = 0
   for (let j = 0; j < TEST_BITS.length; j += 2) {
     let vj = new SInt64(TEST_BITS[j + 1], TEST_BITS[j])
@@ -2047,7 +1992,7 @@ TEST('Int64/div-mod', () => {
 })
 
 
-TEST('Int64/ToFromString', () => {
+TEST('ToFromString', () => {
   for (let i = 0; i < TEST_BITS.length; i += 2) {
     let vi = new SInt64(TEST_BITS[i + 1], TEST_BITS[i])
     let str = vi.toString(10)

@@ -3,7 +3,7 @@ import { Pos, SrcFile } from './pos'
 import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
-import { FunType, BasicType, IntType, RegType } from './ast'
+import { FunType, BasicType, IntType, MemType } from './ast'
 import { optdce } from './ir-opt-dce'
 import { optcf_op1, optcf_op2 } from './ir-opt-cf'
 import { debuglog as dlog } from './util'
@@ -160,90 +160,90 @@ export enum Op {
 //
 function getop(tok :token, t :BasicType) :Op {
   switch (tok) {
-  case token.EQL: switch (t.regtype) { // ==
-    case RegType.i32: return Op.i32Eq
-    case RegType.i64: return Op.i64Eq
-    case RegType.f32: return Op.f32Eq
-    case RegType.f64: return Op.f64Eq
+  case token.EQL: switch (t.memtype) { // ==
+    case MemType.i32: return Op.i32Eq
+    case MemType.i64: return Op.i64Eq
+    case MemType.f32: return Op.f32Eq
+    case MemType.f64: return Op.f64Eq
   }; break
-  case token.NEQ: switch (t.regtype) { // !=
-    case RegType.i32: return Op.i32Ne
-    case RegType.i64: return Op.i64Ne
-    case RegType.f32: return Op.f32Ne
-    case RegType.f64: return Op.f64Ne
+  case token.NEQ: switch (t.memtype) { // !=
+    case MemType.i32: return Op.i32Ne
+    case MemType.i64: return Op.i64Ne
+    case MemType.f32: return Op.f32Ne
+    case MemType.f64: return Op.f64Ne
   }; break
-  case token.LSS: switch (t.regtype) { // <
-    case RegType.i32: return (t as IntType).signed ? Op.i32Lt_s : Op.i32Lt_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Lt_s : Op.i64Lt_u
-    case RegType.f32: return Op.f32Lt
-    case RegType.f64: return Op.f64Lt
+  case token.LSS: switch (t.memtype) { // <
+    case MemType.i32: return (t as IntType).signed ? Op.i32Lt_s : Op.i32Lt_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Lt_s : Op.i64Lt_u
+    case MemType.f32: return Op.f32Lt
+    case MemType.f64: return Op.f64Lt
   }; break
-  case token.LEQ: switch (t.regtype) { // <=
-    case RegType.i32: return (t as IntType).signed ? Op.i32Le_s : Op.i32Le_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Le_s : Op.i64Le_u
-    case RegType.f32: return Op.f32Le
-    case RegType.f64: return Op.f64Le
+  case token.LEQ: switch (t.memtype) { // <=
+    case MemType.i32: return (t as IntType).signed ? Op.i32Le_s : Op.i32Le_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Le_s : Op.i64Le_u
+    case MemType.f32: return Op.f32Le
+    case MemType.f64: return Op.f64Le
   }; break
-  case token.GTR: switch (t.regtype) { // >
-    case RegType.i32: return (t as IntType).signed ? Op.i32Gt_s : Op.i32Gt_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Gt_s : Op.i64Gt_u
-    case RegType.f32: return Op.f32Gt
-    case RegType.f64: return Op.f64Gt
+  case token.GTR: switch (t.memtype) { // >
+    case MemType.i32: return (t as IntType).signed ? Op.i32Gt_s : Op.i32Gt_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Gt_s : Op.i64Gt_u
+    case MemType.f32: return Op.f32Gt
+    case MemType.f64: return Op.f64Gt
   }; break
-  case token.GEQ: switch (t.regtype) { // >=
-    case RegType.i32: return (t as IntType).signed ? Op.i32Ge_s : Op.i32Ge_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Ge_s : Op.i64Ge_u
-    case RegType.f32: return Op.f32Ge
-    case RegType.f64: return Op.f64Ge
+  case token.GEQ: switch (t.memtype) { // >=
+    case MemType.i32: return (t as IntType).signed ? Op.i32Ge_s : Op.i32Ge_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Ge_s : Op.i64Ge_u
+    case MemType.f32: return Op.f32Ge
+    case MemType.f64: return Op.f64Ge
   }; break
-  case token.ADD: switch (t.regtype) { // +
-    case RegType.i32: return Op.i32Add
-    case RegType.i64: return Op.i64Add
-    case RegType.f32: return Op.f32Add
-    case RegType.f64: return Op.f64Add
+  case token.ADD: switch (t.memtype) { // +
+    case MemType.i32: return Op.i32Add
+    case MemType.i64: return Op.i64Add
+    case MemType.f32: return Op.f32Add
+    case MemType.f64: return Op.f64Add
   }; break
-  case token.SUB: switch (t.regtype) { // -
-    case RegType.i32: return Op.i32Sub
-    case RegType.i64: return Op.i64Sub
-    case RegType.f32: return Op.f32Sub
-    case RegType.f64: return Op.f64Sub
+  case token.SUB: switch (t.memtype) { // -
+    case MemType.i32: return Op.i32Sub
+    case MemType.i64: return Op.i64Sub
+    case MemType.f32: return Op.f32Sub
+    case MemType.f64: return Op.f64Sub
   }; break
-  case token.MUL: switch (t.regtype) { // *
-    case RegType.i32: return Op.i32Mul
-    case RegType.i64: return Op.i64Mul
-    case RegType.f32: return Op.f32Mul
-    case RegType.f64: return Op.f64Mul
+  case token.MUL: switch (t.memtype) { // *
+    case MemType.i32: return Op.i32Mul
+    case MemType.i64: return Op.i64Mul
+    case MemType.f32: return Op.f32Mul
+    case MemType.f64: return Op.f64Mul
   }; break
-  case token.QUO: switch (t.regtype) { // /
-    case RegType.i32: return (t as IntType).signed ? Op.i32Div_s : Op.i32Div_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Div_s : Op.i64Div_u
-    case RegType.f32: return Op.f32Div
-    case RegType.f64: return Op.f64Div
+  case token.QUO: switch (t.memtype) { // /
+    case MemType.i32: return (t as IntType).signed ? Op.i32Div_s : Op.i32Div_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Div_s : Op.i64Div_u
+    case MemType.f32: return Op.f32Div
+    case MemType.f64: return Op.f64Div
   }; break
   // The remaining operators are only available for integers
-  case token.REM: switch (t.regtype) { // %
-    case RegType.i32: return (t as IntType).signed ? Op.i32Rem_s : Op.i32Rem_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Rem_s : Op.i64Rem_u
+  case token.REM: switch (t.memtype) { // %
+    case MemType.i32: return (t as IntType).signed ? Op.i32Rem_s : Op.i32Rem_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Rem_s : Op.i64Rem_u
   }; break
-  case token.OR: switch (t.regtype) { // |
-    case RegType.i32: return Op.i32Or
-    case RegType.i64: return Op.i64Or
+  case token.OR: switch (t.memtype) { // |
+    case MemType.i32: return Op.i32Or
+    case MemType.i64: return Op.i64Or
   }; break
-  case token.XOR: switch (t.regtype) { // ^
-    case RegType.i32: return Op.i32Xor
-    case RegType.i64: return Op.i64Xor
+  case token.XOR: switch (t.memtype) { // ^
+    case MemType.i32: return Op.i32Xor
+    case MemType.i64: return Op.i64Xor
   }; break
-  case token.AND: switch (t.regtype) { // &
-    case RegType.i32: return Op.i32And
-    case RegType.i64: return Op.i64And
+  case token.AND: switch (t.memtype) { // &
+    case MemType.i32: return Op.i32And
+    case MemType.i64: return Op.i64And
   }; break
-  case token.SHL: switch (t.regtype) { // <<
-    case RegType.i32: return Op.i32Shl
-    case RegType.i64: return Op.i64Shl
+  case token.SHL: switch (t.memtype) { // <<
+    case MemType.i32: return Op.i32Shl
+    case MemType.i64: return Op.i64Shl
   }; break
-  case token.SHR: switch (t.regtype) { // >>
-    case RegType.i32: return (t as IntType).signed ? Op.i32Shr_s : Op.i32Shr_u
-    case RegType.i64: return (t as IntType).signed ? Op.i64Shr_s : Op.i64Shr_u
+  case token.SHR: switch (t.memtype) { // >>
+    case MemType.i32: return (t as IntType).signed ? Op.i32Shr_s : Op.i32Shr_u
+    case MemType.i64: return (t as IntType).signed ? Op.i64Shr_s : Op.i64Shr_u
   }; break
   case token.AND_NOT: // &^  TODO implement (need to generalize/unroll)
     assert(false, 'AND_NOT "&^" not yet supported')
@@ -274,16 +274,16 @@ function getop(tok :token, t :BasicType) :Op {
 //   // f32Store,    // store 4 bytes (no conversion)
 //   // f64Store,    // store 8 bytes (no conversion)
 //   let bz :int
-//   switch (t.regtype) {
+//   switch (t.memtype) {
 
-//     case RegType.i32:
+//     case MemType.i32:
 //       bz = (t as IntType).bitsize
 //       if (bz <= 8) { return Op.i32Store8 }
 //       if (bz <= 16) { return Op.i32Store16 }
 //       assert(bz <= 32)
 //       return Op.i32Store
 
-//     case RegType.i64:
+//     case MemType.i64:
 //       bz = (t as IntType).bitsize
 //       if (bz <= 8) { return Op.i64Store8 }
 //       if (bz <= 16) { return Op.i64Store16 }
@@ -291,10 +291,10 @@ function getop(tok :token, t :BasicType) :Op {
 //       assert(bz <= 64)
 //       return Op.i64Store
 
-//     case RegType.f32:
+//     case MemType.f32:
 //       return Op.f32Store
     
-//     case RegType.f64:
+//     case MemType.f64:
 //       return Op.f64Store
 //   }
 //   return Op.None
@@ -553,11 +553,11 @@ export class Fun {
 
     // Select operation based on type
     let op :Op = Op.None
-    switch (t.regtype) {
-      case RegType.i32: op = Op.i32Const; break
-      case RegType.i64: op = Op.i64Const; break
-      case RegType.f32: op = Op.f32Const; break
-      case RegType.f64: op = Op.f64Const; break
+    switch (t.memtype) {
+      case MemType.i32: op = Op.i32Const; break
+      case MemType.i64: op = Op.i64Const; break
+      case MemType.f32: op = Op.f32Const; break
+      case MemType.f64: op = Op.f64Const; break
     }
     assert(op != Op.None)
 
@@ -1212,9 +1212,11 @@ export class IRBuilder {
       let t = s.type //as BasicType
       let c :number = 0
       if (s.isInt()) {
-        c = s.isSignedInt() ? s.parseSInt() : s.parseUInt()
+        c = typeof s.value == 'number' ? s.value : s.value.toFloat64()
+        // TODO store s.value vanilla to constVal
       } else {
-        c = s.parseFloat()
+        assert(typeof s.value == 'number')
+        c = s.value as number
       }
       return r.f.constVal(t, c)
     }

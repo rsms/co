@@ -1533,10 +1533,7 @@ export class Parser extends scanner.Scanner {
 
     switch (t) {
       case token.ADD:
-      case token.SUB:
-      case token.NOT:
-      case token.XOR: {
-        // e.g. "-x", "!y"
+      case token.SUB: {
         p.next()
         if (token.literal_beg < p.tok && p.tok < token.literal_end) {
           // common case of negated literal, e.g. "-3", "+0.0"
@@ -1547,6 +1544,8 @@ export class Parser extends scanner.Scanner {
         return x
       }
 
+      case token.NOT:
+      case token.XOR:
       case token.AND: {
         p.next()
         // unaryExpr may have returned a parenthesized composite literal
@@ -1642,8 +1641,8 @@ export class Parser extends scanner.Scanner {
 
   operand(ctx :exprCtx) :Expr {
     // Operand   = Literal | OperandName | MethodExpr | "(" Expression ")" .
-    // Literal   = BasicLit | CompositeLit | FunctionLit .
-    // BasicLit  = int_lit | float_lit | imaginary_lit | rune_lit | string_lit
+    // Literal   = BasicLit | string_lit | CompositeLit | FunctionLit .
+    // BasicLit  = int_lit | float_lit | ratio_lit | rune_lit
     // OperandName = identifier | QualifiedIdent.
     const p = this
 
@@ -1674,7 +1673,10 @@ export class Parser extends scanner.Scanner {
         return p.strlit()
 
       default: {
-        if (token.literal_beg < p.tok && p.tok < token.literal_end) {
+        if (
+          token.literal_basic_beg < p.tok &&
+          p.tok < token.literal_basic_end
+        ) {
           return p.basicLit(ctx)
         }
 
@@ -1688,9 +1690,21 @@ export class Parser extends scanner.Scanner {
 
 
   basicLit(ctx :exprCtx, op? :token) :BasicLit {
+    //
+    // BasicLit  = int_lit | float_lit | ratio_lit | rune_lit
+    //
     const p = this
-    assert(token.literal_beg < p.tok && p.tok < token.literal_end)
-    const x = new BasicLit(p.pos, p.scope, p.tok, p.takeByteValue(), op)
+    switch (p.tok) {
+      case token.INT: break
+      case token.INT_BIN: break
+      case token.INT_OCT: break
+      case token.INT_HEX: break
+      case token.FLOAT: break
+      case token.CHAR: break
+      // case token.RATIO: break
+    }
+    let intval = p.int64val || p.int32val
+    const x = new BasicLit(p.pos, p.scope, p.tok, intval, op)
     const reqt = p.ctxType(ctx)
     x.type = p.universe.basicLitType(x, reqt, p.basicLitErrH, op)
     p.next() // consume literal

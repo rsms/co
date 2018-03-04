@@ -40,6 +40,7 @@ export enum token {
   // (these tokens stand for classes of literals)
   NAME,    // main
   NAMEAT,  // @foo, @
+  literal_basic_beg,
   literal_int_beg,
   INT,     // 12345
   INT_BIN, // 0b1010
@@ -47,8 +48,9 @@ export enum token {
   INT_HEX, // 0xBE3f
   literal_int_end,
   FLOAT,   // 123.45
-  RATIO,   // 22/7
   CHAR,    // 'a'
+  // RATIO,   // 22/7
+  literal_basic_end,
   STRING,  // "abc"
   STRING_MULTI, // "ab\nc" — multi-line
   STRING_PIECE, // "a ${...} b" -- the "a " part (" b" is STRING)

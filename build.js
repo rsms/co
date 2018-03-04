@@ -147,6 +147,7 @@ if (watch) {
 
 
 function buildIncrementally() {
+  let hasPatchedConfigAfterFirstRun = false
   const wopt = Object.assign({}, rin, {
     clearScreen: true,
     output: rout,
@@ -185,6 +186,20 @@ function buildIncrementally() {
       default:
         console.log('rollup event:', ev.code, ev)
     }
+
+    // if (ev.code.indexOf('START') == -1 && !hasPatchedConfigAfterFirstRun) {
+    //   hasPatchedConfigAfterFirstRun = true
+    //   if (tsconfig.clean) {
+    //     // disable "clean" for consecutive builds
+    //     rin.plugins = rin.plugins.map(plugin => {
+    //       if (plugin.name === 'rpt2') {
+    //         tsconfig.clean = false
+    //         return typescriptPlugin(tsconfig)
+    //       }
+    //       return plugin
+    //     })
+    //   }
+    // }
   })
 }
 

@@ -1,10 +1,21 @@
-import { AppendBuffer, bufcmp, asciibuf } from './util'
 import { Pos, Position, SrcFile } from './pos'
 import * as utf8 from './utf8'
 import * as unicode from './unicode'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { token, lookupKeyword, prec } from './token'
 import * as path from './path'
+import { stdoutStyle } from './termstyle'
+import { Int64, UInt64 } from './int64'
+import { strtou } from './strtou'
+import { IntParser } from './intparse'
+import {
+  AppendBuffer,
+  bufcmp,
+  asciibuf,
+  asciistr,
+  asciistrn,
+  debuglog as dlog,
+} from './util'
 
 
 export enum Mode {
@@ -22,6 +33,17 @@ export enum Mode {
 
 const linePrefix = asciibuf('//!line ')
 
+// integer parsing constants
+const UINT32_MAX    = 0xFFFFFFFF >>> 0
+const UINT32_CUTOFF_BIN = Math.floor(UINT32_MAX / 2)
+const UINT32_CUTLIM_BIN = UINT32_MAX % 2
+const UINT32_CUTOFF_OCT = Math.floor(UINT32_MAX / 8)
+const UINT32_CUTLIM_OCT = UINT32_MAX % 8
+const UINT32_CUTOFF_DEC = Math.floor(UINT32_MAX / 10)
+const UINT32_CUTLIM_DEC = UINT32_MAX % 10
+const UINT32_CUTOFF_HEX = Math.floor(UINT32_MAX / 16)
+const UINT32_CUTLIM_HEX = UINT32_MAX % 16
+
 enum istrOne { OFF, WAIT, CONT }
 
 // A Scanner holds the scanner's internal state while processing a given text.
@@ -35,7 +57,7 @@ export class Scanner extends ErrorReporter {
   public sfile :SrcFile = undefined as any as SrcFile // source file handle
   public sdata :Uint8Array = undefined as any as Uint8Array // source data
   public dir   :string = ''   // directory portion of file.name
-  public mode  :Mode = 0         // scanning mode
+  public mode  :Mode = 0      // scanning mode
 
   // scanning state
   private ch         :int = -1 // current character (unicode; -1=EOF)
@@ -47,6 +69,7 @@ export class Scanner extends ErrorReporter {
   private interpStrL :int = 0  // string interpolation level
   private istrOne    :istrOne = istrOne.OFF // string interpolation
   private byteval    :Uint8Array|null = null // value for some string tokens
+  private intParser  = new IntParser()
 
   // public scanning state (read-only)
   public pos       :Pos = 0  // token start position
@@ -54,8 +77,10 @@ export class Scanner extends ErrorReporter {
   public endoffs   :int = 0  // token end offset
   public tok       :token = token.EOF
   public prec      :prec = prec.LOWEST
-  public intval    :int = 0 // value for some tokens
   public hash      :int = 0 // hash value for current token (if NAME*)
+  public int32val  :int = 0 // value for some tokens (char and int lits)
+  public int64val  :Int64|null = null  // value for large int tokens
+  public floatval  :number = +0.0  // IEEE 754-2008 float
 
   // sparse buffer state (not reset by s.init)
   private appendbuf  :AppendBuffer|null = null // for string literals
@@ -708,38 +733,48 @@ export class Scanner extends ErrorReporter {
     const s = this
     let cp = -1
     s.tok = token.CHAR
+    s.int32val = NaN
 
     switch (s.ch) {
-      case -1: case 0xA: { // EOF | \n
-        s.error("unterminated character literal")
-        s.tok = token.ILLEGAL
-        return
-      }
-      case 0x27: { // '
-        s.error("empty character literal or unescaped ' in character literal")
-        s.readchar()
-        s.intval = unicode.InvalidChar
-        return
-      }
-      case 0x5c: { // \
-        s.readchar()
-        cp = s.scanEscape(0x27) // '
-        // note: cp is -1 for illegal escape sequences
-        break
-      }
-      default: {
-        cp = s.ch
-        s.readchar()
-        break
-      }
-    }
+    
+    case -1: // EOF
+      s.error("unterminated character literal")
+      s.tok = token.ILLEGAL
+      return
 
+    case 0x27: // '
+      s.error("empty character literal or unescaped ' in character literal")
+      s.readchar()
+      s.tok = token.ILLEGAL
+      return
+
+    case 0x5c: // \
+      s.readchar()
+      cp = s.scanEscape(0x27) // '
+      // note: cp is -1 for illegal escape sequences
+      break
+
+    default:
+      cp = s.ch
+      if (cp < 0x20) {
+        s.error("invalid character literal")
+        s.tok = token.ILLEGAL
+        cp = -1
+      }
+      s.readchar()
+      break
+    }
 
     if (s.ch == 0x27) { // '
       s.readchar()
-      s.intval = cp
+      if (cp == -1) {
+        s.tok = token.ILLEGAL
+      } else {
+        s.int32val = cp
+      }
     } else {
       // failed -- read until EOF or '
+      s.tok = token.ILLEGAL
       while (true) {
         if (s.ch == -1) {
           break
@@ -750,7 +785,6 @@ export class Scanner extends ErrorReporter {
         }
         s.readchar()
       }
-      s.intval = unicode.InvalidChar
       s.error("invalid character literal")
     }
   }
@@ -883,6 +917,7 @@ export class Scanner extends ErrorReporter {
 
     let n :int = 0
     let base :int = 0
+    let isuc = false
 
     switch (s.ch) {
       case quote: s.readchar(); return quote
@@ -897,8 +932,8 @@ export class Scanner extends ErrorReporter {
       case 0x5c:  s.readchar(); return 0x5c // \
       case 0x24:  s.readchar(); return 0x24 // $
       case 0x78:  s.readchar(); n = 2; base = 16; break // x
-      case 0x75:  s.readchar(); n = 4; base = 16; break // u
-      case 0x55:  s.readchar(); n = 8; base = 16; break // U
+      case 0x75:  s.readchar(); n = 4; base = 16; isuc = true; break // u
+      case 0x55:  s.readchar(); n = 8; base = 16; isuc = true; break // U
       default: {
         let msg = "unknown escape sequence"
         if (s.ch < 0) {
@@ -926,6 +961,15 @@ export class Scanner extends ErrorReporter {
       n--
     }
 
+    // validate unicode codepoints
+    if (isuc && !unicode.isValid(cp)) {
+      s.errorAtOffs(
+        "escape sequence is invalid Unicode code point",
+        s.offset
+      )
+      return -1
+    }
+
     return cp
   }
 
@@ -935,21 +979,8 @@ export class Scanner extends ErrorReporter {
     if (c == 0x30) { // 0
       switch (s.ch) {
 
-        case 0x78: case 0x58: { // x, X
-          s.tok = token.INT_HEX
-          s.readchar()
-          while (isHexDigit(s.ch)) {
-            s.readchar()
-          }
-          if (s.offset - s.startoffs <= 2 || unicode.isLetter(s.ch)) {
-            // only scanned "0x" or "0X" OR e.g. 0xfg
-            while (unicode.isLetter(s.ch) || unicode.isDigit(s.ch)) {
-              s.readchar() // consume invalid letters & digits
-            }
-            s.error("invalid hex number")
-          }
-          return
-        }
+        case 0x78: case 0x58: // x, X
+          return s.scanHexInt()
 
         case 0x6F: case 0x4F: // o, O
           s.tok = token.INT_OCT
@@ -962,71 +993,123 @@ export class Scanner extends ErrorReporter {
         case 0x2e: case 0x65: case 0x45:  // . e E
           return s.scanFloatNumber(/*seenDecimal*/false)
 
-        case 0x2f:  // /
-          if (s.scanRatioNumber()) {
-            // i.e. 0/N
-            s.error("invalid zero ratio")
-            return
-          }
-          break
+        // case 0x2f:  // /
+        //   // this is invalid, but we will still parse any number after "/"
+        //   // scanRatioNumber returns true if it actually parsed a number.
+        //   if (s.scanRatioNumber()) {
+        //     // i.e. 0/N
+        //     s.error("invalid zero ratio")
+        //     return
+        //   }
+        //   break
       }
     }
 
-    while (unicode.isDigit(s.ch)) {
+    // if we get here, the number is in base 10 and is either an int, float
+    // or ratio.
+
+    s.intParser.init(10)
+    s.intParser.add(c - 0x30) // entry char
+
+    while (s.ch >= 0x30 && s.ch <= 0x39) {  // 0..9
+      s.intParser.add(s.ch - 0x30)
       s.readchar()
     }
     s.tok = token.INT
 
     switch (s.ch) {
-      case 0x2e: case 0x65: case 0x45:  // . e E
-        s.scanFloatNumber(/*seenDecimal*/false)
-        break
+    case 0x2e: case 0x65: case 0x45:  // . e E
+      // scanning a floating-point number
+      return s.scanFloatNumber(/*seenDecimal*/false)
+    }
 
-      case 0x2f:  // /
-        s.scanRatioNumber()
-        break
+    // scanned an integer
+    let valid = s.intParser.finalize()
+    s.int32val = s.intParser.int32val
+    s.int64val = s.intParser.int64val
+    if (!valid) {
+      s.error("integer constant too large")
+    }
+
+    // if (s.ch == 0x2f) {
+    //   return s.scanRatioNumber()
+    // }
+  }
+
+  scanHexInt() {
+    const s = this
+    s.tok = token.INT_HEX
+    s.readchar()
+    s.intParser.init(16)
+    let n = 0
+    while ((n = hexDigit(s.ch)) != -1) {
+      s.intParser.add(n)
+      s.readchar()
+    }
+    if (s.offset - s.startoffs <= 2 || unicode.isLetter(s.ch)) {
+      // only scanned "0x" or "0X" OR e.g. 0xfg
+      while (unicode.isLetter(s.ch) || unicode.isDigit(s.ch)) {
+        s.readchar() // consume invalid letters & digits
+      }
+      s.error("invalid hex number")
+    }
+    let valid = s.intParser.finalize()
+    s.int32val = s.intParser.int32val
+    s.int64val = s.intParser.int64val
+    if (!valid) {
+      s.error("integer constant too large")
     }
   }
 
-  scanRadixInt8(base :int) {
-    // invariant: base = 8 | 2
+  scanRadixInt8(radix :int) {
     const s = this
     s.readchar()
     let isInvalid = false
+
+    s.intParser.init(radix)
+
     while (unicode.isDigit(s.ch)) {
-      if (s.ch - 0x30 >= base) {
+      if (s.ch - 0x30 >= radix) {
         // e.g. 0o678
         isInvalid = true
+      } else {
+        s.intParser.add(s.ch - 0x30)
       }
       s.readchar()
     }
-    if (isInvalid || s.offset - s.startoffs <= 2) {
+
+    if (isInvalid || s.offset - s.startoffs <= 2 || !s.intParser.finalize()) {
       // isInvalid OR only scanned "0x"
-      s.error(`invalid ${base == 8 ? "octal" : "binary"} number`)
+      s.error(`invalid ${radix == 8 ? "octal" : "binary"} number`)
+      s.int32val = NaN
+      s.int64val = null
+    } else {
+      s.int32val = s.intParser.int32val
+      s.int64val = s.intParser.int64val
     }
   }
 
-  scanRatioNumber() :bool {
-    // ratio_lit = decimals "/" decimals
-    const s = this
-    const startoffs = s.offset
-    s.readchar() // consume /
-    while (unicode.isDigit(s.ch)) {
-      s.readchar()
-    }
-    if (startoffs+1 == s.offset) {
-      // e.g. 43/* 43/= etc -- restore state
-      s.ch = 0x2f // /
-      s.offset = startoffs
-      s.rdOffset = s.offset + 1
-      return false
-    }
-    if (s.ch == 0x2e) { // .
-      s.error("invalid ratio")
-    }
-    s.tok = token.RATIO
-    return true
-  }
+  // scanRatioNumber() :bool {
+  //   // ratio_lit = decimals "/" decimals
+  //   const s = this
+  //   const startoffs = s.offset
+  //   s.readchar() // consume /
+  //   while (unicode.isDigit(s.ch)) {
+  //     s.readchar()
+  //   }
+  //   if (startoffs+1 == s.offset) {
+  //     // e.g. 43/* 43/= etc -- restore state
+  //     s.ch = 0x2f // /
+  //     s.offset = startoffs
+  //     s.rdOffset = s.offset + 1
+  //     return false
+  //   }
+  //   if (s.ch == 0x2e) { // .
+  //     s.error("invalid ratio")
+  //   }
+  //   s.tok = token.RATIO
+  //   return true
+  // }
 
   scanFloatNumber(seenDecimal :bool) {
     // float_lit = decimals "." [ decimals ] [ exponent ] |
@@ -1035,6 +1118,7 @@ export class Scanner extends ErrorReporter {
     // decimals  = decimal_digit { decimal_digit } .
     // exponent  = ( "e" | "E" ) [ "+" | "-" ] decimals .
     const s = this
+    s.tok = token.FLOAT
 
     if (seenDecimal || s.ch == 0x2e) { // .
       s.readchar()
@@ -1049,16 +1133,29 @@ export class Scanner extends ErrorReporter {
         s.readchar()
       }
       let valid = false
-      while (unicode.isDigit(s.ch)) {
+      if (unicode.isDigit(s.ch)) {
         valid = true
         s.readchar()
+        while (unicode.isDigit(s.ch)) {
+          s.readchar()
+        }
       }
       if (!valid) {
         s.error("invalid floating-point exponent")
+        s.floatval = NaN
+        return
       }
     }
 
-    s.tok = token.FLOAT
+    let str :string
+    if (s.byteval) {
+      str = asciistr(s.byteval)
+    } else {
+      str = asciistrn(s.sdata, s.startoffs, s.offset)
+    }
+
+    s.floatval = parseFloat(str)
+    assert(!isNaN(s.floatval), 'we failed to catch invalid float lit')
   }
 
   scanLineComment() {
@@ -1257,12 +1354,15 @@ function isDigit(c :int) :bool {
   return 0x30 <= c && c <= 0x39 // 0..9
 }
 
-function isHexDigit(c :int) :bool {
-  return (
-    (0x30 <= c && c <= 0x39) || // 0..9
-    (0x41 <= c && c <= 0x46) || // A..F
-    (0x61 <= c && c <= 0x66)    // a..f
-  )
+function hexDigit(c :int) :int {
+  if (c >= 0x30 && c <= 0x39) { // 0..9
+    return c - 0x30
+  } else if (c >= 0x41 && c <= 0x46) { // A..F
+    return c - (0x41 - 10)
+  } else if (c >= 0x61 && c <= 0x66) { // a..f
+    return c - (0x61 - 10)
+  }
+  return -1
 }
 
 function isUniIdentStart(c :int) :bool {
