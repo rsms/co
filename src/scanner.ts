@@ -4,9 +4,7 @@ import * as unicode from './unicode'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { token, lookupKeyword, prec } from './token'
 import * as path from './path'
-import { stdoutStyle } from './termstyle'
-import { Int64, UInt64 } from './int64'
-import { strtou } from './strtou'
+import { Int64 } from './int64'
 import { IntParser } from './intparse'
 import {
   AppendBuffer,
@@ -14,7 +12,7 @@ import {
   asciibuf,
   asciistr,
   asciistrn,
-  debuglog as dlog,
+  // debuglog as dlog,
 } from './util'
 
 
@@ -32,17 +30,6 @@ export enum Mode {
 }
 
 const linePrefix = asciibuf('//!line ')
-
-// integer parsing constants
-const UINT32_MAX    = 0xFFFFFFFF >>> 0
-const UINT32_CUTOFF_BIN = Math.floor(UINT32_MAX / 2)
-const UINT32_CUTLIM_BIN = UINT32_MAX % 2
-const UINT32_CUTOFF_OCT = Math.floor(UINT32_MAX / 8)
-const UINT32_CUTLIM_OCT = UINT32_MAX % 8
-const UINT32_CUTOFF_DEC = Math.floor(UINT32_MAX / 10)
-const UINT32_CUTLIM_DEC = UINT32_MAX % 10
-const UINT32_CUTOFF_HEX = Math.floor(UINT32_MAX / 16)
-const UINT32_CUTLIM_HEX = UINT32_MAX % 16
 
 enum istrOne { OFF, WAIT, CONT }
 
@@ -287,7 +274,7 @@ export class Scanner extends ErrorReporter {
     }
 
     // make progress
-    const ch = s.ch
+    let ch = s.ch
     s.readchar()
 
     let insertSemi = false
@@ -302,7 +289,7 @@ export class Scanner extends ErrorReporter {
       case 0x30: case 0x31: case 0x32: case 0x33: case 0x34:
       case 0x35: case 0x36: case 0x37: case 0x38: case 0x39:
         // 0..9
-        s.scanNumber(ch)
+        s.scanNumber(ch, /*modch=*/0)
         insertSemi = true
         break
 
@@ -345,7 +332,7 @@ export class Scanner extends ErrorReporter {
           //   ).1 => (selector (name x) (int 1))
           //   ].1 => (selector (name x) (int 1))
           //   .1  => (float 0.1)
-          s.scanFloatNumber(/*seenDecimal*/true)
+          s.scanFloatNumber(/*seenDecimal*/true, /*modc*/0)
           insertSemi = true
         } else {
           if (s.gotchar(0x2e)) { // ..
@@ -427,6 +414,14 @@ export class Scanner extends ErrorReporter {
         } else if (s.gotchar(ch)) { // ++
           s.tok = token.INC
           insertSemi = true
+        } else if (s.ch >= 0x30 && s.ch <= 0x39) { // 0..9
+          ch = s.ch
+          s.readchar()
+          s.scanNumber(ch, /*modch=*/0x2B)
+          insertSemi = true
+        } else if (s.gotchar(0x2e)) { // .
+          s.scanFloatNumber(/*seenDecimal*/true, /*modc=*/0x2B)
+          insertSemi = true
         } else {
           s.tok = token.ADD
           s.prec = prec.ADD
@@ -438,16 +433,22 @@ export class Scanner extends ErrorReporter {
         s.prec = prec.LOWEST
         if (s.gotchar(0x3e)) { // ->
           s.tok = token.ARROWR
+        } else if (s.gotchar(0x3D)) { // -=
+          s.tok = token.SUB_ASSIGN
+        } else if (s.gotchar(ch)) { // --
+          s.tok = token.DEC
+          insertSemi = true
+        } else if (s.ch >= 0x30 && s.ch <= 0x39) { // 0..9
+          ch = s.ch
+          s.readchar()
+          s.scanNumber(ch, /*modc=*/0x2D)
+          insertSemi = true
+        } else if (s.gotchar(0x2e)) { // .
+          s.scanFloatNumber(/*seenDecimal*/true, /*modc=*/0x2D)
+          insertSemi = true
         } else {
-          if (s.gotchar(0x3D)) { // -=
-            s.tok = token.SUB_ASSIGN
-          } else if (s.gotchar(ch)) { // --
-            s.tok = token.DEC
-            insertSemi = true
-          } else {
-            s.tok = token.SUB
-            s.prec = prec.ADD
-          }
+          s.tok = token.SUB
+          s.prec = prec.ADD
         }
         break
       }
@@ -653,7 +654,7 @@ export class Scanner extends ErrorReporter {
 
     s.insertSemi = insertSemi
 
-    // console.log(
+    // dlog(
     //   `-> ${tokstr(s.tok)} "${utf8.decodeToString(s.byteValue())}"`)
     return
 
@@ -973,25 +974,25 @@ export class Scanner extends ErrorReporter {
     return cp
   }
 
-  scanNumber(c :int) {
+  scanNumber(c :int, modc :int) {
     let s = this
 
     if (c == 0x30) { // 0
       switch (s.ch) {
 
         case 0x78: case 0x58: // x, X
-          return s.scanHexInt()
+          return s.scanHexInt(modc)
 
         case 0x6F: case 0x4F: // o, O
           s.tok = token.INT_OCT
-          return s.scanRadixInt8(8)
+          return s.scanRadixInt8(8, modc)
 
         case 0x62: case 0x42: // b, B
           s.tok = token.INT_BIN
-          return s.scanRadixInt8(2)
+          return s.scanRadixInt8(2, modc)
 
         case 0x2e: case 0x65: case 0x45:  // . e E
-          return s.scanFloatNumber(/*seenDecimal*/false)
+          return s.scanFloatNumber(/*seenDecimal*/false, modc)
 
         // case 0x2f:  // /
         //   // this is invalid, but we will still parse any number after "/"
@@ -1008,11 +1009,11 @@ export class Scanner extends ErrorReporter {
     // if we get here, the number is in base 10 and is either an int, float
     // or ratio.
 
-    s.intParser.init(10)
-    s.intParser.add(c - 0x30) // entry char
+    s.intParser.init(10, /*signed*/modc > 0, /*negative*/modc == 0x2D)
+    s.intParser.parseval(c - 0x30) // entry char
 
     while (s.ch >= 0x30 && s.ch <= 0x39) {  // 0..9
-      s.intParser.add(s.ch - 0x30)
+      s.intParser.parseval(s.ch - 0x30)
       s.readchar()
     }
     s.tok = token.INT
@@ -1020,7 +1021,7 @@ export class Scanner extends ErrorReporter {
     switch (s.ch) {
     case 0x2e: case 0x65: case 0x45:  // . e E
       // scanning a floating-point number
-      return s.scanFloatNumber(/*seenDecimal*/false)
+      return s.scanFloatNumber(/*seenDecimal*/false, modc)
     }
 
     // scanned an integer
@@ -1036,14 +1037,14 @@ export class Scanner extends ErrorReporter {
     // }
   }
 
-  scanHexInt() {
+  scanHexInt(modc :int) {
     const s = this
     s.tok = token.INT_HEX
     s.readchar()
-    s.intParser.init(16)
+    s.intParser.init(16, /*signed*/modc > 0, /*negative*/modc == 0x2D)
     let n = 0
     while ((n = hexDigit(s.ch)) != -1) {
-      s.intParser.add(n)
+      s.intParser.parseval(n)
       s.readchar()
     }
     if (s.offset - s.startoffs <= 2 || unicode.isLetter(s.ch)) {
@@ -1061,19 +1062,19 @@ export class Scanner extends ErrorReporter {
     }
   }
 
-  scanRadixInt8(radix :int) {
+  scanRadixInt8(radix :int, modc :int) {
     const s = this
     s.readchar()
     let isInvalid = false
 
-    s.intParser.init(radix)
+    s.intParser.init(radix, /*signed*/modc > 0, /*negative*/modc == 0x2D)
 
     while (unicode.isDigit(s.ch)) {
       if (s.ch - 0x30 >= radix) {
         // e.g. 0o678
         isInvalid = true
       } else {
-        s.intParser.add(s.ch - 0x30)
+        s.intParser.parseval(s.ch - 0x30)
       }
       s.readchar()
     }
@@ -1111,7 +1112,7 @@ export class Scanner extends ErrorReporter {
   //   return true
   // }
 
-  scanFloatNumber(seenDecimal :bool) {
+  scanFloatNumber(seenDecimal :bool, modc :int) {
     // float_lit = decimals "." [ decimals ] [ exponent ] |
     //             decimals exponent |
     //             "." decimals [ exponent ] .
@@ -1119,6 +1120,9 @@ export class Scanner extends ErrorReporter {
     // exponent  = ( "e" | "E" ) [ "+" | "-" ] decimals .
     const s = this
     s.tok = token.FLOAT
+
+    // Note: We are ignoring modc since we use parseFloat to parse the entire
+    // range of source text.
 
     if (seenDecimal || s.ch == 0x2e) { // .
       s.readchar()
@@ -1155,6 +1159,7 @@ export class Scanner extends ErrorReporter {
     }
 
     s.floatval = parseFloat(str)
+
     assert(!isNaN(s.floatval), 'we failed to catch invalid float lit')
   }
 

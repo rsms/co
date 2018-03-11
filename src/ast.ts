@@ -2,7 +2,7 @@ import { Pos, SrcFile } from './pos'
 import { ByteStr } from './bytestr'
 import { token, tokstr } from './token'
 import * as utf8 from './utf8'
-import { strtou } from './strtou'
+import { numconv } from './num'
 import { Int64 } from './int64'
 
 // ——————————————————————————————————————————————————————————————————
@@ -448,27 +448,21 @@ export class LiteralExpr extends Expr {}
 
 export class BasicLit extends LiteralExpr {
   //
-  // kind = INT | INT_BIN | INT_OCT | INT_HEX | FLOAT | RATIO | CHAR
-  // op = ADD | SUB
+  // kind = INT | INT_BIN | INT_OCT | INT_HEX | FLOAT | CHAR
   //
-  type :BasicType
+
+  type :BasicType  // type is always known
 
   constructor(pos :Pos, scope :Scope,
     public kind  :token,
     public value :Int64|number,
-    public op    :token = token.ILLEGAL,
-      // op: potential negation operation, e.g. "-3"
   ) {
     super(pos, scope)
     assert(token.literal_basic_beg < kind && kind < token.literal_basic_end)
-    assert(op == token.ILLEGAL || op == token.ADD || op == token.SUB)
   }
 
   toString() :string {
-    return (
-      (this.op != token.ILLEGAL ? tokstr(this.op) : '') +
-      this.value
-    )
+    return this.value.toString()
   }
 
   isInt() :bool {
@@ -487,64 +481,23 @@ export class BasicLit extends LiteralExpr {
   // if op == token.SUB.
   //
   isSignedInt() :bool {
-    assert(this.isInt(), "called isSignedInt on non-integer")
     return (
+      this.isInt() &&
       this.type instanceof IntType ? this.type.signed :
-      this.op == token.SUB
+      typeof this.value == 'number' ? this.value < 0 :
+      this.value.isSigned
     )
   }
 
-  // // parseInt parses a signed value up to Number.MAX_SAFE_INTEGER
-  // // Returns NaN on failure.
-  // //
-  // parseSInt() :int {
-  //   let base = 0, b = this.value
-  //   switch (this.kind) {
-  //     case token.INT_BIN: base = 2; b = b.subarray(2); break
-  //     case token.INT_OCT: base = 8; b = b.subarray(2); break
-  //     case token.INT:     base = 10; break
-  //     case token.INT_HEX: base = 16; b = b.subarray(2); break
-  //     default: return NaN
-  //   }
-  //   var v = parseInt(String.fromCharCode.apply(null, b), base)
-  //   return (
-  //     v > Number.MAX_SAFE_INTEGER || v < Number.MIN_SAFE_INTEGER ? NaN :
-  //     v
-  //   )
-  // }
-
-  // // parseUInt parses an unsigned value up to Number.MAX_SAFE_INTEGER
-  // // -1 is returned to indicate failure.
-  // //
-  // parseUInt() :int {
-  //   assert(this.isInt(), "calling parseUInt on a non-integer")
-  //   if (this.op == token.SUB) {
-  //     return -1
-  //   }
-
-  //   let base = 0, start = 0
-
-  //   switch (this.kind) {
-  //     case token.INT_BIN: base = 2; start = 2; break
-  //     case token.INT_OCT: base = 8; start = 2; break
-  //     case token.INT:     base = 10; break
-  //     case token.INT_HEX: base = 16; start = 2; break
-  //     default: return -1
-  //   }
-
-  //   return strtou(this.value, base, start, this.value.length)
-  // }
-
-  // parseFloat() :number {
-  //   assert(this.isFloat(), "called parseFloat on non-float")
-  //   let str = String.fromCharCode.apply(null, this.value)
-  //   let c = parseFloat(str)
-  //   assert(!isNaN(c), `failed to parse "${str}"`)
-  //   if (!isNaN(c) && this.op == token.SUB) {
-  //     c = -c
-  //   }
-  //   return c
-  // }
+  // convertTo coverts the value of the literal to the provided basic type.
+  // Returns true if the conversion was lossless.
+  //
+  convertToType(t :BasicType) :bool {
+    let [v, lossless] = numconv(this.value, t)
+    this.type = t
+    this.value = v
+    return lossless
+  }
 }
 
 // export const ImplicitOne = new BasicLit(
@@ -770,6 +723,8 @@ export const
 , u_t_f64 = new BasicType(64,    MemType.f64, 'f64')
 , u_t_uint = new IntType(uintz,  uintmemtype, 'uint', false)
 , u_t_int  = new IntType(uintz-1,uintmemtype, 'int', true)
+, u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64
+, u_t_int_itype = uintmemtype == MemType.i32 ? u_t_i32 : u_t_i64
 
 
 export class StrType extends Type {

@@ -23,35 +23,36 @@ import { strtou } from './strtou'
 export interface Int64 {
   eq(x :Int64) :bool   // this == x
   neq(x :Int64) :bool  // this != x
-  eqz() :bool           // this == 0
+  eqz() :bool          // this == 0
   cmp(x :Int64) :int   // this <> x  ->  -1 | 0 | 1
   lt(x :Int64) :bool   // this < x
   lte(x :Int64) :bool  // this <= x
   gt(x :Int64) :bool   // this > x
   gte(x :Int64) :bool  // this >= x
 
+  readonly isSigned :bool
   isNeg() :bool  // true if negative (always false for UInt64)
   isPos() :bool  // true if positive (always true for UInt64)
   isOdd() :bool  // true if odd number
 
   neg() :Int64 // -N negation
-  
-  not() :Int64         // ~N bitwise not
-  mod(x :Int64) :Int64 // this % x
-  and(x :Int64) :Int64 // this & x
-  or(x :Int64) :Int64  // this | x
-  xor(x :Int64) :Int64 // this ^ x
-  shiftLeft(nbits :int) :Int64  // 
-  shiftRight(nbits :int) :Int64 // sign-replicating/arithmetic shift right
-  shiftRightUnsigned(nbits :int) :Int64 // zero-replicating/logical shift right
+
+  not() :Int64             // ~N bitwise not
+  mod(x :Int64) :Int64     // this % x
+  and(x :Int64) :Int64     // this & x
+  or(x :Int64) :Int64      // this | x
+  xor(x :Int64) :Int64     // this ^ x
+  shl(nbits :int) :Int64   // 
+  shr_s(nbits :int) :Int64 // sign-replicating/arithmetic shift right
+  shr_u(nbits :int) :Int64 // zero-replicating/logical shift right
 
   add(x :Int64) :Int64 // this + x
   sub(x :Int64) :Int64 // this - x
   mul(x :Int64) :Int64 // this * x
   div(x :Int64) :Int64 // this / x
 
-  toSigned() :Int64
-  toUnsigned() :Int64
+  toSigned() :SInt64
+  toUnsigned() :UInt64
   toInt32() :int
   toUInt32() :int
   toFloat64() :number
@@ -71,6 +72,7 @@ export interface Int64Cons {
 
   fromInt32(v :int) :Int64
   fromFloat64(v :number) :Int64
+  maybeFromFloat64(v :number) :Int64|null
   fromStr(str :string, radix :int) :Int64
   fromByteStr(b :ArrayLike<byte>, radix :int) :Int64
   fromByteStr0(b :ArrayLike<byte>, radix :int, start :int, end :int) :Int64
@@ -197,9 +199,9 @@ class Int64Base {
     )
   }
 
-  // shiftLeft returns an Int64 with bits shifted to the left by nbits
+  // shl returns an Int64 with bits shifted to the left by nbits
   //
-  shiftLeft(nbits :int) :Int64 {
+  shl(nbits :int) :Int64 {
     nbits &= 63
     if (nbits == 0) {
       return this as any as Int64
@@ -214,10 +216,10 @@ class Int64Base {
     return new (<_Int64Cons>this.constructor)(0, low << (nbits - 32))
   }
 
-  // shiftRight returns an Int64 with bits shifted to the right by nbits.
+  // shr_s returns an Int64 with bits shifted to the right by nbits.
   // The new leading bits match the current sign bit.
   //
-  shiftRight(nbits :int) :Int64 {
+  shr_s(nbits :int) :Int64 {
     nbits &= 63
     if (nbits == 0) {
       return this as any as Int64
@@ -235,10 +237,10 @@ class Int64Base {
     )
   }
 
-  // shiftRight returns an Int64 with its bits logically
+  // shr_u returns an Int64 with its bits logically
   // shifted to the right by nbits.
   //
-  shiftRightUnsigned(nbits :int) :Int64 {
+  shr_u(nbits :int) :Int64 {
     nbits &= 63;
     if (nbits === 0) {
       return this as any as Int64
@@ -573,12 +575,40 @@ export class SInt64 extends Int64Base implements Int64 {
   static fromFloat64(v :number) :SInt64 {
     if (isNaN(v)) {
       return S64_ZERO
-    } else if (v <= -_TWO_PWR_63_DBL) {
+    }
+    if (v <= -_TWO_PWR_63_DBL) {
       return S64_MIN
-    } else if (v + 1 >= _TWO_PWR_63_DBL) {
+    }
+    if (v + 1 >= _TWO_PWR_63_DBL) {
       return S64_MAX
-    } else if (v < 0) {
+    }
+    if (v < 0) {
       return this.fromFloat64(-v).neg()
+    }
+    return new SInt64((v % _TWO_PWR_32_DBL) | 0, (v / _TWO_PWR_32_DBL) | 0)
+  }
+
+  // maybeFromFloat64 is like fromFloat64, but returns null if v can not be
+  // losslessly represented (i.e. if v < SInt64.MIN, v > SInt64.MAX, or nan.)
+  //
+  static maybeFromFloat64(v :number) :SInt64|null {
+    if (isNaN(v) || v < -_TWO_PWR_63_DBL || v + 1 > _TWO_PWR_63_DBL) {
+      return null
+    }
+    if (v == -_TWO_PWR_63_DBL) {
+      return S64_MIN
+    }
+    if (v + 1 == _TWO_PWR_63_DBL) {
+      return S64_MAX
+    }
+    if (v < 0) {
+      v = -v
+      if (v + 1 >= _TWO_PWR_63_DBL) {
+        return null
+      }
+      return (
+        new SInt64((v % _TWO_PWR_32_DBL) | 0, (v / _TWO_PWR_32_DBL) | 0)
+      ).neg()
     }
     return new SInt64((v % _TWO_PWR_32_DBL) | 0, (v / _TWO_PWR_32_DBL) | 0)
   }
@@ -641,6 +671,8 @@ export class SInt64 extends Int64Base implements Int64 {
     )
   }
 
+  readonly isSigned :bool = true
+
   isNeg() :bool {
     return this._high < 0
   }
@@ -686,8 +718,8 @@ export class SInt64 extends Int64Base implements Int64 {
         return S64_ONE
       }
       // At this point, we have |x| >= 2, so |this/x| < |MIN_VALUE|.
-      let halfThis = this.shiftRight(1)
-      let approx = halfThis.div(x).shiftLeft(1)
+      let halfThis = this.shr_s(1)
+      let approx = halfThis.div(x).shl(1)
       if (approx.eq(S64_ZERO)) {
         return x.isNeg() ? S64_ONE : S64_NEGONE
       }
@@ -795,7 +827,8 @@ export class UInt64 extends Int64Base {
   static readonly ZERO :UInt64  // 0
   static readonly ONE  :UInt64  // 1
 
-  // fromInt32 create a UInt64 representing the 32-bit unsigned integer v
+  // fromInt32 create a UInt64 representing the 32-bit integer v.
+  // if v is negative, overflow rules apply.
   //
   static fromInt32(v :int) :UInt64 {
     let u = v >>> 0
@@ -819,6 +852,22 @@ export class UInt64 extends Int64Base {
       return U64_ZERO
     }
     if (v >= _TWO_PWR_64_DBL) {
+      return U64_MAX
+    }
+    return new UInt64(v % _TWO_PWR_32_DBL, v / _TWO_PWR_32_DBL)
+  }
+
+  // maybeFromFloat64 is like fromFloat64, but returns null if v can not be
+  // losslessly represented (i.e. if v < UInt64.MIN, v > UInt64.MAX, or nan.)
+  //
+  static maybeFromFloat64(v :number) :UInt64|null {
+    if (v < 0 || v > _TWO_PWR_64_DBL || isNaN(v)) {
+      return null
+    }
+    if (v == 0) {
+      return U64_ZERO
+    }
+    if (v == _TWO_PWR_64_DBL) {
       return U64_MAX
     }
     return new UInt64(v % _TWO_PWR_32_DBL, v / _TWO_PWR_32_DBL)
@@ -856,10 +905,11 @@ export class UInt64 extends Int64Base {
   static fromBytesLE(b :ArrayLike<byte>) :Int64 { return U64_ZERO }
   static fromBytesBE(b :ArrayLike<byte>) :Int64 { return U64_ZERO }
 
+  readonly isSigned :bool = false
   isNeg() :bool { return false }
   isPos() :bool { return true }
 
-  cmp(x :SInt64) :int { // this <> x  ->  -1 | 0 | 1
+  cmp(x :Int64) :int { // this <> x  ->  -1 | 0 | 1
     if (this.eq(x)) {
       return 0
     }
@@ -897,7 +947,7 @@ export class UInt64 extends Int64Base {
       return U64_ZERO
     }
 
-    if (x.gt(this.shiftRightUnsigned(1))) {
+    if (x.gt(this.shr_u(1))) {
       // 15 >>> 1 = 7 ; with divisor = 8 ; true
       return U64_ONE
     }

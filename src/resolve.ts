@@ -1,7 +1,7 @@
 import { SrcFileSet, Pos, NoPos } from './pos'
 import { TypeCompat, basicTypeCompat, Universe } from './universe'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
-import { debuglog, asciibuf } from './util'
+import { debuglog as dlog } from './util'
 import { token } from './token'
 import {
   Scope,
@@ -174,7 +174,7 @@ export class TypeResolver extends ErrorReporter {
         return r.resolve(s)
       }
       // last statement is a declaration
-      // debuglog(`TODO handle Block with declaration at end`)
+      // dlog(`TODO handle Block with declaration at end`)
       return u_t_nil //u_t_void
     }
 
@@ -277,7 +277,7 @@ export class TypeResolver extends ErrorReporter {
       return n.type
     }
 
-    debuglog(`TODO handle ${n.constructor.name}`)
+    dlog(`TODO handle ${n.constructor.name}`)
     return null  // unknown type
   }
 
@@ -547,11 +547,11 @@ export class TypeResolver extends ErrorReporter {
 
     if (opt instanceof UnresolvedType) {
       // defer to bind stage
-      debuglog(`[index type] deferred to bind stage`)
+      dlog(`[index type] deferred to bind stage`)
     } else if (opt instanceof TupleType) {
       r.resolveTupleIndex(x, opt)
     } else {
-      debuglog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
+      dlog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
     }
 
     return x
@@ -565,7 +565,7 @@ export class TypeResolver extends ErrorReporter {
 
     let it = r.resolve(x.index)
     if (it instanceof UnresolvedType) {
-      debuglog(`index resolution deferred to post-resolve`)
+      dlog(`index resolution deferred to post-resolve`)
       x.type = r.markUnresolved(x)
       return
     }
@@ -673,10 +673,10 @@ export class TypeResolver extends ErrorReporter {
           assert(x.indexv < tuple.exprs.length) // bounds checked when resolved
           return r.resolveLitConstant(tuple.exprs[x.indexv], evaluator)
         } else {
-          debuglog(`x.indexv < 0 for IndexExpr ${x}`)
+          dlog(`x.indexv < 0 for IndexExpr ${x}`)
         }
       } else {
-        debuglog(`TODO ${x.constructor.name} operand ${opt}`)
+        dlog(`TODO ${x.constructor.name} operand ${opt}`)
       }
     } else if (x instanceof Operation) {
       const lval = r.resolveLitConstant(x.x, evaluator)
@@ -693,7 +693,7 @@ export class TypeResolver extends ErrorReporter {
         }
       }
     } else {
-      debuglog(`TODO ${x.constructor.name}`)
+      dlog(`TODO ${x.constructor.name}`)
     }
 
     return null
@@ -705,7 +705,7 @@ export class TypeResolver extends ErrorReporter {
   //
   markUnresolved(expr :Expr) :UnresolvedType {
     const t = new UnresolvedType(expr.pos, expr.scope, expr)
-    debuglog(`expr ${expr} as ${this.fset.position(expr.pos)}`)
+    dlog(`expr ${expr} as ${this.fset.position(expr.pos)}`)
     this.unresolved.add(t)
     return t
   }
@@ -758,7 +758,7 @@ export class TypeResolver extends ErrorReporter {
       }
     }
 
-    debuglog(`TODO conversion of ${x} into type ${t}`)
+    dlog(`TODO conversion of ${x} into type ${t}`)
 
     // TODO: figure out a scalable type conversion system
     // TODO: conversion of other types
@@ -816,7 +816,7 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
       case token.REM: return new IntEvalConst(xv % yv)
       case token.AND: return new IntEvalConst(xv & yv)
       default:
-        debuglog(`TODO eval binary op (${token[op]} ${x} (${xv}) ${y})`)
+        dlog(`TODO eval binary op (${token[op]} ${x} (${xv}) ${y})`)
     }
 
   } else {
@@ -827,7 +827,7 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
       case token.INC: return new IntEvalConst(xv + 1)
       case token.DEC: return new IntEvalConst(xv + 1)
       default:
-        debuglog(`TODO eval unary op (${token[op]} ${x})`)
+        dlog(`TODO eval unary op (${token[op]} ${x})`)
     }
   }
 

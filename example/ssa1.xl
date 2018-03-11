@@ -36,10 +36,10 @@
 // I.e. for CF.
 
 fun constfold() int {
-  k = 2
-  a = 1 + k
-  a * 9
-  // becomes just "27"
+  k i32 = 2
+  a i32 = 1 + k
+  a * -9
+  // becomes just "-27"
 }
 
 // fun foo(x, y int) int {

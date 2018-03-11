@@ -1205,10 +1205,6 @@ export class IRBuilder {
     assert(s.type, `type not resolved for ${s}`)
 
     if (s instanceof ast.BasicLit) {
-      if (s.op != token.ILLEGAL) {
-        // e.g. negation
-        dlog(`TODO handle BasicLit.op`)
-      }
       let t = s.type //as BasicType
       let c :number = 0
       if (s.isInt()) {

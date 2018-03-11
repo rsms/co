@@ -5,8 +5,9 @@ import { ErrorHandler, ErrorCode } from './error'
 import { TypeResolver } from './resolve'
 import { ByteStr, ByteStrSet } from './bytestr'
 import { Universe } from './universe'
-import { debuglog } from './util'
+import { debuglog as dlog } from './util'
 import { DiagHandler, DiagKind } from './diag'
+import { SInt64, UInt64 } from './int64'
 import {
   File,
   Scope,
@@ -48,6 +49,7 @@ import {
   SliceExpr,
 
   Type,
+  BasicType,
   IntType,
   FunType,
   StrType,
@@ -57,8 +59,9 @@ import {
 
   u_t_nil,
   u_t_auto,
-  u_t_f32,
-  u_t_f64,
+  u_t_i32, u_t_u32,
+  u_t_i64, u_t_u64,
+  u_t_f32, u_t_f64,
 } from './ast'
 
 const kEmptyByteArray = new Uint8Array(0)
@@ -203,7 +206,7 @@ export class Parser extends scanner.Scanner {
       assert(scope.outer != null, 'pushing scope without outer scope')
     }
     p.scope = scope || new Scope(p.scope)
-    // debuglog(`${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
+    // dlog(`${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
   }
 
   popScope() :Scope { // returns old ("popped") scope
@@ -214,7 +217,7 @@ export class Parser extends scanner.Scanner {
     assert(s !== p.pkgscope, "pop file scope")
     assert(p.scope.outer != null, 'pop scope at base scope')
 
-    // debuglog(` ${(p as any).scope.outer.level()} <- ${p.scope.level()}`)
+    // dlog(` ${(p as any).scope.outer.level()} <- ${p.scope.level()}`)
 
     p.scope = p.scope.outer as Scope
 
@@ -292,7 +295,7 @@ export class Parser extends scanner.Scanner {
     while (s) {
       const ent = s.lookupImm(x.value)
       if (ent) {
-        // debuglog(`${x} found in scope#${s.level()}`)
+        // dlog(`${x} found in scope#${s.level()}`)
         x.refEnt(ent) // reference ent
 
         if (!x.type) {
@@ -318,7 +321,7 @@ export class Parser extends scanner.Scanner {
       s = s.outer
     }
 
-    // debuglog(`${x} not found`)
+    // dlog(`${x} not found`)
     if (collectUnresolved) {
       // all local scopes are known, so any unresolved identifier
       // must be found either in the file scope, package scope
@@ -1071,7 +1074,7 @@ export class Parser extends scanner.Scanner {
       const id = lhs[i]
 
       if (!(id instanceof Ident)) {
-        debuglog(`TODO LHS is not an id (type is ${id.constructor.name})`)
+        dlog(`TODO LHS is not an id (type is ${id.constructor.name})`)
         continue
       }
 
@@ -1244,7 +1247,7 @@ export class Parser extends scanner.Scanner {
       t !== u_t_f32 && t !== u_t_f64 &&
       !(t instanceof UnresolvedType)
     ) {
-      // debuglog(`operand type: ${x.constructor.name}`, x)
+      // dlog(`operand type: ${x.constructor.name}`, x)
       this.syntaxError(`cannot mutate ${x}`, x.pos)
     }
   }
@@ -1532,18 +1535,6 @@ export class Parser extends scanner.Scanner {
     const pos = p.pos
 
     switch (t) {
-      case token.ADD:
-      case token.SUB: {
-        p.next()
-        if (token.literal_beg < p.tok && p.tok < token.literal_end) {
-          // common case of negated literal, e.g. "-3", "+0.0"
-          return p.basicLit(ctx, t)
-        }
-        let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx))
-        p.types.resolve(x)
-        return x
-      }
-
       case token.NOT:
       case token.XOR:
       case token.AND: {
@@ -1689,25 +1680,71 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  basicLit(ctx :exprCtx, op? :token) :BasicLit {
+  basicLit(ctx :exprCtx) :BasicLit {
     //
     // BasicLit  = int_lit | float_lit | ratio_lit | rune_lit
     //
     const p = this
+    const x = new BasicLit(p.pos, p.scope, p.tok, 0)
+
     switch (p.tok) {
-      case token.INT: break
-      case token.INT_BIN: break
-      case token.INT_OCT: break
-      case token.INT_HEX: break
-      case token.FLOAT: break
-      case token.CHAR: break
-      // case token.RATIO: break
+      case token.INT:
+      case token.INT_BIN:
+      case token.INT_OCT:
+      case token.INT_HEX:
+        if (p.int64val) {
+          if (p.int64val.isSigned || p.int64val.lte(SInt64.MAX)) {
+            x.value = p.int64val.toSigned()
+            x.type = u_t_i64
+          } else {
+            assert(p.int64val instanceof UInt64)
+            x.value = p.int64val
+            x.type = u_t_u64
+          }
+        } else {
+          x.value = p.int32val
+          x.type = x.value <= 0x7fffffff ? u_t_i32 : u_t_u32
+        }
+        break
+      
+      case token.FLOAT:
+        x.value = p.floatval
+        x.type = u_t_f64
+        break
+      
+      case token.CHAR:
+        x.value = p.int32val
+        x.type = u_t_u32
+        assert(x.value >= 0, 'negative character value')
+        break
     }
-    let intval = p.int64val || p.int32val
-    const x = new BasicLit(p.pos, p.scope, p.tok, intval, op)
-    const reqt = p.ctxType(ctx)
-    x.type = p.universe.basicLitType(x, reqt, p.basicLitErrH, op)
-    p.next() // consume literal
+
+    assert(typeof x.value == 'number' ? !isNaN(x.value) : true)
+
+    // a certain type was requested
+    const reqt = p.ctxType(ctx) as BasicType | null
+    if (reqt) {
+      if (!(reqt instanceof BasicType)) {
+        p.syntaxError(`invalid value ${x.value} for type ${reqt}`)
+      } else {
+        // capture refs to current type and value before converting, as
+        // convertToType may change these properties.
+        let xt = x.type
+        let xv = x.value
+        if (!x.convertToType(reqt)) {
+          let tIsInt = xt instanceof IntType
+          let reqtIsInt = reqt instanceof IntType
+          if (tIsInt == reqtIsInt) {
+            p.syntaxError(`constant ${xv} overflows ${reqt.name}`)
+          } else {
+            p.syntaxError(`constant ${xv} truncated to ${reqt.name}`)
+          }
+        }
+      }
+    }
+
+    p.next() // consume literal token
+
     return x
   }
 
@@ -1791,123 +1828,6 @@ export class Parser extends scanner.Scanner {
       new IndexExpr(pos, p.scope, operand, x1 as Expr)
     )
   }
-
-
-  // // resolveIndex attempts to resolve the 
-  // // returns ix as a convenience
-  // //
-  // resolveIndex(ix :IndexExpr) :IndexExpr {
-  //   const p = this
-
-  //   // for type inference of the IndexExpr to work, we need to inspect the type
-  //   // of the operand
-  //   let opt = p.types.resolve(ix.operand)
-  //   if (opt instanceof UnresolvedType) {
-  //     // defer to bind stage
-  //     debuglog(`[index type] deferred to bind stage`)
-  //   } else if (opt instanceof TupleType) {
-  //     p.resolveTupleIndex(ix, opt)
-  //   } else {
-  //     debuglog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
-  //   }
-  //   return ix
-  // }
-
-
-  // resolveTupleIndex(ix :IndexExpr, opt :TupleType) {
-  //   const p = this
-
-  //   let it = p.types.resolve(ix.index)
-  //   if (it instanceof UnresolvedType) {
-  //     debuglog(`[index type] deferred to bind stage`)
-  //     ix.type = p.types.markUnresolved(ix)
-  //     return
-  //   }
-
-  //   // index must be constant for tuple access
-  //   let index = p.resolveLitConstant(ix.index)
-  //   if (!index) {
-  //     // TODO: somehow track this and complete the check during bind
-  //     p.syntaxError('non-constant tuple index', ix.index.pos)
-  //     return
-  //   }
-
-  //   // check type to make sure index is an integer
-  //   if (
-  //     index.type && !(index.type instanceof IntType) ||
-  //     !(index instanceof BasicLit) ||
-  //     !index.isInt()
-  //   ) {
-  //     p.syntaxError(`invalid index type ${index.type || index}`, ix.index.pos)
-  //     return
-  //   }
-
-  //   // parse the integer; returns -1 on failure
-  //   ix.indexv = index.parseUInt()
-  //   if (ix.indexv == -1) {
-  //     p.syntaxError(`invalid index ${index}`, ix.index.pos)
-  //     return
-  //   }
-
-  //   if (ix.indexv >= opt.types.length) {
-  //     p.syntaxError(`out-of-bounds tuple index ${index} on type ${opt}`, ix.pos)
-  //     return
-  //   }
-
-  //   // success -- type of IndexExpr found
-  //   ix.type = opt.types[ix.indexv]
-  // }
-
-
-  // // resolveLitConstant attempts to resolve the constant value of x, expected
-  // // to be a LiteralExpr. If x or anything x might refer to is not constant,
-  // // null is returned.
-  // //
-  // resolveLitConstant(x :Expr) :LiteralExpr|null {
-  //   const p = this
-
-  //   if (x instanceof LiteralExpr) {
-  //     return x
-  //   }
-
-  //   if (x instanceof Ident) {
-  //     if (x.ent && x.ent.writes == 0 && x.ent.value) {
-  //       // Note: we check `x.ent.writes == 0` to make sure that x is a constant
-  //       // i.e. that there are no potential conditional branches that might
-  //       // change the value of x.
-  //       return p.resolveLitConstant(x.ent.value)
-  //     }
-  //   } else if (x instanceof IndexExpr) {
-  //     let opt = p.types.resolve(x.operand)
-
-  //     if (opt instanceof TupleType) {
-  //       let tuple :TupleExpr
-  //       if (x.operand instanceof Ident) {
-  //         assert(x.operand.ent != null) // should have been resolved
-  //         const ent = x.operand.ent as Ent
-  //         assert(ent.value instanceof TupleExpr)
-  //         tuple = ent.value as TupleExpr
-  //       } else {
-  //         // TODO: handle selectors to fields
-  //         assert(x.operand instanceof TupleExpr)
-  //         tuple = x.operand as TupleExpr
-  //       }
-
-  //       if (x.indexv >= 0) {
-  //         assert(x.indexv < tuple.exprs.length) // bounds checked when resolved
-  //         return p.resolveLitConstant(tuple.exprs[x.indexv])
-  //       } else {
-  //         debuglog(`x.indexv < 0 for IndexExpr ${x}`)
-  //       }
-  //     } else {
-  //       debuglog(`TODO ${x.constructor.name} operand ${opt}`)
-  //     }
-  //   } else {
-  //     debuglog(`TODO ${x.constructor.name}`)
-  //   }
-
-  //   return null
-  // }
 
 
   parenExpr(ctx :exprCtx) :Expr {

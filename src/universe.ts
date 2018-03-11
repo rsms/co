@@ -1,5 +1,5 @@
 import { ByteStr, ByteStrSet } from './bytestr'
-import { asciibuf, bufcmp } from './util'
+import { asciibuf } from './util'
 import { token, tokstr } from './token'
 import { Pos } from './pos'
 import { TypeSet } from './typeset'
@@ -491,7 +491,6 @@ type basicLitTypeFitter = (
   x :BasicLit,
   reqt :Type|null,
   errh? :ErrorHandler,
-  op? :token,
 ) => BasicType
 
 
@@ -652,11 +651,10 @@ export class Universe {
     x :BasicLit,
     reqt? :Type|null,
     errh? :ErrorHandler,
-    op? :token, // e.g. token.SUB for "-", token.NOT for "!", etc.
   ) :BasicType {
     let f = basicLitTypesFitters.get(x.kind) as basicLitTypeFitter
     assert(f, `missing type fitter for ${tokstr(x.kind)}`)
-    return f(x, reqt || null, errh, op)
+    return f(x, reqt || null, errh)
   }
 
   // internType potentially returns an equivalent type (t1.equals(t2) == true)

@@ -1,72 +1,82 @@
-import { Int64, UInt64 } from './int64'
-import { strtou } from './strtou'
-import { debuglog as dlog } from './util'
+import { Int64, UInt64, SInt64 } from './int64'
+// import { debuglog as dlog } from './util'
 
-const IntParserI32 = 0
-const IntParserI64 = 1
-const IntParserBigInt = 2
-
-const UInt64MaxByRadix = [
+const u64MaxByRadix = [
   '', '',
-  '1111111111111111111111111111111111111111111111111111111111111111',  // base 2
-  '11112220022122120101211020120210210211220',  // base 3
-  '33333333333333333333333333333333',  // base 4
-  '2214220303114400424121122430',  // base 5
-  '3520522010102100444244423',  // base 6
-  '45012021522523134134601',  // base 7
-  '1777777777777777777777',  // base 8
-  '145808576354216723756',  // base 9
-  '18446744073709551615',  // base 10
-  '335500516a429071284',  // base 11
-  '839365134a2a240713',  // base 12
-  '219505a9511a867b72',  // base 13
-  '8681049adb03db171',  // base 14
-  '2c1d56b648c6cd110',  // base 15
-  'ffffffffffffffff',  // base 16
-  '67979g60f5428010',  // base 17
-  '2d3fgb0b9cg4bd2f',  // base 18
-  '141c8786h1ccaagg',  // base 19
-  'b53bjh07be4dj0f',  // base 20
-  '5e8g4ggg7g56dif',  // base 21
-  '2l4lf104353j8kf',  // base 22
-  '1ddh88h2782i515',  // base 23
-  'l12ee5fn0ji1if',  // base 24
-  'c9c336o0mlb7ef',  // base 25
-  '7b7n2pcniokcgf',  // base 26
-  '4eo8hfam6fllmo',  // base 27
-  '2nc6j26l66rhof',  // base 28
-  '1n3rsh11f098rn',  // base 29
-  '14l9lkmo30o40f',  // base 30
-  'nd075ib45k86f',  // base 31
-  'fvvvvvvvvvvvv',  // base 32
-  'b1w8p7j5q9r6f',  // base 33
-  '7orp63sh4dphh',  // base 34
-  '5g24a25twkwff',  // base 35
-  '3w5e11264sgsf',  // base 36
+  '1111111111111111111111111111111111111111111111111111111111111111',
+    // base 2
+  '11112220022122120101211020120210210211220', // base 3
+  '33333333333333333333333333333333',          // base 4
+  '2214220303114400424121122430',              // base 5
+  '3520522010102100444244423',                 // base 6
+  '45012021522523134134601',                   // base 7
+  '1777777777777777777777',                    // base 8
+  '145808576354216723756',                     // base 9
+  '18446744073709551615',                      // base 10
+  '335500516a429071284',                       // base 11
+  '839365134a2a240713',                        // base 12
+  '219505a9511a867b72',                        // base 13
+  '8681049adb03db171',                         // base 14
+  '2c1d56b648c6cd110',                         // base 15
+  'ffffffffffffffff',                          // base 16
+  '67979g60f5428010',                          // base 17
+  '2d3fgb0b9cg4bd2f',                          // base 18
+  '141c8786h1ccaagg',                          // base 19
+  'b53bjh07be4dj0f',                           // base 20
+  '5e8g4ggg7g56dif',                           // base 21
+  '2l4lf104353j8kf',                           // base 22
+  '1ddh88h2782i515',                           // base 23
+  'l12ee5fn0ji1if',                            // base 24
+  'c9c336o0mlb7ef',                            // base 25
+  '7b7n2pcniokcgf',                            // base 26
+  '4eo8hfam6fllmo',                            // base 27
+  '2nc6j26l66rhof',                            // base 28
+  '1n3rsh11f098rn',                            // base 29
+  '14l9lkmo30o40f',                            // base 30
+  'nd075ib45k86f',                             // base 31
+  'fvvvvvvvvvvvv',                             // base 32
+  'b1w8p7j5q9r6f',                             // base 33
+  '7orp63sh4dphh',                             // base 34
+  '5g24a25twkwff',                             // base 35
+  '3w5e11264sgsf',                             // base 36
 ]
+
+const _U32_CUTOFF = 0xFFFFFFFF >>> 0
 
 export class IntParser {
   int32val :int = 0
-  int64val :UInt64 | null = null
+  int64val :Int64 | null = null
 
-  _stage = IntParserI32
-  _ndigits = 0      // total digit count
-  _ndigitsChunk = 0 // digit count per i32 chunk
-  _radix = 10
+  private _ndigits = 0      // total digit count
+  private _ndigitsChunk = 0 // digit count per i32 chunk
+  private _radix = 10
+  private _signed :bool = false
+  private _neg :bool = false
+  private _s32cutoff = 0 | 0
 
-  constructor(){}
+  init(radix :int, signed :bool, negative :bool) {
+    assert(signed || (!signed && !negative), 'invalid unsigned and negative')
 
-  init(radix :int) {
     this.int32val = 0
     this.int64val = null
 
-    this._stage = IntParserI32
     this._ndigits = 0
     this._ndigitsChunk = 0
     this._radix = radix
+    this._signed = signed
+    this._neg = negative
+
+    if (signed) {
+      this._s32cutoff = negative ? 0x80000000 : 0x7FFFFFFF
+      this.parseval = this.parseval_s32
+    } else {
+      this.parseval = this.parseval_u32
+    }
   }
 
-  addchar(c :int) {
+  // parsedigit parses an ASCII digit
+  //
+  parsedigit(c :int) {
     let n = 37  // max base + 1 since we compare with base/radix later
     if (c >= 0x30 && c <= 0x39) { // 0..9
       n = c - 0x30
@@ -76,60 +86,112 @@ export class IntParser {
       n = c - (0x61 - 10)
     }
     if (n <= this._radix) {
-      return this.add(n)
+      return this.parseval(n)
     }
   }
 
-  add(n :int) {
+  // parseval parses a digit value
+  //
+  // It is dynamically redirected to a parsing function depending on the
+  // current magnitude of the number and if its signed or negative.
+  //
+  parseval :(n :int)=>void
+
+
+  private parseval_s32(n :int) {
     let p = this
     let nextval = (p.int32val * p._radix) + n
-
-    switch (p._stage) {
-
-    case IntParserI32: {
-      if (nextval > 0xFFFFFFFF) {
-        // i32 -> i64
-        p.int64val = UInt64.fromInt32(p.int32val)
-        p._stage = IntParserI64
-        // dlog(`[intParser] i32 -> i64  starting at ${p.int64val}`)
-
-        p.int32val = n
-        p._ndigits = p._ndigitsChunk
-        p._ndigitsChunk = 1
-        return
-      }
-      break
+    if (nextval > this._s32cutoff) {
+      // i32 -> i64
+      p.int64val = SInt64.fromInt32(p.int32val)
+      p.int32val = n
+      p._ndigits = p._ndigitsChunk
+      p._ndigitsChunk = 1
+      p.parseval = p.parseval_s64
+      // dlog(`[intParser] s32 -> s64  starting at ${p.int64val}`)
+    } else {
+      p.int32val = nextval
+      p._ndigitsChunk++
     }
+  }
 
-    case IntParserI64: {
-      if (nextval > 0xFFFFFFFF) {
-        // i64 -> bigint
-        let radixToPower = UInt64.fromFloat64(
-          Math.pow(p._radix, p._ndigitsChunk)
-        )
-        p.int64val = (p.int64val as UInt64).mul(radixToPower).add(
-          UInt64.fromFloat64(p.int32val)
-        )
-        p._stage = IntParserBigInt
-        // dlog(`[intParser] i64 -> bigint  starting at ${p.int64val}`)
-
-        p.int32val = n
-        p._ndigits += p._ndigitsChunk
-        p._ndigitsChunk = 1
-        return
-      }
-      break
+  private parseval_s64(n :int) {
+    let p = this
+    let nextval = (p.int32val * p._radix) + n
+    if (nextval > this._s32cutoff) {
+      // i64 -> big
+      let radixToPower = UInt64.fromFloat64(
+        Math.pow(p._radix, p._ndigitsChunk)
+      )
+      p.int64val = (p.int64val as SInt64).mul(radixToPower).add(
+        SInt64.fromFloat64(p.int32val)
+      )
+      p.int32val = n
+      p._ndigits += p._ndigitsChunk
+      p._ndigitsChunk = 1
+      p.parseval = p.parseval_sbig
+      // dlog(`[intParser] s64 -> sbig  starting at ${p.int64val}`)
+    } else {
+      p.int32val = nextval
+      p._ndigitsChunk++
     }
+  }
 
-    // default: {
-    //   console.log('\n\n———————— bigint ————————\n')
-    //   break
-    // }
 
-    } // switch (p._stage)
+  private parseval_u32(n :int) {
+    let p = this
+    let nextval = (p.int32val * p._radix) + n
+    if (nextval > _U32_CUTOFF) {
+      // i32 -> i64
+      p.int64val = UInt64.fromInt32(p.int32val)
+      p.int32val = n
+      p._ndigits = p._ndigitsChunk
+      p._ndigitsChunk = 1
+      p.parseval = p.parseval_u64
+      // dlog(`[intParser] u32 -> u64  starting at ${p.int64val}`)
+    } else {
+      p.int32val = nextval
+      p._ndigitsChunk++
+    }
+  }
 
-    p.int32val = nextval
-    p._ndigitsChunk++
+  private parseval_u64(n :int) {
+    let p = this
+    let nextval = (p.int32val * p._radix) + n
+    if (nextval > _U32_CUTOFF) {
+      // i64 -> big
+      let radixToPower = UInt64.fromFloat64(
+        Math.pow(p._radix, p._ndigitsChunk)
+      )
+      p.int64val = (p.int64val as UInt64).mul(radixToPower).add(
+        UInt64.fromFloat64(p.int32val)
+      )
+      p.int32val = n
+      p._ndigits += p._ndigitsChunk
+      p._ndigitsChunk = 1
+      p.parseval = p.parseval_ubig
+      // dlog(`[intParser] u64 -> ubig  starting at ${p.int64val}`)
+    } else {
+      p.int32val = nextval
+      p._ndigitsChunk++
+    }
+  }
+
+  private parseval_ubig(n :int) {
+    // not implemented
+    this._ndigitsChunk++
+  }
+
+  private parseval_sbig(n :int) {
+    // not implemented
+    this._ndigitsChunk++
+  }
+
+  private overflow() :bool {
+    let p = this
+    p.int32val = NaN
+    p.int64val = null
+    return false
   }
 
   // finalize performs any final parsing required
@@ -137,127 +199,80 @@ export class IntParser {
   finalize() :bool {
     let p = this
 
-    if (p._stage == IntParserI32) {
-      // no finalization needed for small numbers
+    if (!p.int64val) {
+      if (p._neg) {
+        p.int32val = -p.int32val
+      }
       return true  // valid
     }
 
-    assert(p.int64val != null)
-    assert(p._ndigitsChunk > 0)
+    assert(p._ndigitsChunk > 0, 'started int64val but did not read digit')
 
-    let ndigits = p._ndigits + p._ndigitsChunk
-    let maxstr = UInt64MaxByRadix[p._radix]
+    let power = UInt64.fromFloat64(Math.pow(p._radix, p._ndigitsChunk))
 
-    if (ndigits <= maxstr.length) {
-      let power = UInt64.fromFloat64(Math.pow(p._radix, p._ndigitsChunk))
-      p.int64val = (p.int64val as UInt64).mul(power).add(
-        UInt64.fromFloat64(p.int32val)
-      )
-      p.int32val = NaN
+    if (power._high >= p._radix) {
+      return p.overflow()
+    }
+
+    if (p._signed) {
+      if (p.parseval === p.parseval_sbig) {
+        if (p._ndigitsChunk > 1) {
+          // did transition into big and contains at least one digit past i64
+          return p.overflow()
+        }
+      } else if (p.int64val._high != 0 && p.int32val != 0) {
+        // special case for -0x8000000000000001 (SINT64_MIN - 1)
+        return p.overflow()
+      }
+
+      let n = p.int64val.mul(power).add(SInt64.fromInt32(p.int32val))
+
+      if (n._high < 0 && (!p._neg || n._low != 0 || n._high != -2147483648)) {
+        assert(n.lt(SInt64.ZERO)) // make sure it actually overflowed
+        // Note on (n._low != 0 || n._high != -2147483648):
+        // checks for the specific case of exactly SInt64.MIN which does
+        // cause overflow because of the sign bit.
+        return p.overflow()
+      }
+
+      p.int64val = n
+
+    } else {
+      // unsigned
+      let ndigits = p._ndigits + p._ndigitsChunk
+      let maxstr = u64MaxByRadix[p._radix]
 
       if (
-        ndigits < maxstr.length ||
-        (
-          !p.int64val.eqz() &&
-          p.int64val.toString(p._radix) <= maxstr
-        )
+        (p.parseval === p.parseval_ubig && p._ndigitsChunk > 1) ||
+        ndigits > maxstr.length
       ) {
-        return true  // valid
+        return p.overflow()
+      }
+
+      if (ndigits == maxstr.length && p.int64val._high == 0) {
+        let maxstr_low = maxstr.substr(0, p._ndigits)
+        let low = p.int64val._low >>> 0
+        if (maxstr_low < low.toString(p._radix)) {
+          return p.overflow()
+        }
+      }
+
+      p.int64val = p.int64val.mul(power).add(UInt64.fromInt32(p.int32val))
+
+      if (p.int64val._high == 0) {
+        // overflowed by just a bit
+        return p.overflow()
       }
     }
 
-    // invalid
-    p.int64val = null
     p.int32val = NaN
-    return false  // invalid
+
+    if (p._neg) {
+      assert(p._signed)
+      p.int64val = p.int64val.neg()
+    }
+
+    return true
   }
 
 }
-
-
-
-// function fmtduration(milliseconds: int) :string {
-//   return (
-//     milliseconds < 0.001 ? `${(milliseconds * 1000000).toFixed(0)} ns` :
-//     milliseconds < 0.01 ? `${(milliseconds * 1000).toFixed(2)} µs` :
-//     `${milliseconds.toFixed(2)} ms`
-//   )
-// }
-
-// let iterations = 100000
-// if (process.argv.length > 2) {
-//   const n = parseInt(process.argv[2])
-//   if (!isNaN(n)) {
-//     iterations = n
-//   }
-// }
-
-// function bench(label :string, f :(i?:int)=>any, countPerIteration :int = 1) {
-//   if (typeof global.gc == 'function') {
-//     global.gc()
-//   }
-//   let timeStart = process.hrtime()
-//   for (let n = 0; n < iterations; n++) {
-//     f(n)
-//   }
-//   let timeEnd = process.hrtime()
-//   let start = (timeStart[0] * 1000) + (timeStart[1] / 1000000)
-//   let end = (timeEnd[0] * 1000) + (timeEnd[1] / 1000000)
-//   let d = end - start
-//   let totalAvg = d / iterations
-//   if (countPerIteration > 1) {
-//     let itemAvg = d / iterations / countPerIteration
-//     console.log(
-//       `${label} ${fmtduration(totalAvg)}, ` +
-//       `${fmtduration(itemAvg)} per operation (avg)`
-//     )
-//   } else {
-//     console.log(`${label} ${fmtduration(totalAvg)} (avg)`)
-//   }
-// }
-
-
-
-// function digitCount(n :int) :int {
-//   return Math.floor(Math.log10(Math.abs(n))) + 1
-// }
-
-// function findNDigits() {
-//   // 100000000
-//   // 1000000001
-//   // 999999999
-//   // for (let i = 100000000; i < 0xFFFFFFFF; i++) {
-//   //   // let n = digitCount(i)
-//   //   let n = i.toString(10).length
-//   //   if (n == 9) {
-//   //     dlog(`${i} has 9 digits`)
-//   //   }
-//   // }
-//   let p = new IntParser()
-//   let x :any
-//   let samples = [
-//     '1234',
-//     '100 000 00',
-//     '100 000 00',
-//     '100 000 000  000 00',
-//     '999 999 999  999 99',
-//   ]
-
-//   // 2.5 microsec (500 ns / op)
-
-//   bench('a', () => {
-//     for (let sample of samples) {
-//       p.init(10)
-//       let s = sample.replace(/[^0-9]+/g, '')
-//       // console.log('parse', s)
-//       for (let i = 0; i < s.length; i++) {
-//         let c = s.charCodeAt(i)
-//         p.parse(c)
-//       }
-//     }
-//   }, samples.length)
-
-//   process.exit(0)
-// }
-
-// findNDigits()

@@ -233,8 +233,8 @@ TEST('fromInt32', () => {
 })
 
 
-TEST('fromFloat64', () => {
-  let s, u
+TEST('fromFloat64/s', () => {
+  let s
 
   s = SInt64.fromFloat64(0x7FFFFFFF)
   assertEq(s.toFloat64(), 2147483647)
@@ -259,7 +259,11 @@ TEST('fromFloat64', () => {
   s = SInt64.fromFloat64(0xFFFFFFFFFFFFFFFF) // limited to SInt64.MAX
   assertEq(s.toFloat64(), 9223372036854775807)
   assertEq(s.toString(10), '9223372036854775807')
+})
 
+
+TEST('fromFloat64/u', () => {
+  let u
 
   u = UInt64.fromFloat64(0x7FFFFFFF)
   assertEq(u.toFloat64(), 2147483647)
@@ -283,6 +287,71 @@ TEST('fromFloat64', () => {
 })
 
 
+TEST('maybeFromFloat64/s', () => {
+  let s
+
+  s = SInt64.maybeFromFloat64(123) as UInt64
+  assert(s != null)
+  assertEq(s.toFloat64(), 123)
+  assertEq(s.toString(10), '123')
+
+  s = SInt64.maybeFromFloat64(0x7FFFFFFF) as UInt64
+  assert(s != null)
+  assertEq(s.toFloat64(), 2147483647)
+  assertEq(s.toString(10), '2147483647')
+
+  s = SInt64.maybeFromFloat64(0xFFFFFFFFFF) as UInt64
+  assert(s != null)
+  assertEq(s.toFloat64(), 1099511627775)
+  assertEq(s.toString(10), '1099511627775')
+
+  s = SInt64.maybeFromFloat64(-0xFFFFFFFFFF) as UInt64
+  assert(s != null)
+  assertEq(s.toFloat64(), -1099511627775)
+  assertEq(s.toString(10), '-1099511627775')
+
+  s = SInt64.maybeFromFloat64(0x7FFFFFFFFFFFFFFF) as UInt64
+  assert(s != null)
+  assertEq(s.toFloat64(), 9223372036854775807)
+  assertEq(s.toString(10), '9223372036854775807')
+
+  s = SInt64.maybeFromFloat64(-0x8000000000000000) as UInt64
+  assert(s != null)
+  assertEq(s.toFloat64(), -9223372036854775808)
+  assertEq(s.toString(10), '-9223372036854775808')
+
+  s = SInt64.maybeFromFloat64(0xFFFFFFFFFFFFFFFF) as null
+    // limited to SInt64.MAX
+  assertEq(s, null)
+})
+
+
+TEST('maybeFromFloat64/u', () => {
+  let u
+
+  u = UInt64.maybeFromFloat64(0x7FFFFFFF) as UInt64
+  assert(u != null)
+  assertEq(u.toFloat64(), 2147483647)
+  assertEq(u.toString(10), '2147483647')
+
+  u = UInt64.maybeFromFloat64(0xFFFFFFFFFF) as UInt64
+  assert(u != null)
+  assertEq(u.toFloat64(), 1099511627775)
+  assertEq(u.toString(10), '1099511627775')
+
+  u = UInt64.maybeFromFloat64(0xFFFFFFFFFFFFFFFF) as UInt64
+  assert(u != null)
+  assertEq(u.toFloat64(), 18446744073709551615)
+  assertEq(u.toString(10), '18446744073709551615')
+
+  u = UInt64.maybeFromFloat64(-1) as null // limited to UInt64.MIN
+  assertEq(u, null)
+
+  u = UInt64.maybeFromFloat64(-0xFFFFFFFFFF) as null // limited to UInt64.MIN
+  assertEq(u, null)
+})
+
+
 TEST('sign-conv', () => {
   let s, u
 
@@ -301,7 +370,7 @@ TEST('sign-conv', () => {
 
 
 TEST('sub-max-signed', () => {
-  let s, u
+  let u
   //
   // UINT64_MAX - INT64_MAX - 1 == INT64_MAX
   //
@@ -312,7 +381,7 @@ TEST('sub-max-signed', () => {
 
 
 TEST('sub-max-unsigned', () => {
-  let s, u
+  let u
   //
   // UINT64_MAX - UINT64_MAX == 0
   //
@@ -354,7 +423,8 @@ let js_mul   = (SInt64.prototype as any)._js_mul as (x:Int64)=>SInt64
 let js_div_s = (SInt64.prototype as any)._js_div as (x:Int64)=>SInt64
 let js_div_u = (UInt64.prototype as any)._js_div as (x:Int64)=>UInt64
 let js_mod_s = (SInt64.prototype as any)._js_mod as (x:Int64)=>SInt64
-let js_mod_u = (UInt64.prototype as any)._js_mod as (x:Int64)=>UInt64
+// let js_mod_u = (UInt64.prototype as any)._js_mod as (x:Int64)=>UInt64
+// TODO test js_mod_u
 
 
 TEST('div-max', () => {
@@ -439,7 +509,7 @@ if (js_div_u) TEST('div-unsigned/js', () => {
 TEST('msb-unsigned', () => {
   // most significant bit
   // 1 << 63 == 0x8000000000000000
-  let u = UInt64.ONE.shiftLeft(63)
+  let u = UInt64.ONE.shl(63)
   assert(u.eq(SInt64.MIN) == false)
   assertEq(u.toString(), "9223372036854775808")
 })
@@ -1727,8 +1797,6 @@ var TEST_STRINGS = [
   '9223372036854775807'
 ]
 
-function setUp() {
-}
 
 TEST('ToFromBits', () => {
   for (var i = 0; i < TEST_BITS.length; i += 2) {
@@ -1821,49 +1889,49 @@ TEST('bitOperations', () => {
     }
 
     actx = `bitOperations[i=${i}]`
-    assertEq(vi.shiftLeft(0)._high,          TEST_BITS[i], actx)
-    assertEq(vi.shiftLeft(0)._low,           TEST_BITS[i + 1], actx)
-    assertEq(vi.shiftRight(0)._high,         TEST_BITS[i], actx)
-    assertEq(vi.shiftRight(0)._low,          TEST_BITS[i + 1], actx)
-    assertEq(vi.shiftRightUnsigned(0)._high, TEST_BITS[i], actx)
-    assertEq(vi.shiftRightUnsigned(0)._low,  TEST_BITS[i + 1], actx)
+    assertEq(vi.shl(0)._high,          TEST_BITS[i], actx)
+    assertEq(vi.shl(0)._low,           TEST_BITS[i + 1], actx)
+    assertEq(vi.shr_s(0)._high,         TEST_BITS[i], actx)
+    assertEq(vi.shr_s(0)._low,          TEST_BITS[i + 1], actx)
+    assertEq(vi.shr_u(0)._high, TEST_BITS[i], actx)
+    assertEq(vi.shr_u(0)._low,  TEST_BITS[i + 1], actx)
 
     for (let len = 1; len < 64; ++len) {
       actx = `bitOperations[i=${i},len=${len}]`
       if (len < 32) {
         assertEq(
-          vi.shiftLeft(len)._high,
+          vi.shl(len)._high,
           (TEST_BITS[i] << len) | (TEST_BITS[i + 1] >>> (32 - len)),
           actx
         )
-        assertEq(vi.shiftLeft(len)._low, TEST_BITS[i + 1] << len, actx)
+        assertEq(vi.shl(len)._low, TEST_BITS[i + 1] << len, actx)
 
-        assertEq(vi.shiftRight(len)._high, TEST_BITS[i] >> len, actx)
+        assertEq(vi.shr_s(len)._high, TEST_BITS[i] >> len, actx)
         assertEq(
-          vi.shiftRight(len)._low,
+          vi.shr_s(len)._low,
           (TEST_BITS[i + 1] >>> len) | (TEST_BITS[i] << (32 - len)),
           actx
         )
 
-        assertEq(vi.shiftRightUnsigned(len)._high, TEST_BITS[i] >>> len, actx)
+        assertEq(vi.shr_u(len)._high, TEST_BITS[i] >>> len, actx)
         assertEq(
-          vi.shiftRightUnsigned(len)._low,
+          vi.shr_u(len)._low,
           (TEST_BITS[i + 1] >>> len) | (TEST_BITS[i] << (32 - len)),
           actx
         )
       } else {
-        assertEq(vi.shiftLeft(len)._high, TEST_BITS[i + 1] << (len - 32), actx)
-        assertEq(vi.shiftLeft(len)._low, 0, actx)
+        assertEq(vi.shl(len)._high, TEST_BITS[i + 1] << (len - 32), actx)
+        assertEq(vi.shl(len)._low, 0, actx)
 
-        assertEq(vi.shiftRight(len)._high, TEST_BITS[i] >= 0 ? 0 : -1, actx)
-        assertEq(vi.shiftRight(len)._low, TEST_BITS[i] >> (len - 32), actx)
+        assertEq(vi.shr_s(len)._high, TEST_BITS[i] >= 0 ? 0 : -1, actx)
+        assertEq(vi.shr_s(len)._low, TEST_BITS[i] >> (len - 32), actx)
 
-        assertEq(vi.shiftRightUnsigned(len)._high, 0, actx)
+        assertEq(vi.shr_u(len)._high, 0, actx)
         if (len == 32) {
-          assertEq(vi.shiftRightUnsigned(len)._low, TEST_BITS[i], actx)
+          assertEq(vi.shr_u(len)._low, TEST_BITS[i], actx)
         } else {
           assertEq(
-            vi.shiftRightUnsigned(len)._low,
+            vi.shr_u(len)._low,
             TEST_BITS[i] >>> (len - 32),
             actx
           )
@@ -1872,12 +1940,12 @@ TEST('bitOperations', () => {
     }
 
     actx = `bitOperations[i=${i}]`
-    assertEq(vi.shiftLeft(64)._high,          TEST_BITS[i], actx)
-    assertEq(vi.shiftLeft(64)._low,           TEST_BITS[i + 1], actx)
-    assertEq(vi.shiftRight(64)._high,         TEST_BITS[i], actx)
-    assertEq(vi.shiftRight(64)._low,          TEST_BITS[i + 1], actx)
-    assertEq(vi.shiftRightUnsigned(64)._high, TEST_BITS[i], actx)
-    assertEq(vi.shiftRightUnsigned(64)._low,  TEST_BITS[i + 1], actx)
+    assertEq(vi.shl(64)._high,   TEST_BITS[i], actx)
+    assertEq(vi.shl(64)._low,    TEST_BITS[i + 1], actx)
+    assertEq(vi.shr_s(64)._high, TEST_BITS[i], actx)
+    assertEq(vi.shr_s(64)._low,  TEST_BITS[i + 1], actx)
+    assertEq(vi.shr_u(64)._high, TEST_BITS[i], actx)
+    assertEq(vi.shr_u(64)._low,  TEST_BITS[i + 1], actx)
   }
 })
 

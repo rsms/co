@@ -67,7 +67,12 @@ function repr(obj) {
 
 function TEST(){}
 if (DEBUG) {
-if (typeof process == 'undefined' || process.argv.indexOf('-no-test') == -1) {
+if (
+  typeof process != 'undefined' &&
+  ( process.argv.indexOf('-test') != -1 ||
+    process.argv.indexOf('-test-only') != -1
+  )
+) {
   var allTests = global.allTests = global.allTests || []
   TEST = (name, f) => {
     if (f === undefined) {
