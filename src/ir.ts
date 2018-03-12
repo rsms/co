@@ -1204,7 +1204,7 @@ export class IRBuilder {
     const r = this
     assert(s.type, `type not resolved for ${s}`)
 
-    if (s instanceof ast.BasicLit) {
+    if (s instanceof ast.NumLit) {
       let t = s.type //as BasicType
       let c :number = 0
       if (s.isInt()) {

@@ -76,7 +76,9 @@ function eval_op2(op :Op, t :BasicType, x :number, y :number) :number {
     x - y >>> 0
 
   // multiplication and division
-  case Op.i32Mul:   return Math.imul(x, y)
+  case Op.i32Mul:   return (t as IntType).signed ?
+    Math.imul(x, y) :
+    Math.imul(x, y) >>> 0
   case Op.i32Div_s: return x / y | 0
   case Op.i32Div_u: return x / y >>> 0
   case Op.i32Rem_s: return x % y | 0

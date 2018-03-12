@@ -23,7 +23,7 @@ import {
   Expr,
   Ident,
   RestExpr,
-  BasicLit,
+  NumLit,
   StringLit,
   FunExpr,
   FunSig,
@@ -217,7 +217,7 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return c.style.purple(c.style.bold(n.name))
   }
 
-  if (n instanceof BasicLit) {
+  if (n instanceof NumLit) {
     return reprt(n.type, newline, c) + c.style.green(n.value.toString())
   }
 
@@ -296,7 +296,7 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   }
 
   if (n instanceof Assignment) {
-    let s = newline + `(${reprcons(n, c)} `
+    let s = newline + `(${c.style.grey('assign')} `
     s += reprv(n.lhs, nl2, c)
     if (n.op == token.ILLEGAL) {
       s += ' = '

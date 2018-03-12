@@ -10,7 +10,7 @@ import {
 
   Expr,
   Ident,
-  BasicLit,
+  NumLit,
   // ParenExpr,
   RestExpr,
   FunExpr,
@@ -39,6 +39,7 @@ import {
 
   u_t_nil, // u_t_void,
   u_t_bool,
+  u_t_int,
   u_t_str,
   u_t_optstr,
 } from './ast'
@@ -218,7 +219,7 @@ export class TypeResolver extends ErrorReporter {
     if (n instanceof Operation) {
       const xt = r.resolve(n.x)
       if (!n.y) {
-        // unary, e.g. x++
+        // unary
         return xt
       } else {
         const yt = r.resolve(n.y)
@@ -589,7 +590,7 @@ export class TypeResolver extends ErrorReporter {
       // check type to make sure index is an integer
       if (
         index2.type && !(index2.type instanceof IntType) ||
-        !(index2 instanceof BasicLit) ||
+        !(index2 instanceof NumLit) ||
         !index2.isInt()
       ) {
         r.syntaxError(`invalid index type ${index2.type || index2}`, ix.pos)
@@ -621,13 +622,14 @@ export class TypeResolver extends ErrorReporter {
 
     // since we folded the constant, replace x.index if it's not already
     // a constant
-    if (!(x.index instanceof BasicLit)) {
+    if (!(x.index instanceof NumLit)) {
       // Note: Simply skip this branch to disable on-the-fly optimizations
-      const bl = new BasicLit(
+      const bl = new NumLit(
         x.index.pos,
         x.index.scope,
         token.INT,
-        x.indexv
+        x.indexv,
+        u_t_int,
       )
       bl.type = r.universe.basicLitType(bl)
       x.index = bl
@@ -705,7 +707,9 @@ export class TypeResolver extends ErrorReporter {
   //
   markUnresolved(expr :Expr) :UnresolvedType {
     const t = new UnresolvedType(expr.pos, expr.scope, expr)
-    dlog(`expr ${expr} as ${this.fset.position(expr.pos)}`)
+    let e = new Error()
+    dlog(`expr ${expr} as ${this.fset.position(expr.pos)}`,
+     '\n' + (e.stack as string).split('\n').slice(2).join('\n'))
     this.unresolved.add(t)
     return t
   }
@@ -715,7 +719,7 @@ export class TypeResolver extends ErrorReporter {
   isConstant(x :Expr) :bool {
     return (
       x instanceof LiteralExpr ||
-      (x instanceof Ident && x.ent != null && x.ent.isConstant)
+      (x instanceof Ident && x.ent != null && x.ent.isConstant())
     )
     // TODO: expand
   }
@@ -771,7 +775,7 @@ export class TypeResolver extends ErrorReporter {
 // intEvaluator is an Evaluator that can perform operations on integers
 //
 function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
-  if (!(x instanceof BasicLit) || !x.isInt()) {
+  if (!(x instanceof NumLit) || !x.isInt()) {
     return null
   }
 
@@ -790,7 +794,7 @@ function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
 
   if (y) {
     // binary operation
-    if (!(y instanceof BasicLit) || !y.isInt()) {
+    if (!(y instanceof NumLit) || !y.isInt()) {
       return null
     }
 

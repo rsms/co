@@ -7,7 +7,7 @@ import { SInt64 } from './int64'
 import {
   Scope,
   Ent,
-  BasicLit,
+  NumLit,
   IntrinsicVal,
   Type,
   BasicType,
@@ -83,6 +83,7 @@ export enum TypeCompat {
 }
 
 // maps destination type to receiver types and their compatbility type
+// TODO: separate into a "type" source file.
 const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
 
   [u_t_u64, new Map<BasicType,TypeCompat>([
@@ -488,7 +489,7 @@ export type ErrorHandler = (msg :string, pos :Pos) => any
 // reqt should be reutned if the literal can safely be represented as reqt.
 //
 type basicLitTypeFitter = (
-  x :BasicLit,
+  x :NumLit,
   reqt :Type|null,
   errh? :ErrorHandler,
 ) => BasicType
@@ -496,7 +497,7 @@ type basicLitTypeFitter = (
 
 // intBits calculates the minimum bit size for an integer constant
 //
-function intBits(x :BasicLit) :int {
+function intBits(x :NumLit) :int {
   if (typeof x.value == 'number') {
     // int32
     assert(!isNaN(x.value))
@@ -509,7 +510,7 @@ function intBits(x :BasicLit) :int {
 
 
 function intLitTypeFitter(
-  x :BasicLit,
+  x :NumLit,
   reqt :Type|null,
   errh? :ErrorHandler,
   op? :token,
@@ -554,7 +555,7 @@ function intLitTypeFitter(
 
 
 function floatLitTypeFitter(
-  x :BasicLit,
+  x :NumLit,
   reqt :Type|null,
   errh? :ErrorHandler,
   op? :token,
@@ -572,7 +573,7 @@ function floatLitTypeFitter(
 
 
 function charLitTypeFitter(
-  x :BasicLit,
+  x :NumLit,
   reqt :Type|null,
   errh? :ErrorHandler,
   op? :token,
@@ -648,7 +649,7 @@ export class Universe {
   // reqt with the result.
   //
   basicLitType(
-    x :BasicLit,
+    x :NumLit,
     reqt? :Type|null,
     errh? :ErrorHandler,
   ) :BasicType {

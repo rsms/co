@@ -13,57 +13,71 @@
 //   a[1].2
 // }
 
+// fun e1 {
+//   // non-constant index operand
+//   xs = (1, 2.3, true, "3")
+//   a = 0
+//   b = a      // increments a.nread
+//   a = a * 1  // increments a.nwrite
+//   y = xs[a]
+// }
+
+
 fun tuple1 {
   xs = (1, 2.3, true, "3")
 
+  // constant-expression field access (all these accesses field 1 <f64>)
+  _ = xs[1]
+  _ = xs[+1]
+  a = -1 ; _ = xs[-a]
+  b = -2 ; _ = xs[^b]
+  c u32 = 0xfffffffe ; _ = xs[^c]
+  d u64 = 0xfffffffffffffffe ; _ = xs[^d]
+  e i64 = -2 ; _ = xs[^e]
+  f i64 = 3 ; _ = xs[f + b]
+  g = 3 ; _ = xs[g + b]
+  _ = xs[g >> 1]
+  h1 = 1 ; h2 = h1 + 1 ; h3 = h2 - 1 ; h4 = h3 ; _ = xs[h4]
+
   // literal field access
-  b0 = xs.0  // int
-  b1 = xs.1  // f64
-  b2 = xs.2  // bool
-  b3 = xs.3  // str<1>
+  // b0 = xs.0  // int
+  // b1 = xs.1  // f64
+  // b2 = xs.2  // bool
+  // b3 = xs.3  // str<1>
   // b4 = xs.4 // error: out-of-bounds tuple index 4 on type (int, ...)
 
-  // constant-expression field access
-  z i64 = 0
-  y = z
-  a0 = xs[y]      // int; 0 by constant-folding
-  a1 = xs[a0]     // f64; 1 by constant-folding
-  a2 = xs[y + 2]  // bool
-  a3 = xs[y + 3]  // str<1>
-  // a4 = xs[y + 4] // error: out-of-bounds tuple index 4 on type (int, ...)
+  // // slicing tuples
+  // // s0 = xs[1:2]
+  // // s1 = xs[1:]
+  // // s2 = xs[:2]
+  // // s3 = xs[:]
 
-  // slicing tuples
-  // s0 = xs[1:2]
-  // s1 = xs[1:]
-  // s2 = xs[:2]
-  // s3 = xs[:]
+  // // error: non-constant tuple index
+  // // k = 0
+  // // if k == 0 { k = k + 1 }  // makes k variable
+  // // e0 = xs[k] // error: non-constant tuple index
 
-  // error: non-constant tuple index
-  // k = 0
-  // if k == 0 { k = k + 1 }  // makes k variable
-  // e0 = xs[k] // error: non-constant tuple index
-
-  // late resolution
-  xs2 = (1, late-str)  // resolved to (int, str<5>) in post-resolve
-  v = xs2.1  // resolved to str<5> in post-resolve
+  // // late resolution
+  // xs2 = (1, late-str)  // resolved to (int, str<5>) in post-resolve
+  // v = xs2.1  // resolved to str<5> in post-resolve
 }
 
-fun tuple2 {
-  // index by indirection via late-resolved tuple
-  t = (1, 2, 3)
-  x = late-tuple.0
-  y = t[x]
-  y
-}
+// fun tuple2 {
+//   // index by indirection via late-resolved tuple
+//   t = (1, 2, 3)
+//   x = late-tuple.0
+//   y = t[x]
+//   y
+// }
 
-late-str = "hello"
-late-tuple = (1, 2)
+// late-str = "hello"
+// late-tuple = (1, 2)
 
-fun tuple3 {
-  // constant folding with operations
-  xs = (1, 2.3, 4.5)
-  z i64 = 1
-  y = z
-  a2 = xs[y + 1] // folded into `2`
-  // a2 = xs[((y + 1) / 2) + 1] // folded into `2` [BUG]
-}
+// fun tuple3 {
+//   // constant folding with operations
+//   xs = (1, 2.3, 4.5)
+//   z i64 = 1
+//   y = z
+//   a2 = xs[y + 1] // folded into `2`
+//   // a2 = xs[((y + 1) / 2) + 1] // folded into `2` [BUG]
+// }

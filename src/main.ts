@@ -165,7 +165,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  const _sources = sources || ['example/literal-num.xl']
+  const _sources = sources || ['example/slice-and-index.xl']
   diagnostics = []
 
   let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
@@ -175,6 +175,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
     if (noIR) {
       return { success: true, diagnostics, ast: r.pkg }
     }
+    process.exit(0) // XXX DEBUG
 
     const irb = new IRBuilder()
     irb.init(diagh, IRFlags.Comments | IRFlags.Optimize)
@@ -184,7 +185,9 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
       for (let file of r.pkg.files) {
 
         if (isNodeJsLikeEnv) {
-          banner(`${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`)
+          banner(
+            `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`
+          )
           console.log(astRepr(r.pkg, reprOptions))
           // for (let decl of file.decls) {
           //   console.log(astRepr(decl, reprOptions))

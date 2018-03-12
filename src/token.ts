@@ -117,14 +117,14 @@ export enum token {
   ADD, // +
   SUB, // -
   OR,  // |
-  XOR, // ^
+  XOR, // ^  "NOT" when unary, "XOR" when binary
   
   // prec.MUL
   MUL,     // *
   QUO,     // /
   REM,     // %
   AND,     // &
-  AND_NOT, // &^
+  AND_NOT, // &^  equiv to `x & (^y)` (or `x & ~y` in C)
   SHL,     // <<
   SHR,     // >>  (arithmetic when signed, logical when unsigned)
 

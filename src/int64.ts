@@ -45,6 +45,7 @@ export interface Int64 {
   shl(nbits :int) :Int64   // 
   shr_s(nbits :int) :Int64 // sign-replicating/arithmetic shift right
   shr_u(nbits :int) :Int64 // zero-replicating/logical shift right
+  shr(nbits :int) :Int64 // shr_s for SInt64, shr_u for UInt64
 
   add(x :Int64) :Int64 // this + x
   sub(x :Int64) :Int64 // this - x
@@ -780,6 +781,10 @@ export class SInt64 extends Int64Base implements Int64 {
     return res
   }
 
+  shr(nbits :int) :Int64 {
+    return this.shr_s(nbits)
+  }
+
   toSigned() {
     return this
   }
@@ -991,6 +996,10 @@ export class UInt64 extends Int64Base {
     return res
   }
 
+  shr(nbits :int) :Int64 {
+    return this.shr_u(nbits)
+  }
+
   toSigned() {
     return new SInt64(this._low, this._high)
   }
@@ -1070,6 +1079,9 @@ if (wasm != null) {
     return new UInt64(low, wasm.get_high())
   }
 }
+
+SInt64.prototype.shr = Int64Base.prototype.shr_s
+UInt64.prototype.shr = Int64Base.prototype.shr_u
 
 const S64_TWO_PWR_24 = new SInt64((1 << 24) | 0, 0)
 

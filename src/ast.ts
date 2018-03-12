@@ -2,7 +2,7 @@ import { Pos, SrcFile } from './pos'
 import { ByteStr } from './bytestr'
 import { token, tokstr } from './token'
 import * as utf8 from './utf8'
-import { numconv } from './num'
+import { Num, numconv } from './num'
 import { Int64 } from './int64'
 
 // ——————————————————————————————————————————————————————————————————
@@ -92,8 +92,8 @@ export class Field extends Node {
 //
 //
 export class Ent {
-  writes :int = 0  // Tracks stores (SSA version). None == constant.
-  nreads :int = 0  // Tracks references to this ent. None == unused
+  writes :int = 0  // Tracks stores
+  nreads :int = 0  // Tracks loads
     // writes and reads does NOT include the definition/declaration itself.
 
   constructor(
@@ -117,7 +117,7 @@ export class Ent {
     )
   }
 
-  get isConstant() :bool {
+  isConstant() :bool {
     return this.writes == 0
   }
 
@@ -404,12 +404,31 @@ export class IndexExpr extends Expr {
   // IndexExpr = Expr "[" Expr "]"
 
   indexv :int = -1  // >=0 = resolved, -1 = invalid/unresolved
+    // TODO: remove when we remove resolve.resolveTupleIndex
+
+  indexnum :Num = -1
+    // index value
+    // >=0 : resolved
+    //  -1 : invalid or unresolved
 
   constructor(pos :Pos, scope :Scope,
     public operand :Expr,
-    public index   :Expr,
+    index   :Expr,
+    // public index   :Expr,
   ) {
     super(pos, scope)
+    this._index = index
+  }
+
+  private _index :Expr
+
+  get index() :Expr { return this._index }
+  set index(x :Expr) {
+    let e = new Error()
+    console.log(
+      '>>>> set index\n' +
+      (e.stack as string).split('\n').slice(2).join('\n'))
+    this._index = x
   }
 
   toString() :string {
@@ -446,19 +465,24 @@ export class RestExpr extends Expr {
 export class LiteralExpr extends Expr {}
 
 
-export class BasicLit extends LiteralExpr {
+export class NumLit extends LiteralExpr {
   //
   // kind = INT | INT_BIN | INT_OCT | INT_HEX | FLOAT | CHAR
   //
 
-  type :BasicType  // type is always known
+  type :NumType  // type is always known
+
+  // Note: kind is only needed for Universe.basicLitType
+  // so when we get rid of that function, we can get rid of "kind"
 
   constructor(pos :Pos, scope :Scope,
     public kind  :token,
     public value :Int64|number,
+    type         :NumType,
   ) {
     super(pos, scope)
     assert(token.literal_basic_beg < kind && kind < token.literal_basic_end)
+    this.type = type
   }
 
   toString() :string {
@@ -466,41 +490,36 @@ export class BasicLit extends LiteralExpr {
   }
 
   isInt() :bool {
-    return (
-      token.literal_int_beg < this.kind &&
-      this.kind < token.literal_int_end
-    )
+    return this.type instanceof IntType
   }
 
   isFloat() :bool {
-    return this.kind == token.FLOAT
-  }
-
-  // isSignedInt returns true if the literal int is signed.
-  // if its type has not yet been resolved, true is returned only
-  // if op == token.SUB.
-  //
-  isSignedInt() :bool {
-    return (
-      this.isInt() &&
-      this.type instanceof IntType ? this.type.signed :
-      typeof this.value == 'number' ? this.value < 0 :
-      this.value.isSigned
-    )
+    return !this.isInt()
   }
 
   // convertTo coverts the value of the literal to the provided basic type.
   // Returns true if the conversion was lossless.
   //
-  convertToType(t :BasicType) :bool {
+  convertToType(t :NumType) :bool {
     let [v, lossless] = numconv(this.value, t)
     this.type = t
     this.value = v
     return lossless
   }
+
+  // // castToType returns a new NumLit of type t.
+  // // Returns null if the conversion would be lossy.
+  // // Note: Returns a new NumLit even when this.type==t
+  // //
+  // castToType(t :NumType) :NumLit|null {
+  //   let [v, lossless] = numconv(this.value, t)
+  //   this.type = t
+  //   this.value = v
+  //   return lossless
+  // }
 }
 
-// export const ImplicitOne = new BasicLit(
+// export const ImplicitOne = new NumLit(
 //   0,
 //   nilScope,
 //   token.INT,
@@ -695,7 +714,11 @@ export class BasicType extends Type {
 }
 
 
-export class IntType extends BasicType {
+export class NumType extends BasicType {
+}
+
+
+export class IntType extends NumType {
   constructor(bitsize :int, memtype :MemType, name :string,
     public signed :bool, // true if type is signed
   ) {
@@ -719,8 +742,8 @@ export const
 , u_t_i32 = new IntType(31,      MemType.i32, 'i32', true)
 , u_t_u64 = new IntType(64,      MemType.i64, 'u64', false)
 , u_t_i64 = new IntType(63,      MemType.i64, 'i64', true)
-, u_t_f32 = new BasicType(32,    MemType.f32, 'f32')
-, u_t_f64 = new BasicType(64,    MemType.f64, 'f64')
+, u_t_f32 = new NumType(32,    MemType.f32, 'f32')
+, u_t_f64 = new NumType(64,    MemType.f64, 'f64')
 , u_t_uint = new IntType(uintz,  uintmemtype, 'uint', false)
 , u_t_int  = new IntType(uintz-1,uintmemtype, 'int', true)
 , u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64

@@ -8,6 +8,7 @@ import { Universe } from './universe'
 import { debuglog as dlog } from './util'
 import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
+import { Num, numconv, numEval } from './num'
 import {
   File,
   Scope,
@@ -34,7 +35,7 @@ import {
   RestExpr,
   FunExpr,
   FunSig,
-  BasicLit,
+  NumLit,
   StringLit,
   Block,
   IfExpr,
@@ -49,13 +50,14 @@ import {
   SliceExpr,
 
   Type,
-  BasicType,
+  // BasicType,
+  NumType, // MemType,
   IntType,
   FunType,
   StrType,
   UnresolvedType,
   UnionType,
-  // TupleType,
+  TupleType,
 
   u_t_nil,
   u_t_auto,
@@ -1521,9 +1523,13 @@ export class Parser extends scanner.Scanner {
       const op = p.tok
       p.next()
       x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx))
-    }
 
-    // p.types.resolve(x) // should be resolved when needed
+      p.types.resolve(x)
+      // Note: We need to resolve types here rather than outside this
+      // loop since x may be an identifier in the left-hand-side of an
+      // assignment operation, which would cause type resolution to fail,
+      // which is slow.
+    }
 
     return x
   }
@@ -1535,14 +1541,23 @@ export class Parser extends scanner.Scanner {
     const pos = p.pos
 
     switch (t) {
+      case token.ADD:
+      case token.SUB:
       case token.NOT:
-      case token.XOR:
-      case token.AND: {
+      case token.XOR: {
         p.next()
         // unaryExpr may have returned a parenthesized composite literal
         // (see comment in operand)
         let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx))
         p.types.resolve(x)
+
+        let isint = x.type instanceof IntType
+        if (!isint && t != token.ADD && t != token.SUB) {
+          p.syntaxError(
+            `invalid operation ${tokstr(t)} ${p.types.resolve(x.x)}`
+          )
+        }
+
         return x
         // legacy: unparen(p.unaryExpr(ctx)) to unwrap ParenExpr.
       }
@@ -1632,8 +1647,8 @@ export class Parser extends scanner.Scanner {
 
   operand(ctx :exprCtx) :Expr {
     // Operand   = Literal | OperandName | MethodExpr | "(" Expression ")" .
-    // Literal   = BasicLit | string_lit | CompositeLit | FunctionLit .
-    // BasicLit  = int_lit | float_lit | ratio_lit | rune_lit
+    // Literal   = NumLit | string_lit | CompositeLit | FunctionLit .
+    // NumLit    = int_lit | float_lit | ratio_lit | rune_lit
     // OperandName = identifier | QualifiedIdent.
     const p = this
 
@@ -1668,7 +1683,7 @@ export class Parser extends scanner.Scanner {
           token.literal_basic_beg < p.tok &&
           p.tok < token.literal_basic_end
         ) {
-          return p.basicLit(ctx)
+          return p.numLit(ctx)
         }
 
         const x = p.bad()
@@ -1680,18 +1695,20 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  basicLit(ctx :exprCtx) :BasicLit {
+  numLit(ctx :exprCtx) :NumLit {
     //
-    // BasicLit  = int_lit | float_lit | ratio_lit | rune_lit
+    // NumLit  = int_lit | float_lit | ratio_lit | rune_lit
     //
     const p = this
-    const x = new BasicLit(p.pos, p.scope, p.tok, 0)
+    const x = new NumLit(p.pos, p.scope, p.tok, 0, u_t_i32)
 
+    // pick type best suited for value
     switch (p.tok) {
       case token.INT:
       case token.INT_BIN:
       case token.INT_OCT:
       case token.INT_HEX:
+        // prefer signed integer types when the value fits
         if (p.int64val) {
           if (p.int64val.isSigned || p.int64val.lte(SInt64.MAX)) {
             x.value = p.int64val.toSigned()
@@ -1722,9 +1739,9 @@ export class Parser extends scanner.Scanner {
     assert(typeof x.value == 'number' ? !isNaN(x.value) : true)
 
     // a certain type was requested
-    const reqt = p.ctxType(ctx) as BasicType | null
+    const reqt = p.ctxType(ctx) as NumType | null
     if (reqt) {
-      if (!(reqt instanceof BasicType)) {
+      if (!(reqt instanceof NumType)) {
         p.syntaxError(`invalid value ${x.value} for type ${reqt}`)
       } else {
         // capture refs to current type and value before converting, as
@@ -1749,7 +1766,7 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  basicLitErrH = (msg :string, pos :Pos) => {
+  numLitErrH = (msg :string, pos :Pos) => {
     this.syntaxError(msg, pos)
   }
 
@@ -1780,7 +1797,7 @@ export class Parser extends scanner.Scanner {
     ) {
       // e.g. "a.3"
       return p.types.resolveIndex(
-        new IndexExpr(pos, p.scope, operand, p.basicLit(ctx))
+        new IndexExpr(pos, p.scope, operand, p.numLit(ctx))
       )
     } else {
       p.syntaxError('expecting name or integer after "."')
@@ -1823,10 +1840,71 @@ export class Parser extends scanner.Scanner {
 
     // index
     p.want(token.RBRACKET)
+    
+    assert(x1 != null)
+    assert(x1 instanceof Expr)
 
-    return p.types.resolveIndex(
-      new IndexExpr(pos, p.scope, operand, x1 as Expr)
-    )
+    let x = new IndexExpr(pos, p.scope, operand, x1 as Expr)
+
+    if (operand.type instanceof TupleType) {
+      // non-uniform operand -- we need to resolve index to find type
+      if (!p.tupleAccess(x)) {
+        x.type = p.types.markUnresolved(x)
+      }
+      return x
+    }
+
+    // else: operand is unitype or unknown
+    dlog(`TODO resolve item type for uniform operand`)
+    x.type = p.types.markUnresolved(x)
+    return x
+
+    // return p.types.resolveIndex(x)
+  }
+
+  // tupleAccess attempts to evaluate a tuple access.
+  // x.index must be constant.
+  //
+  tupleAccess(x :IndexExpr) :bool {
+    const p = this
+
+    let tupletype = x.operand.type as TupleType
+    assert(tupletype, 'unresolved tuple type')
+    assert(tupletype instanceof TupleType)
+
+    // resolve index value
+    let n = numEval(x.index)
+    if (n === null) {
+      p.syntaxError(`invalid index into type ${tupletype}`, x.index.pos)
+      return false
+    }
+
+    // convert to u32
+    let [i, lossless] = numconv(n, u_t_u32)
+    if (!lossless) {
+      p.outOfBoundsAccess(i, tupletype, x.index.pos)
+      return false
+    }
+
+    assert(typeof i == 'number')
+    assert(i >= 0, 'negative value of unsigned int')
+
+    let memberTypes = tupletype.types
+    if (i as int >= memberTypes.length) {
+      p.outOfBoundsAccess(i, tupletype, x.index.pos)
+      return false
+    }
+
+    x.indexnum = i
+    x.type = memberTypes[i as int]
+
+    return true
+  }
+
+  // outOfBoundsAccess reports an error for out-of-bounds access
+  //
+  outOfBoundsAccess(i :Num, t :Type, pos :Pos) {
+    this.syntaxError(`out-of-bounds index ${i} on type ${t}`, pos)
   }
 
 
