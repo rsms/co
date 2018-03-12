@@ -24,7 +24,7 @@
 
 
 fun tuple1 {
-  xs = (1, 2.3, true, "3")
+  xs = (1, 2.3, true, "3")  // type: (i32, f64, bool, str<1>)
 
   // constant-expression field access (all these accesses field 1 <f64>)
   _ = xs[1]
@@ -40,27 +40,33 @@ fun tuple1 {
   h1 = 1 ; h2 = h1 + 1 ; h3 = h2 - 1 ; h4 = h3 ; _ = xs[h4]
 
   // literal field access
-  // b0 = xs.0  // int
-  // b1 = xs.1  // f64
-  // b2 = xs.2  // bool
-  // b3 = xs.3  // str<1>
-  // b4 = xs.4 // error: out-of-bounds tuple index 4 on type (int, ...)
+  _ = xs.0  // int
+  _ = xs.1  // f64
+  _ = xs.2  // bool
+  _ = xs.3  // str<1>
+  // // _ = xs.4 // error: out-of-bounds tuple index 4 on type (int, ...)
 
-  // // slicing tuples
-  // // s0 = xs[1:2]
-  // // s1 = xs[1:]
-  // // s2 = xs[:2]
-  // // s3 = xs[:]
+  // slicing tuples
+  _ = xs[1:3]  // (f64, bool)
+  _ = xs[1:]   // (f64, bool, str<1>)
+  _ = xs[:3]   // (i32, f64, bool)
+  _ = xs[:]    // (i32, f64, bool, str<1>)
+  // _ = xs[1:2]  // invalid single-element slice of type ...
+  // _ = xs[2:2] // invalid empty slice: 2 == 2
+  // _ = xs[2:1] // error: invalid slice index: 2 > 1
+  // _ = xs[4:] // invalid for tuples; would yield empty tuple
 
-  // // error: non-constant tuple index
-  // // k = 0
-  // // if k == 0 { k = k + 1 }  // makes k variable
-  // // e0 = xs[k] // error: non-constant tuple index
+  // error: non-constant tuple index
+  // k = 0
+  // if k == 0 { k = k + 1 }  // makes k variable
+  // e0 = xs[k] // error: non-constant tuple index
 
-  // // late resolution
-  // xs2 = (1, late-str)  // resolved to (int, str<5>) in post-resolve
-  // v = xs2.1  // resolved to str<5> in post-resolve
+  // late resolution
+  xs2 = (1, late-str)  // resolved to (int, str<5>) in post-resolve
+  v = xs2.1  // resolved to str<5> in post-resolve
 }
+
+late-str = "hello"
 
 // fun tuple2 {
 //   // index by indirection via late-resolved tuple
@@ -69,8 +75,7 @@ fun tuple1 {
 //   y = t[x]
 //   y
 // }
-
-// late-str = "hello"
+// 
 // late-tuple = (1, 2)
 
 // fun tuple3 {

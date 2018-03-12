@@ -439,6 +439,12 @@ export class IndexExpr extends Expr {
 
 export class SliceExpr extends Expr {
   // SliceExpr = Expr "[" Expr? ":" Expr? "]"
+
+  startnum :Num = -1
+  endnum   :Num = -1
+    // >=0 : resolved
+    //  -1 : invalid or unresolved
+
   constructor(pos :Pos, scope :Scope,
     public operand :Expr,
     public start   :Expr|null,
@@ -780,10 +786,10 @@ export const u_t_str = new StrType(-1)  // heap-allocated string
 
 export class RestType extends Type {
   // ...type
-  constructor(pos :Pos, scope :Scope,
+  constructor(
     public type :Type,
   ) {
-    super(pos, scope)
+    super(0, nilScope)
     this.type = type
   }
 
@@ -803,10 +809,10 @@ export class RestType extends Type {
 
 export class TupleType extends Type {
   // TupleType = "(" Type ("," Type)+ ")"
-  constructor(pos :Pos, scope :Scope,
+  constructor(
   public types :Type[],
   ) {
-    super(pos, scope)
+    super(0, nilScope)
   }
 
   toString() :string {
@@ -826,11 +832,11 @@ export class TupleType extends Type {
 
 export class FunType extends Type {
   // FunType = ( Type | TupleType ) "->" Type
-  constructor(pos :Pos, scope :Scope,
+  constructor(
   public inputs :Type[],
   public result :Type,
   ) {
-    super(pos, scope)
+    super(0, nilScope)
   }
 
   equals(other :Type) :bool {

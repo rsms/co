@@ -200,6 +200,27 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
 
 
 
+
+// evalConstU32 evaluates a constant expression yielding a u32
+// returns
+//  >= 0 on success
+//    -1 on lossy conversion
+//    -2 if x is not a number
+//
+export function numEvalU32(x :Expr) :int {
+  let n = numEval(x)
+  if (n === null) {
+    return -2
+  }
+
+  let [i, lossless] = numconv(n, u_t_u32)
+  assert(typeof i == 'number')
+  assert(i >= 0, 'negative value of u32')
+
+  return lossless ? i as int : -1
+}
+
+
 // numEval evaulates a constant expression yielding a number.
 // returns null if the expression either yields a non-number or some
 // components are unresolved or not constant.

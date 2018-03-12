@@ -1791,14 +1791,27 @@ export class Parser extends scanner.Scanner {
     if (p.tok as token == token.NAME) {
       // e.g. "a.b"
       rhs = p.dotident(ctx, p.ident())
+
     } else if (
       (p.tok as token) > token.literal_int_beg &&
       (p.tok as token) < token.literal_int_end
     ) {
-      // e.g. "a.3"
-      return p.types.resolveIndex(
-        new IndexExpr(pos, p.scope, operand, p.numLit(ctx))
-      )
+      // e.g. "t.3"
+      let x = new IndexExpr(pos, p.scope, operand, p.numLit(ctx))
+      if (operand.type instanceof TupleType) {
+        if (!p.types.tupleAccess(x)) {
+          x.type = p.types.markUnresolved(x)
+        }
+      } else {
+        // numeric access on something that's not a tuple
+        x.type = p.types.markUnresolved(x)
+        p.syntaxError(
+          `numeric field access on non-tuple type ${operand.type}`,
+          pos
+        )
+      }
+      return x
+
     } else {
       p.syntaxError('expecting name or integer after "."')
       rhs = p.bad(pos)
@@ -1829,13 +1842,26 @@ export class Parser extends scanner.Scanner {
     }
 
     if (p.got(token.COLON)) {
-      // slice with implicit start, e.g. "operand[:end]"
-      let end :Expr|null = null
+      // slice, e.g. "x[1:3]", "x[:3]", "x[1:]", "x[:]"
+      let endx :Expr|null = null
+      
       if (!p.got(token.RBRACKET)) {
-        end = p.expr(ctx)
+        // explicit end, e.g. "x[1:3]", "x[:3]
+        endx = p.expr(ctx)
         p.want(token.RBRACKET)
-      } // else: slice with implicit end, e.g. "operand[:]"
-      return new SliceExpr(pos, p.scope, operand, x1, end)
+      } // else: implicit end, e.g. "x[1:]", "x[:]"
+
+      let x = new SliceExpr(pos, p.scope, operand, x1, endx)
+
+      if (operand.type instanceof TupleType) {
+        // non-uniform operand type
+        // we need to resolve indexes to find type
+        if (!p.types.tupleSlice(x)) {
+          x.type = p.types.markUnresolved(x)
+        }
+      } else dlog(`TODO handle uniform slice operand ${operand.type}`)
+
+      return x
     }
 
     // index
@@ -1847,59 +1873,130 @@ export class Parser extends scanner.Scanner {
     let x = new IndexExpr(pos, p.scope, operand, x1 as Expr)
 
     if (operand.type instanceof TupleType) {
-      // non-uniform operand -- we need to resolve index to find type
-      if (!p.tupleAccess(x)) {
+      // non-uniform operand type
+      // we need to resolve index to find type
+      if (!p.types.tupleAccess(x)) {
         x.type = p.types.markUnresolved(x)
       }
       return x
     }
 
     // else: operand is unitype or unknown
-    dlog(`TODO resolve item type for uniform operand`)
+    dlog(`TODO resolve item type for uniform operand of type ${operand.type}`)
     x.type = p.types.markUnresolved(x)
     return x
 
     // return p.types.resolveIndex(x)
   }
 
-  // tupleAccess attempts to evaluate a tuple access.
-  // x.index must be constant.
-  //
-  tupleAccess(x :IndexExpr) :bool {
-    const p = this
+  // tupleSlice(x :SliceExpr) :bool {
+  //   const p = this
 
-    let tupletype = x.operand.type as TupleType
-    assert(tupletype, 'unresolved tuple type')
-    assert(tupletype instanceof TupleType)
+  //   let tupletype = x.operand.type as TupleType
+  //   assert(tupletype, 'unresolved operand type')
+  //   assert(tupletype instanceof TupleType)
+  //   assert(tupletype.types.length > 0, 'empty tuple')
 
-    // resolve index value
-    let n = numEval(x.index)
-    if (n === null) {
-      p.syntaxError(`invalid index into type ${tupletype}`, x.index.pos)
-      return false
-    }
+  //   let tuplelen = tupletype.types.length
+  //   let starti = 0
+  //   let endi = tuplelen
 
-    // convert to u32
-    let [i, lossless] = numconv(n, u_t_u32)
-    if (!lossless) {
-      p.outOfBoundsAccess(i, tupletype, x.index.pos)
-      return false
-    }
+  //   if (x.start) {
+  //     starti = p.evalConstU32(x.start)
+  //     if (starti < 0) {
+  //       p.syntaxError(`invalid index into type ${tupletype}`, x.start.pos)
+  //       return false
+  //     }
+  //     if (starti >= tuplelen) {
+  //       p.outOfBoundsAccess(starti, tupletype, x.start.pos)
+  //       return false
+  //     }
+  //   }
 
-    assert(typeof i == 'number')
-    assert(i >= 0, 'negative value of unsigned int')
+  //   if (x.end) {
+  //     endi = p.evalConstU32(x.end)
+  //     if (endi < 0) {
+  //       p.syntaxError(`invalid index into type ${tupletype}`, x.end.pos)
+  //       return false
+  //     }
+  //     if (endi >= tuplelen) {
+  //       p.outOfBoundsAccess(endi, tupletype, x.end.pos)
+  //       return false
+  //     }
+  //   }
 
-    let memberTypes = tupletype.types
-    if (i as int >= memberTypes.length) {
-      p.outOfBoundsAccess(i, tupletype, x.index.pos)
-      return false
-    }
+  //   if (starti >= endi) {
+  //     if (starti == endi) {
+  //       p.syntaxError(`invalid empty slice: ${starti} == ${endi}`, x.pos)
+  //     } else {
+  //       p.syntaxError(`invalid slice index: ${starti} > ${endi}`, x.pos)
+  //     }
+  //     return false
+  //   }
 
-    x.indexnum = i
-    x.type = memberTypes[i as int]
+  //   let len = endi - starti
 
-    return true
-  }
+  //   if (len == 1) {
+  //     p.syntaxError(
+  //       `invalid single-element slice into type ${tupletype}`,
+  //       x.pos
+  //     )
+  //     p.diag(
+  //       "info",
+  //       `Instead of slicing a single element from a tuple, ` +
+  //       `access it directly with a subscript operation: ` +
+  //       `${x.operand}[${x.start || x.end}]`,
+  //       x.pos
+  //     )
+  //     return false
+  //   }
+
+  //   x.startnum = starti
+  //   x.endnum = endi
+
+  //   if (len == tuplelen) {
+  //     // e.g. `(1,2,3)[:] => (1,2,3)`
+  //     x.type = tupletype
+  //   } else {
+  //     x.type = p.types.getTupleType(tupletype.types.slice(starti, endi))
+  //   }
+
+  //   return true
+  // }
+
+  // // tupleAccess attempts to evaluate a tuple access.
+  // // x.index must be constant.
+  // //
+  // tupleAccess(x :IndexExpr) :bool {
+  //   const p = this
+
+  //   let tupletype = x.operand.type as TupleType
+  //   assert(tupletype, 'unresolved operand type')
+  //   assert(tupletype instanceof TupleType)
+  //   assert(tupletype.types.length > 0, 'empty tuple')
+
+  //   let i = p.evalConstU32(x.index)
+
+  //   if (i < 0) {
+  //     if (i == -1) {
+  //       p.outOfBoundsAccess(i, tupletype, x.index.pos)
+  //     } else {
+  //       p.syntaxError(`invalid index into type ${tupletype}`, x.index.pos)
+  //     }
+  //     return false
+  //   }
+
+  //   let memberTypes = tupletype.types
+  //   if (i as int >= memberTypes.length) {
+  //     p.outOfBoundsAccess(i, tupletype, x.index.pos)
+  //     return false
+  //   }
+
+  //   x.indexnum = i
+  //   x.type = memberTypes[i as int]
+
+  //   return true
+  // }
 
   // outOfBoundsAccess reports an error for out-of-bounds access
   //

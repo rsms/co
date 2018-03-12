@@ -3,6 +3,7 @@ import { TypeCompat, basicTypeCompat, Universe } from './universe'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { debuglog as dlog } from './util'
 import { token } from './token'
+import { Num, numconv, numEvalU32 } from './num'
 import {
   Scope,
   Ent,
@@ -24,7 +25,7 @@ import {
   Operation,
   IfExpr,
   IndexExpr,
-  // SliceExpr,
+  SliceExpr,
   
   Type,
   UnresolvedType,
@@ -37,9 +38,10 @@ import {
   OptionalType,
   UnionType,
 
-  u_t_nil, // u_t_void,
+  u_t_nil,
   u_t_bool,
   u_t_int,
+  u_t_u32,
   u_t_str,
   u_t_optstr,
 } from './ast'
@@ -90,6 +92,45 @@ export class TypeResolver extends ErrorReporter {
   //
   syntaxError(msg :string, pos :Pos = NoPos) {
     this.error(msg, pos, 'E_SYNTAX')
+  }
+
+
+  getTupleType(types :Type[]) :TupleType {
+    return this.universe.internType(new TupleType(types))
+  }
+
+  getRestType(t :Type) :RestType {
+    return this.universe.internType(new RestType(t))
+  }
+
+  getOptionalUnionType2(l :OptionalType, r :OptionalType) :UnionType {
+    return this.universe.internType(
+      new UnionType(new Set<Type>([
+        l.type instanceof StrType && l.type.length != -1 ? u_t_optstr : l,
+        r.type instanceof StrType && r.type.length != -1 ? u_t_optstr : r,
+      ]))
+    )
+  }
+
+  getUnionType2(l :Type, r :Type) :UnionType {
+    return this.universe.internType(
+      new UnionType(new Set<Type>([
+        l instanceof StrType && l.length != -1 ? u_t_str : l,
+        r instanceof StrType && r.length != -1 ? u_t_str : r,
+      ]))
+    )
+  }
+
+  getFunType(inputs :Type[], result :Type) :FunType {
+    return this.universe.internType(new FunType(inputs, result))
+  }
+
+  getOptionalType(t :Type) {
+    return (
+      t instanceof OptionalType ? t :
+      t instanceof StrType ? u_t_optstr :
+      this.universe.internType(new OptionalType(t))
+    )
   }
 
   // resolve attempts to resolve or infer the type of n.
@@ -181,12 +222,10 @@ export class TypeResolver extends ErrorReporter {
 
     if (n instanceof FunExpr) {
       const s = n.sig
-      let t = r.universe.internType(new FunType(
-        s.pos,
-        s.scope,
+      let t = r.getFunType(
         s.params.map(field => r.resolve(field.type)),
-        r.resolve(s.result),
-      ))
+        r.resolve(s.result)
+      )
       if (t.result instanceof UnresolvedType) {
         t.result.addRef(t)
       }
@@ -200,7 +239,7 @@ export class TypeResolver extends ErrorReporter {
     if (n instanceof RestExpr) {
       if (n.expr) {
         let t = r.resolve(n.expr)
-        return r.universe.internType(new RestType(n.pos, n.scope, t))
+        return r.getRestType(t)
       }
       return null
     }
@@ -293,7 +332,7 @@ export class TypeResolver extends ErrorReporter {
       }
       types.push(t)
     }
-    return r.universe.internType(new TupleType(pos, scope, types)) as TupleType
+    return r.getTupleType(types)
   }
 
 
@@ -325,10 +364,7 @@ export class TypeResolver extends ErrorReporter {
           if (t1 instanceof BasicType) {
             this.error(`mixing optional and ${t1} type`, pos, 'E_CONV')
           } else {
-            t1 = (
-              t1 instanceof StrType ? u_t_optstr :
-              r.universe.internType(new OptionalType(t1))
-            )
+            t1 = r.getOptionalType(t1)
           }
         }
         ut.add(t1)
@@ -342,10 +378,7 @@ export class TypeResolver extends ErrorReporter {
     }
 
     // t is different than opt -- return optional of t
-    return (
-      t instanceof StrType ? u_t_optstr :
-      r.universe.internType(new OptionalType(t))
-    )
+    return r.getOptionalType(t)
   }
 
 
@@ -354,19 +387,13 @@ export class TypeResolver extends ErrorReporter {
     let ut = new UnionType(new Set<Type>())
     for (let t of a.types) {
       if (!(t instanceof OptionalType)) {
-        t = (
-          t instanceof StrType ? u_t_optstr :
-          r.universe.internType(new OptionalType(t))
-        )
+        t = r.getOptionalType(t)
       }
       ut.add(t)
     }
     for (let t of b.types) {
       if (!(t instanceof OptionalType)) {
-        t = (
-          t instanceof StrType ? u_t_optstr :
-          r.universe.internType(new OptionalType(t))
-        )
+        t = r.getOptionalType(t)
       }
       ut.add(t)
     }
@@ -390,25 +417,6 @@ export class TypeResolver extends ErrorReporter {
       ut.add(t)
     }
     return r.universe.internType(ut)
-  }
-
-
-  makeOptionalUnionType2(l :OptionalType, r :OptionalType) :UnionType {
-    return this.universe.internType(
-      new UnionType(new Set<Type>([
-        l.type instanceof StrType && l.type.length != -1 ? u_t_optstr : l,
-        r.type instanceof StrType && r.type.length != -1 ? u_t_optstr : r,
-      ]))
-    )
-  }
-
-  makeUnionType2(l :Type, r :Type) :UnionType {
-    return this.universe.internType(
-      new UnionType(new Set<Type>([
-        l instanceof StrType && l.length != -1 ? u_t_str : l,
-        r instanceof StrType && r.length != -1 ? u_t_str : r,
-      ]))
-    )
   }
 
 
@@ -455,11 +463,7 @@ export class TypeResolver extends ErrorReporter {
         r.error(`mixing ${thentyp} and optional type`, n.pos, 'E_CONV')
       }
       // makes the type optional
-      return (
-        thentyp instanceof OptionalType ? thentyp :
-        thentyp instanceof StrType ? u_t_optstr :
-        r.universe.internType(new OptionalType(thentyp))
-      )
+      return r.getOptionalType(thentyp)
     }
 
     if (thentyp === u_t_nil) {
@@ -468,11 +472,7 @@ export class TypeResolver extends ErrorReporter {
         // e.g. `if x nil else int`
         r.error(`mixing optional and ${eltyp} type`, n.pos, 'E_CONV')
       }
-      return (
-        eltyp instanceof OptionalType ? eltyp :
-        eltyp instanceof StrType ? u_t_optstr :
-        r.universe.internType(new OptionalType(eltyp))
-      )
+      return r.getOptionalType(eltyp)
     }
 
     if (eltyp instanceof OptionalType) {
@@ -492,7 +492,7 @@ export class TypeResolver extends ErrorReporter {
           return u_t_optstr
         }
 
-        return r.makeOptionalUnionType2(thentyp, eltyp)
+        return r.getOptionalUnionType2(thentyp, eltyp)
       }
       // e.g. `if x A else B? => A?|B?`
       // e.g. `if x A else A? => A?`
@@ -533,9 +533,8 @@ export class TypeResolver extends ErrorReporter {
     }
 
     // e.g. `if x A else B => A|B`
-    return r.makeUnionType2(thentyp, eltyp)
+    return r.getUnionType2(thentyp, eltyp)
   }
-
 
   // resolveIndex attempts to resolve the type of an index expression.
   // returns x as a convenience.
@@ -550,7 +549,7 @@ export class TypeResolver extends ErrorReporter {
       // defer to bind stage
       dlog(`[index type] deferred to bind stage`)
     } else if (opt instanceof TupleType) {
-      r.resolveTupleIndex(x, opt)
+      r.tupleAccess(x)
     } else {
       dlog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
     }
@@ -558,147 +557,116 @@ export class TypeResolver extends ErrorReporter {
     return x
   }
 
-  // resolveTupleIndex attempts to resolve the type of an index expression
-  // on a tuple.
-  //
-  resolveTupleIndex(x :IndexExpr, opt :TupleType) {
-    const r = this
 
-    let it = r.resolve(x.index)
-    if (it instanceof UnresolvedType) {
-      dlog(`index resolution deferred to post-resolve`)
-      x.type = r.markUnresolved(x)
-      return
+  tupleSlice(x :SliceExpr) :bool {
+    const p = this
+
+    let tupletype = x.operand.type as TupleType
+    assert(tupletype, 'unresolved operand type')
+    assert(tupletype instanceof TupleType)
+    assert(tupletype.types.length > 0, 'empty tuple')
+
+    let tuplelen = tupletype.types.length
+    let starti = 0
+    let endi = tuplelen
+
+    if (x.start) {
+      starti = numEvalU32(x.start)
+      if (starti < 0) {
+        p.syntaxError(`invalid index into type ${tupletype}`, x.start.pos)
+        return false
+      }
+      if (starti >= tuplelen) {
+        p.outOfBoundsAccess(starti, tupletype, x.start.pos)
+        return false
+      }
     }
 
-    const ix = x.index
-
-    // index must be constant for tuple access
-    let index = r.resolveLitConstant(ix, intEvaluator)
-    if (index == null) {
-      // TODO: somehow track this and complete the check during bind
-      r.syntaxError('non-constant tuple index', ix.pos)
-      return
+    if (x.end) {
+      endi = numEvalU32(x.end)
+      if (endi < 0) {
+        p.syntaxError(`invalid index into type ${tupletype}`, x.end.pos)
+        return false
+      }
+      if (endi >= tuplelen) {
+        p.outOfBoundsAccess(endi, tupletype, x.end.pos)
+        return false
+      }
     }
 
-    if (index instanceof EvalConst) {
-      assert(index instanceof IntEvalConst, "there is not other kind")
-      x.indexv = (index as IntEvalConst).value
+    if (starti >= endi) {
+      if (starti == endi) {
+        p.syntaxError(`invalid empty slice: ${starti} == ${endi}`, x.pos)
+      } else {
+        p.syntaxError(`invalid slice index: ${starti} > ${endi}`, x.pos)
+      }
+      return false
+    }
+
+    let len = endi - starti
+
+    if (len == 1) {
+      p.syntaxError(
+        `invalid single-element slice into type ${tupletype}`,
+        x.pos,
+        // `Instead of slicing a single element from a tuple, ` +
+        // `access it directly with a subscript operation: ` +
+        // `${x.operand}[${x.start || x.end}]`,
+      )
+      return false
+    }
+
+    x.startnum = starti
+    x.endnum = endi
+
+    if (len == tuplelen) {
+      // e.g. `(1,2,3)[:] => (1,2,3)`
+      x.type = tupletype
     } else {
-      let index2 = index as LiteralExpr
-      assert(index2 instanceof LiteralExpr)
-      // check type to make sure index is an integer
-      if (
-        index2.type && !(index2.type instanceof IntType) ||
-        !(index2 instanceof NumLit) ||
-        !index2.isInt()
-      ) {
-        r.syntaxError(`invalid index type ${index2.type || index2}`, ix.pos)
-        return
-      }
-
-      // parse the integer; returns -1 on failure
-      // TODO: deal directly with int32 and Int64 values
-      x.indexv = (
-        typeof index2.value == 'number' ? index2.value :
-        index2.value.toFloat64()
-      )
-      if (x.indexv == -1) {
-        r.syntaxError(`invalid index ${index2}`, ix.pos)
-        return
-      }
+      x.type = p.getTupleType(tupletype.types.slice(starti, endi))
     }
 
-    if (x.indexv < 0 || x.indexv >= opt.types.length) {
-      r.syntaxError(
-        `out-of-bounds tuple index ${x.indexv} on type ${opt}`,
-        ix.pos
-      )
-      return
-    }
-
-    // success -- type of IndexExpr found
-    x.type = opt.types[x.indexv]
-
-    // since we folded the constant, replace x.index if it's not already
-    // a constant
-    if (!(x.index instanceof NumLit)) {
-      // Note: Simply skip this branch to disable on-the-fly optimizations
-      const bl = new NumLit(
-        x.index.pos,
-        x.index.scope,
-        token.INT,
-        x.indexv,
-        u_t_int,
-      )
-      bl.type = r.universe.basicLitType(bl)
-      x.index = bl
-    }
+    return true
   }
 
-
-  // resolveLitConstant attempts to resolve the constant value of x, expected
-  // to be a LiteralExpr. If x or anything x might refer to is not constant,
-  // null is returned.
+  // tupleAccess attempts to evaluate a tuple access.
+  // x.index must be constant.
   //
-  resolveLitConstant(x :Expr, evaluator :Evaluator) :EvalArg|null {
-    const r = this
+  tupleAccess(x :IndexExpr) :bool {
+    const p = this
 
-    if (x instanceof LiteralExpr) {
-      return x
-    }
+    let tupletype = x.operand.type as TupleType
+    assert(tupletype, 'unresolved operand type')
+    assert(tupletype instanceof TupleType)
+    assert(tupletype.types.length > 0, 'empty tuple')
 
-    if (x instanceof Ident) {
-      if (x.ent && x.ent.writes == 0 && x.ent.value) {
-        // Note: we check `x.ent.writes == 0` to make sure that x is a constant
-        // i.e. that there are no potential conditional branches that might
-        // change the value of x.
-        return r.resolveLitConstant(x.ent.value, evaluator)
-      }
-    } else if (x instanceof IndexExpr) {
-      let opt = r.resolve(x.operand)
+    let i = numEvalU32(x.index)
 
-      if (opt instanceof TupleType) {
-        let tuple :TupleExpr
-        if (x.operand instanceof Ident) {
-          assert(x.operand.ent != null) // should have been resolved
-          const ent = x.operand.ent as Ent
-          assert(ent.value instanceof TupleExpr)
-          tuple = ent.value as TupleExpr
-        } else {
-          // TODO: handle selectors to fields
-          assert(x.operand instanceof TupleExpr)
-          tuple = x.operand as TupleExpr
-        }
-
-        if (x.indexv >= 0) {
-          assert(x.indexv < tuple.exprs.length) // bounds checked when resolved
-          return r.resolveLitConstant(tuple.exprs[x.indexv], evaluator)
-        } else {
-          dlog(`x.indexv < 0 for IndexExpr ${x}`)
-        }
+    if (i < 0) {
+      if (i == -1) {
+        p.outOfBoundsAccess(i, tupletype, x.index.pos)
       } else {
-        dlog(`TODO ${x.constructor.name} operand ${opt}`)
+        p.syntaxError(`invalid index into type ${tupletype}`, x.index.pos)
       }
-    } else if (x instanceof Operation) {
-      const lval = r.resolveLitConstant(x.x, evaluator)
-      if (lval) {
-        if (!x.y) {
-          // unary operation
-          return evaluator(x.op, lval)
-        } else {
-          const rval = r.resolveLitConstant(x.y, evaluator)
-          if (rval) {
-            // attempt evaluation
-            return evaluator(x.op, lval, rval)
-          }
-        }
-      }
-    } else {
-      dlog(`TODO ${x.constructor.name}`)
+      return false
     }
 
-    return null
+    let memberTypes = tupletype.types
+    if (i as int >= memberTypes.length) {
+      p.outOfBoundsAccess(i, tupletype, x.index.pos)
+      return false
+    }
+
+    x.indexnum = i
+    x.type = memberTypes[i as int]
+
+    return true
+  }
+
+  // outOfBoundsAccess reports an error for out-of-bounds access
+  //
+  outOfBoundsAccess(i :Num, t :Type, pos :Pos) {
+    this.syntaxError(`out-of-bounds index ${i} on type ${t}`, pos)
   }
 
 
@@ -707,9 +675,7 @@ export class TypeResolver extends ErrorReporter {
   //
   markUnresolved(expr :Expr) :UnresolvedType {
     const t = new UnresolvedType(expr.pos, expr.scope, expr)
-    let e = new Error()
-    dlog(`expr ${expr} as ${this.fset.position(expr.pos)}`,
-     '\n' + (e.stack as string).split('\n').slice(2).join('\n'))
+    dlog(`expr ${expr} as ${this.fset.position(expr.pos)}`)
     this.unresolved.add(t)
     return t
   }
@@ -770,71 +736,3 @@ export class TypeResolver extends ErrorReporter {
     return null
   }
 }
-
-
-// intEvaluator is an Evaluator that can perform operations on integers
-//
-function intEvaluator(op :token, x  :EvalArg, y? :EvalArg) :EvalArg|null {
-  if (!(x instanceof NumLit) || !x.isInt()) {
-    return null
-  }
-
-  //
-  // TODO: rewrite this to deal with Int64 values in x and y
-  //
-
-  // interpret x
-  // const xs = x.isSignedInt()
-  // let xv = xs ? x.parseSInt() : x.parseUInt()
-  // // const xneg = x.op == token.SUB
-  // if ((!xs && xv < 0) || isNaN(xv)) {
-  //   return null
-  // }
-  const xv = typeof x.value == 'number' ? x.value : x.value.toFloat64()
-
-  if (y) {
-    // binary operation
-    if (!(y instanceof NumLit) || !y.isInt()) {
-      return null
-    }
-
-    // interpret y
-    // const ys = y.isSignedInt()
-    // let yv = ys ? y.parseSInt() : y.parseUInt()
-    // // const yneg = y.op == token.SUB
-    // if ((!ys && yv < 0) || isNaN(yv)) {
-    //   return null
-    // }
-    const yv = (
-      typeof y.value == 'number' ? y.value :
-      y.value.toFloat64()
-    )
-
-    switch (op) {
-      case token.ADD: return new IntEvalConst(xv + yv)
-      case token.SUB: return new IntEvalConst(xv - yv)
-      case token.OR:  return new IntEvalConst(xv | yv)
-      case token.XOR: return new IntEvalConst(xv ^ yv)
-      case token.MUL: return new IntEvalConst(Math.round(xv * yv))
-      case token.QUO: return new IntEvalConst(Math.round(xv / yv))
-      case token.REM: return new IntEvalConst(xv % yv)
-      case token.AND: return new IntEvalConst(xv & yv)
-      default:
-        dlog(`TODO eval binary op (${token[op]} ${x} (${xv}) ${y})`)
-    }
-
-  } else {
-    // unary operation
-    switch (op) {
-      case token.ADD: return new IntEvalConst(+xv)
-      case token.SUB: return new IntEvalConst(-xv)
-      case token.INC: return new IntEvalConst(xv + 1)
-      case token.DEC: return new IntEvalConst(xv + 1)
-      default:
-        dlog(`TODO eval unary op (${token[op]} ${x})`)
-    }
-  }
-
-  return null  // error
-}
-

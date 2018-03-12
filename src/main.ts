@@ -175,7 +175,18 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
     if (noIR) {
       return { success: true, diagnostics, ast: r.pkg }
     }
-    process.exit(0) // XXX DEBUG
+
+    // XXX ------------
+    if (isNodeJsLikeEnv) {
+      for (let file of r.pkg.files) {
+        banner(
+          `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`
+        )
+        console.log(astRepr(r.pkg, reprOptions))
+      }
+      process.exit(0)
+    }
+    // XXX ------------
 
     const irb = new IRBuilder()
     irb.init(diagh, IRFlags.Comments | IRFlags.Optimize)
