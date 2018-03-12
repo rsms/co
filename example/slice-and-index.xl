@@ -60,7 +60,9 @@ fun tuple1 {
   // k = 0
   // if k == 0 { k = k + 1 }  // makes k variable
   // e0 = xs[k] // error: non-constant tuple index
+}
 
+fun late1 {
   // late resolution
   xs2 = (1, late-str)  // resolved to (int, str<5>) in post-resolve
   v = xs2.1  // resolved to str<5> in post-resolve

@@ -143,10 +143,10 @@ class pkgBinder extends ErrorReporter {
         continue
       }
 
-      // dlog(
-      //   `${id} (${ent.value && ent.value.constructor.name})`+
-      //   ` at ${b.fset.position(id.pos)}`
-      // )
+      dlog(
+        `${id} (${ent.value && ent.value.constructor.name})`+
+        ` at ${b.fset.position(id.pos)}`
+      )
 
       id.refEnt(ent) // reference ent
 
@@ -157,6 +157,7 @@ class pkgBinder extends ErrorReporter {
         assert(!(id.type instanceof UnresolvedType), 'still unresolved')
         
         // delegate type to any expressions that reference this type
+        dlog('len(t.refs):', t.refs ? t.refs.size : 0)
         if (t.refs) for (let ref of t.refs) {
           if (ref instanceof FunSig || ref instanceof FunType) {
             ref.result = id.type

@@ -199,8 +199,6 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
 }
 
 
-
-
 // evalConstU32 evaluates a constant expression yielding a u32
 // returns
 //  >= 0 on success

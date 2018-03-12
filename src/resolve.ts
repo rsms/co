@@ -143,6 +143,9 @@ export class TypeResolver extends ErrorReporter {
     }
 
     if (n.type instanceof Type /*&& (n.type.constructor !== UnresolvedType)*/) {
+      if (n.type instanceof UnresolvedType) {
+        n.type.addRef(n)
+      }
       return n.type
     }
 
@@ -150,13 +153,6 @@ export class TypeResolver extends ErrorReporter {
     let t = r.maybeResolve(n)
 
     if (!t) {
-      // if (n.type) {
-      //   if (n.type instanceof UnresolvedType) {
-      //     n.type.addRef(n)
-      //   }
-      //   return n.type
-      // }
-
       t = r.markUnresolved(n)
 
       // error failing to resolve field of known type
@@ -326,11 +322,12 @@ export class TypeResolver extends ErrorReporter {
     const r = this
     let types :Type[] = []
     for (const x of exprs) {
-      const t = r.resolve(x)
-      if (!t) {
-        return null
-      }
-      types.push(t)
+      // Note: We don't check for unresolved types
+      //
+      // TODO: when x is unresolved, register the tuple _type_ as a dependency
+      // for that unresolved type, so that laste-bind can wire it up.
+      //
+      types.push(r.resolve(x))
     }
     return r.getTupleType(types)
   }
@@ -675,7 +672,7 @@ export class TypeResolver extends ErrorReporter {
   //
   markUnresolved(expr :Expr) :UnresolvedType {
     const t = new UnresolvedType(expr.pos, expr.scope, expr)
-    dlog(`expr ${expr} as ${this.fset.position(expr.pos)}`)
+    dlog(`expr ${expr} at ${this.fset.position(expr.pos)}`)
     this.unresolved.add(t)
     return t
   }
