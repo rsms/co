@@ -3,10 +3,11 @@ import { Pos, SrcFile } from './pos'
 import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
-import { FunType, BasicType, IntType, MemType } from './ast'
+import { FunType, BasicType, NumType, IntType, MemType } from './ast'
 import { optdce } from './ir-opt-dce'
 import { optcf_op1, optcf_op2 } from './ir-opt-cf'
 import { debuglog as dlog } from './util'
+import { Num } from './num'
 // const dlog = function(..._ :any[]){} // silence dlog
 
 
@@ -301,7 +302,7 @@ function getop(tok :token, t :BasicType) :Op {
 // }
 
 
-export type Aux = ByteStr | Uint8Array | number
+export type Aux = ByteStr | Uint8Array | Num
 
 // Value is a three-address-code operation
 //
@@ -517,7 +518,7 @@ export class Fun {
   name   :ByteStr
   bid    :int = 0  // block ID allocator
   vid    :int = 0  // value ID allocator
-  consts :Map<int,Value[]>|null = null
+  consts :Map<Num,Value[]>|null = null
     // constants cache, keyed by constant value; users must check value's
     // Op and Type
 
@@ -547,7 +548,7 @@ export class Fun {
   //
   // Limitation: c must be smaller than Number.MAX_SAFE_INTEGER
   //
-  constVal(t :BasicType, c :int) :Value {
+  constVal(t :NumType, c :Num) :Value {
     let f = this
     let vv :Value[]|undefined
 
@@ -562,7 +563,7 @@ export class Fun {
     assert(op != Op.None)
 
     if (!f.consts) {
-      f.consts = new Map<int,Value[]>()
+      f.consts = new Map<Num,Value[]>()
     } else {
       vv = f.consts.get(c)
       if (vv) for (let v of vv) {
@@ -1205,16 +1206,7 @@ export class IRBuilder {
     assert(s.type, `type not resolved for ${s}`)
 
     if (s instanceof ast.NumLit) {
-      let t = s.type //as BasicType
-      let c :number = 0
-      if (s.isInt()) {
-        c = typeof s.value == 'number' ? s.value : s.value.toFloat64()
-        // TODO store s.value vanilla to constVal
-      } else {
-        assert(typeof s.value == 'number')
-        c = s.value as number
-      }
-      return r.f.constVal(t, c)
+      return r.f.constVal(s.type, s.value)
     }
 
     if (s instanceof ast.Ident) {

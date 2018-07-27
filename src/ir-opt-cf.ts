@@ -2,6 +2,11 @@ import { BasicType, IntType } from './ast'
 import { Block, Value, Op } from './ir'
 import { debuglog as dlog } from './util'
 
+//
+// TODO use numEvalOp* functions in ./num instead of the partial, old
+// evaluation code in here.
+//
+
 export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
   // TODO implement unary operations
   return null

@@ -311,7 +311,12 @@ export function numEvalOp(x :Operation) :Num|null {
 }
 
 
-function numEvalOpBitSh(t :IntType, a :Num, b :Num, op :token.SHL|token.SHR) :Num|null {
+export function numEvalOpBitSh(
+  t :IntType,
+  a :Num,
+  b :Num,
+  op :token.SHL|token.SHR
+) :Num|null {
   let nbits = 0
   if (typeof b == 'number' && b >= 0) {
     nbits = b >>> 0
@@ -346,7 +351,12 @@ function numEvalOpBitSh(t :IntType, a :Num, b :Num, op :token.SHL|token.SHR) :Nu
 }
 
 
-function numEvalOpBin(t :NumType, a :Num, b :Num, op :token) :Num|null {
+export function numEvalOpBin(
+  t :NumType,
+  a :Num,
+  b :Num,
+  op :token
+) :Num|null {
   if (t.memtype == MemType.i32) {
     assert(t instanceof IntType)
     assert(typeof a == 'number')
@@ -394,7 +404,7 @@ function numEvalOpBin(t :NumType, a :Num, b :Num, op :token) :Num|null {
 // SHR      i       >>   arithmetic when signed, logical when unsigned
 //
 
-function numEvalOpBinS32(a :int, b :int, op :token) :Num|null {
+export function numEvalOpBinS32(a :int, b :int, op :token) :Num|null {
   switch (op) {
   case token.ADD:     return a + b | 0 // +
   case token.SUB:     return a - b | 0 // -
@@ -413,7 +423,7 @@ function numEvalOpBinS32(a :int, b :int, op :token) :Num|null {
   }
 }
 
-function numEvalOpBinU32(a :int, b :int, op :token) :Num|null {
+export function numEvalOpBinU32(a :int, b :int, op :token) :Num|null {
   switch (op) {
   case token.ADD:     return a + b >>> 0 // +
   case token.SUB:     return a - b >>> 0 // -
@@ -432,7 +442,7 @@ function numEvalOpBinU32(a :int, b :int, op :token) :Num|null {
   }
 }
 
-function numEvalOpBinI64(a :Int64, b :Int64, op :token) :Num|null {
+export function numEvalOpBinI64(a :Int64, b :Int64, op :token) :Num|null {
   switch (op) {
   case token.ADD:     return a.add(b) // +
   case token.SUB:     return a.sub(b) // -
@@ -451,7 +461,7 @@ function numEvalOpBinI64(a :Int64, b :Int64, op :token) :Num|null {
   }
 }
 
-function numEvalOpBinFloat(a :number, b :number, op :token) :Num|null {
+export function numEvalOpBinFloat(a :number, b :number, op :token) :Num|null {
   switch (op) {
   case token.ADD:     return a + b // +
   case token.SUB:     return a - b // -
@@ -464,7 +474,7 @@ function numEvalOpBinFloat(a :number, b :number, op :token) :Num|null {
 }
 
 
-function numEvalOpUnary(t :NumType, n :Num, op :token) :Num|null {
+export function numEvalOpUnary(t :NumType, n :Num, op :token) :Num|null {
   if (t.memtype == MemType.i32) {
     assert(typeof n == 'number')
     assert(t instanceof IntType)
@@ -494,7 +504,7 @@ function numEvalOpUnary(t :NumType, n :Num, op :token) :Num|null {
 //                  and   m = -1 for signed x
 //
 
-function numEvalOpUnaryS32(n :int, op :token) :Num|null {
+export function numEvalOpUnaryS32(n :int, op :token) :Num|null {
   switch (op) {
   case token.ADD: return n
   case token.SUB: return 0 - n | 0
@@ -506,7 +516,7 @@ function numEvalOpUnaryS32(n :int, op :token) :Num|null {
   }
 }
 
-function numEvalOpUnaryU32(n :int, op :token) :Num|null {
+export function numEvalOpUnaryU32(n :int, op :token) :Num|null {
   switch (op) {
   case token.ADD: return n
   case token.SUB: return 0 - n >>> 0
@@ -518,7 +528,7 @@ function numEvalOpUnaryU32(n :int, op :token) :Num|null {
   }
 }
 
-function numEvalOpUnaryI64(n :Int64, op :token) :Num|null {
+export function numEvalOpUnaryI64(n :Int64, op :token) :Num|null {
   switch (op) {
   case token.ADD: return n
   case token.SUB: return n.neg()
@@ -530,7 +540,7 @@ function numEvalOpUnaryI64(n :Int64, op :token) :Num|null {
   }
 }
 
-function numEvalOpUnaryFloat(n :number, op :token) :Num|null {
+export function numEvalOpUnaryFloat(n :number, op :token) :Num|null {
   switch (op) {
   case token.ADD: return n
   case token.SUB: return 0 - n

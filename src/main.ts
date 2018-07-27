@@ -165,7 +165,7 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  const _sources = sources || ['example/slice-and-index.xl']
+  const _sources = sources || ['example/ssa1.xl']
   diagnostics = []
 
   let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
