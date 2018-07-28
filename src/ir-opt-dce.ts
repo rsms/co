@@ -1,4 +1,5 @@
-import { Fun, Value } from './ir'
+import { Fun, Value, Op } from './ir'
+
 // import { fmtir } from './ir-repr'
 // import { debuglog as dlog } from './util'
 
@@ -21,18 +22,26 @@ export function optdce(fn :Fun) {
     }
     let v = b.vtail
     while (v) {
-      // attempt to remove receiver var from live.
-      if (!live.delete(v)) {
-        // dead (the var is not in `live`)
-        // dlog(`${v} is dead  ${fmtir(v)}`)
-        v = v.remove()  // returns previous sibling
-      } else {
+      // attempt to remove receiver var from live (except for calls)
+      //
+      // TODO: when encountering a call, check if the call has
+      // side effects (i.e. called function is not pure), and if not attempt
+      // elimination of the call.
+      // Currently we don't know if the call has side effects or not, so we
+      // have to assume all calls have side effects, thus we never elminiate
+      // calls.
+      //
+      if (v.op === Op.Call || v.op === Op.TailCall || live.delete(v)) {
         // register operands as being live (since they are read)
         // dlog(`${v} is live  ${fmtir(v)}`)
         if (v.args) for (let operand of v.args) {
           live.add(operand)
         }
         v = v.prevv
+      } else {
+        // dead (the var is not in `live`)
+        // dlog(`${v} is dead  ${fmtir(v)}`)
+        v = v.remove()  // returns previous sibling
       }
       // dumplive(live)
     }

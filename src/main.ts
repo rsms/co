@@ -166,6 +166,8 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   const parser = new Parser()
 
   const _sources = sources || ['example/ssa1.xl']
+
+  // clear diagnostics from past run (this is a global var)
   diagnostics = []
 
   let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
