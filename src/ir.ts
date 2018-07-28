@@ -656,6 +656,42 @@ export class IRBuilder {
     r.flags = flags
   }
 
+  // addTopLevel is the primary interface to builder
+  //
+  addTopLevel(sfile :SrcFile, d :ast.Decl|ast.FunExpr) :Fun|null {
+    // Note: d must not contain unresolved references (including types).
+    // If there are unresolved references, behavior is undefined.
+    //
+    const r = this
+    r.sfile = sfile
+
+    if (d instanceof ast.MultiDecl) {
+      for (let d2 of d.decls) {
+        r.addTopLevel(sfile, d2)
+      }
+    } else if (d instanceof ast.VarDecl) {
+      r.global(d)
+    } else if (d instanceof ast.FunExpr) {
+      if (d.isInit) {
+        // Sanity checks (parser has already checked these things)
+        assert(d.sig.params.length == 0, 'init fun with parameters')
+        assert(d.sig.result === ast.u_t_nil, 'init fun with result')
+        assert(d.body, 'missing body')
+        r.initCode(d.body as ast.Expr)
+      } else if (d.body) {
+        // regular function with an implementation (d.body)
+        return r.fun(d)
+      } else {
+        dlog(`skipping pure function declaration ${d}`)
+      }
+    } else if (d instanceof ast.ImportDecl) {
+      dlog(`TODO ImportDecl`)
+    } else if (d instanceof ast.TypeDecl) {
+      dlog(`TODO TypeDecl`)
+    }
+    return null // TODO: return other top-level things
+  }
+
   // startBlock sets the current block we're generating code in
   //
   startBlock(b :Block) {
@@ -750,43 +786,6 @@ export class IRBuilder {
   nilValue() :Value {
     assert(this.b, "no current block")
     return this.b.newValue0(Op.None, ast.u_t_nil)
-  }
-
-  // ------------------------------------------------------------
-  // primary interface to builder
-
-  addTopLevel(sfile :SrcFile, d :ast.Decl|ast.FunExpr) :Fun|null {
-    // Note: d must not contain unresolved references (including types).
-    // If there are unresolved references, behavior is undefined.
-    //
-    const r = this
-    r.sfile = sfile
-
-    if (d instanceof ast.MultiDecl) {
-      for (let d2 of d.decls) {
-        r.addTopLevel(sfile, d2)
-      }
-    } else if (d instanceof ast.VarDecl) {
-      r.global(d)
-    } else if (d instanceof ast.FunExpr) {
-      if (d.isInit) {
-        // Sanity checks (parser has already checked these things)
-        assert(d.sig.params.length == 0, 'init fun with parameters')
-        assert(d.sig.result === ast.u_t_nil, 'init fun with result')
-        assert(d.body, 'missing body')
-        r.initCode(d.body as ast.Expr)
-      } else if (d.body) {
-        // regular function with an implementation (d.body)
-        return r.fun(d)
-      } else {
-        dlog(`skipping pure function declaration ${d}`)
-      }
-    } else if (d instanceof ast.ImportDecl) {
-      dlog(`TODO ImportDecl`)
-    } else if (d instanceof ast.TypeDecl) {
-      dlog(`TODO TypeDecl`)
-    }
-    return null // TODO: return other top-level things
   }
 
   global(v :ast.VarDecl) {
@@ -1411,6 +1410,7 @@ export class IRBuilder {
 
     let ft = funid.type as FunType
     assert(ft, "unresolved function type")
+
 
     let rt = ft.result as BasicType
     assert(ft.result instanceof BasicType,
