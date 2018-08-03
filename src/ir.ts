@@ -3,13 +3,16 @@ import { Pos, SrcFile } from './pos'
 import { token } from './token'
 import { DiagKind, DiagHandler } from './diag'
 import * as ast from './ast'
+import { t_nil, t_bool } from './types'
+import * as types from './types'
 import { FunType, BasicType, NumType, IntType, MemType } from './ast'
 import { optdce } from './ir-opt-dce'
 import { optcf_op1, optcf_op2 } from './ir-opt-cf'
 import { debuglog as dlog } from './util'
 import { Num } from './num'
-// const dlog = function(..._ :any[]){} // silence dlog
+import { op } from './ir-op'
 
+// const dlog = function(..._ :any[]){} // silence dlog
 
 const byteStr_main = asciiByteStr("main")
 const byteStr_anonfun = asciiByteStr('anonfun')
@@ -21,10 +24,10 @@ export enum Op {
   // FwdRef,   // forward reference (SSA)
   Copy,
   Phi,
-  LoadParam,   // read function parameter (inside callee)
-  PushParam,   // push a parameter for a function call
+  Arg,         // function parameter argument (inside callee)
+  CallArg,     // push a parameter for a function call
   Call,        // call a function
-  TailCall,    // call a function just before returning
+  TailCall,    // call a function as tail
 
   // constants
   const_begin,
@@ -33,6 +36,21 @@ export enum Op {
   f32Const, // load a number as f32
   f64Const, // load a number as f64
   const_end,
+
+  // register access
+  RegLoad,   // load memory location into register
+  RegStore,  // store register value into memory
+
+  // stack
+  SP, // stack pointer
+    // The SP pseudo-register is a virtual stack pointer used to refer
+    // to frame-local variables and the arguments being prepared for
+    // function calls. It points to the top of the local stack frame,
+    // so references should use negative offsets in the range
+    // [−framesize, 0): x-8(SP), y-4(SP), and so on.
+  SB, // static base pointer
+    // SB is a pseudo-register that holds the "static-base" pointer,
+    // i.e. the address of the beginning of the program address space.
 
   // memory load
   i32Load,     // load 4 bytes as i32
@@ -61,7 +79,7 @@ export enum Op {
   f32Store,    // store 4 bytes (no conversion)
   f64Store,    // store 8 bytes (no conversion)
 
-  // integer operators
+  // integer operators (i=size type, i32=i32 type, etc)
   i32Add,    // +  sign-agnostic addition
   i32Sub,    // -  sign-agnostic subtraction
   i32Mul,    // *  sign-agnostic multiplication (lower 32-bits)
@@ -95,10 +113,11 @@ export enum Op {
   i32Popcnt, //    sign-agnostic count number of one bits
   i32Eqz,    // == compare equal to zero
 
-  i64Add, i64Sub, i64Mul, i64Div_s, i64Div_u, i64Rem_s, i64Rem_u, i64And,
-  i64Neg, i64Or, i64Xor, i64Shl, i64Shr_u, i64Shr_s, i64Rotl, i64Rotr, i64Eq,
-  i64Ne, i64Lt_s, i64Lt_u, i64Le_s, i64Le_u, i64Gt_s, i64Gt_u, i64Ge_s,
-  i64Ge_u, i64Clz, i64Ctz, i64Popcnt, i64Eqz,
+  // same operations listed above are defined for 64-bit integers
+  i64Add, i64Sub, i64Mul, i64Div_s, i64Div_u, i64Rem_s, i64Rem_u, i64Neg,
+  i64And, i64Or, i64Xor, i64Shl, i64Shr_u, i64Shr_s, i64Rotl, i64Rotr,
+  i64Eq, i64Ne, i64Lt_s, i64Lt_u, i64Le_s, i64Le_u, i64Gt_s, i64Gt_u,
+  i64Ge_s, i64Ge_u, i64Clz, i64Ctz, i64Popcnt, i64Eqz,
 
   // floating-point operators
   f32Add,   // +  addition
@@ -122,6 +141,7 @@ export enum Op {
   f32Min,   //    minimum (binary operator); if either operand is NaN, ret NaN
   f32Max,   //    maximum (binary operator); if either operand is NaN, ret NaN
 
+  // same operations listed above are defined for 64-bit floats
   f64Add, f64Sub, f64Mul, f64Div, f64Abs, f64Neg, f64Cps, f64Ceil, f64Floor,
   f64Trunc, f64Near, f64Eq, f64Ne, f64Lt, f64Le, f64Gt, f64Ge, f64Sqrt, f64Min,
   f64Max,
@@ -133,6 +153,7 @@ export enum Op {
   i32Trunc_u_f32,   // truncate a 32-bit float to an unsigned 32-bit int
   i32Trunc_u_f64,   // truncate a 64-bit float to an unsigned 32-bit int
   i32Rein_f32,      // reinterpret the bits of a 32-bit float as a 32-bit int
+  
   i64Extend_s_i32,  // extend a signed 32-bit int to a 64-bit int
   i64Extend_u_i32,  // extend an unsigned 32-bit int to a 64-bit int
   i64Trunc_s_f32,   // truncate a 32-bit float to a signed 64-bit int
@@ -140,12 +161,14 @@ export enum Op {
   i64Trunc_u_f32,   // truncate a 32-bit float to an unsigned 64-bit int
   i64Trunc_u_f64,   // truncate a 64-bit float to an unsigned 64-bit int
   i64Rein_f64,      // reinterpret the bits of a 64-bit float as a 64-bit int
+  
   f32Demote_f64,    // demote a 64-bit float to a 32-bit float
   f32Convert_s_i32, // convert a signed 32-bit int to a 32-bit float
   f32Convert_s_i64, // convert a signed 64-bit int to a 32-bit float
   f32Convert_u_i32, // convert an unsigned 32-bit int to a 32-bit float
   f32Convert_u_i64, // convert an unsigned 64-bit int to a 32-bit float
   f32Rein_i32,      // reinterpret the bits of a 32-bit int as a 32-bit float
+  
   f64Promote_f32,   // promote a 32-bit float to a 64-bit float
   f64Convert_s_i32, // convert a signed 32-bit int to a 64-bit float
   f64Convert_s_i64, // convert a signed 64-bit int to a 64-bit float
@@ -157,94 +180,114 @@ export enum Op {
   Trap,             // aka "unreachable". Trap/crash
 }
 
+// const tokenToOp = new Map<token,Op>([
+//   // [token.LSS, ], // <
+// ])
+
 // getop returns the IR operator for the corresponding token operator and type
 //
 function getop(tok :token, t :BasicType) :Op {
   switch (tok) {
   case token.EQL: switch (t.memtype) { // ==
-    case MemType.i32: return Op.i32Eq
-    case MemType.i64: return Op.i64Eq
-    case MemType.f32: return Op.f32Eq
-    case MemType.f64: return Op.f64Eq
+    //case MemType.Size: return Op.iEq
+    case MemType.i32:  return Op.i32Eq
+    case MemType.i64:  return Op.i64Eq
+    case MemType.f32:  return Op.f32Eq
+    case MemType.f64:  return Op.f64Eq
   }; break
   case token.NEQ: switch (t.memtype) { // !=
-    case MemType.i32: return Op.i32Ne
-    case MemType.i64: return Op.i64Ne
-    case MemType.f32: return Op.f32Ne
-    case MemType.f64: return Op.f64Ne
+    //case MemType.Size: return Op.iNe
+    case MemType.i32:  return Op.i32Ne
+    case MemType.i64:  return Op.i64Ne
+    case MemType.f32:  return Op.f32Ne
+    case MemType.f64:  return Op.f64Ne
   }; break
   case token.LSS: switch (t.memtype) { // <
-    case MemType.i32: return (t as IntType).signed ? Op.i32Lt_s : Op.i32Lt_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Lt_s : Op.i64Lt_u
-    case MemType.f32: return Op.f32Lt
-    case MemType.f64: return Op.f64Lt
+    //case MemType.Size: return (t as IntType).signed ? Op.iLt_s : Op.iLt_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Lt_s : Op.i32Lt_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Lt_s : Op.i64Lt_u
+    case MemType.f32:  return Op.f32Lt
+    case MemType.f64:  return Op.f64Lt
   }; break
   case token.LEQ: switch (t.memtype) { // <=
-    case MemType.i32: return (t as IntType).signed ? Op.i32Le_s : Op.i32Le_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Le_s : Op.i64Le_u
-    case MemType.f32: return Op.f32Le
-    case MemType.f64: return Op.f64Le
+    //case MemType.Size: return (t as IntType).signed ? Op.iLe_s : Op.iLe_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Le_s : Op.i32Le_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Le_s : Op.i64Le_u
+    case MemType.f32:  return Op.f32Le
+    case MemType.f64:  return Op.f64Le
   }; break
   case token.GTR: switch (t.memtype) { // >
-    case MemType.i32: return (t as IntType).signed ? Op.i32Gt_s : Op.i32Gt_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Gt_s : Op.i64Gt_u
-    case MemType.f32: return Op.f32Gt
-    case MemType.f64: return Op.f64Gt
+    //case MemType.Size: return (t as IntType).signed ? Op.iGt_s : Op.iGt_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Gt_s : Op.i32Gt_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Gt_s : Op.i64Gt_u
+    case MemType.f32:  return Op.f32Gt
+    case MemType.f64:  return Op.f64Gt
   }; break
   case token.GEQ: switch (t.memtype) { // >=
-    case MemType.i32: return (t as IntType).signed ? Op.i32Ge_s : Op.i32Ge_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Ge_s : Op.i64Ge_u
-    case MemType.f32: return Op.f32Ge
-    case MemType.f64: return Op.f64Ge
+    //case MemType.Size: return (t as IntType).signed ? Op.iGe_s : Op.iGe_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Ge_s : Op.i32Ge_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Ge_s : Op.i64Ge_u
+    case MemType.f32:  return Op.f32Ge
+    case MemType.f64:  return Op.f64Ge
   }; break
   case token.ADD: switch (t.memtype) { // +
-    case MemType.i32: return Op.i32Add
-    case MemType.i64: return Op.i64Add
-    case MemType.f32: return Op.f32Add
-    case MemType.f64: return Op.f64Add
+    //case MemType.Size: return Op.iAdd
+    case MemType.i32:  return Op.i32Add
+    case MemType.i64:  return Op.i64Add
+    case MemType.f32:  return Op.f32Add
+    case MemType.f64:  return Op.f64Add
   }; break
   case token.SUB: switch (t.memtype) { // -
-    case MemType.i32: return Op.i32Sub
-    case MemType.i64: return Op.i64Sub
-    case MemType.f32: return Op.f32Sub
-    case MemType.f64: return Op.f64Sub
+    //case MemType.Size: return Op.iSub
+    case MemType.i32:  return Op.i32Sub
+    case MemType.i64:  return Op.i64Sub
+    case MemType.f32:  return Op.f32Sub
+    case MemType.f64:  return Op.f64Sub
   }; break
   case token.MUL: switch (t.memtype) { // *
-    case MemType.i32: return Op.i32Mul
-    case MemType.i64: return Op.i64Mul
-    case MemType.f32: return Op.f32Mul
-    case MemType.f64: return Op.f64Mul
+    //case MemType.Size: return Op.iMul
+    case MemType.i32:  return Op.i32Mul
+    case MemType.i64:  return Op.i64Mul
+    case MemType.f32:  return Op.f32Mul
+    case MemType.f64:  return Op.f64Mul
   }; break
   case token.QUO: switch (t.memtype) { // /
-    case MemType.i32: return (t as IntType).signed ? Op.i32Div_s : Op.i32Div_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Div_s : Op.i64Div_u
-    case MemType.f32: return Op.f32Div
-    case MemType.f64: return Op.f64Div
+    //case MemType.Size: return (t as IntType).signed ? Op.iDiv_s : Op.iDiv_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Div_s : Op.i32Div_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Div_s : Op.i64Div_u
+    case MemType.f32:  return Op.f32Div
+    case MemType.f64:  return Op.f64Div
   }; break
   // The remaining operators are only available for integers
   case token.REM: switch (t.memtype) { // %
-    case MemType.i32: return (t as IntType).signed ? Op.i32Rem_s : Op.i32Rem_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Rem_s : Op.i64Rem_u
+    //case MemType.Size: return (t as IntType).signed ? Op.iRem_s : Op.iRem_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Rem_s : Op.i32Rem_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Rem_s : Op.i64Rem_u
   }; break
   case token.OR: switch (t.memtype) { // |
-    case MemType.i32: return Op.i32Or
-    case MemType.i64: return Op.i64Or
+    //case MemType.Size: return Op.iOr
+    case MemType.i32:  return Op.i32Or
+    case MemType.i64:  return Op.i64Or
   }; break
   case token.XOR: switch (t.memtype) { // ^
-    case MemType.i32: return Op.i32Xor
-    case MemType.i64: return Op.i64Xor
+    //case MemType.Size: return Op.iXor
+    case MemType.i32:  return Op.i32Xor
+    case MemType.i64:  return Op.i64Xor
   }; break
   case token.AND: switch (t.memtype) { // &
-    case MemType.i32: return Op.i32And
-    case MemType.i64: return Op.i64And
+    //case MemType.Size: return Op.iAnd
+    case MemType.i32:  return Op.i32And
+    case MemType.i64:  return Op.i64And
   }; break
   case token.SHL: switch (t.memtype) { // <<
-    case MemType.i32: return Op.i32Shl
-    case MemType.i64: return Op.i64Shl
+    //case MemType.Size: return Op.iShl
+    case MemType.i32:  return Op.i32Shl
+    case MemType.i64:  return Op.i64Shl
   }; break
   case token.SHR: switch (t.memtype) { // >>
-    case MemType.i32: return (t as IntType).signed ? Op.i32Shr_s : Op.i32Shr_u
-    case MemType.i64: return (t as IntType).signed ? Op.i64Shr_s : Op.i64Shr_u
+    //case MemType.Size: return (t as IntType).signed ? Op.iShr_s : Op.iShr_u
+    case MemType.i32:  return (t as IntType).signed ? Op.i32Shr_s : Op.i32Shr_u
+    case MemType.i64:  return (t as IntType).signed ? Op.i64Shr_s : Op.i64Shr_u
   }; break
   case token.AND_NOT: // &^  TODO implement (need to generalize/unroll)
     assert(false, 'AND_NOT "&^" not yet supported')
@@ -255,51 +298,12 @@ function getop(tok :token, t :BasicType) :Op {
     return Op.None
   }
 
+  assert(t.memtype !== MemType.None, 'operand with MemType.None')
+
   // fallthrough from unhandled (but known) operator token
-  assert(false, `invalid operation for floating-point number`)
+  assert(false, `invalid operation ${tok} ${t}`)
   return Op.None
 }
-
-
-// // storeop maps value type to store operator
-// //
-// function storeop(t :BasicType) :Op {
-//   // select store operation
-//   // i32Store,    // store 4 bytes (no conversion)
-//   // i32Store8,   // wrap i32 to i8 and store 1 byte
-//   // i32Store16,  // wrap i32 to i16 and store 2 bytes
-//   // i64Store,    // store 8 bytes (no conversion)
-//   // i64Store8,   // wrap i64 to i8 and store 1 byte
-//   // i64Store16,  // wrap i64 to i16 and store 2 bytes
-//   // i64Store32,  // wrap i64 to i32 and store 4 bytes
-//   // f32Store,    // store 4 bytes (no conversion)
-//   // f64Store,    // store 8 bytes (no conversion)
-//   let bz :int
-//   switch (t.memtype) {
-
-//     case MemType.i32:
-//       bz = (t as IntType).bitsize
-//       if (bz <= 8) { return Op.i32Store8 }
-//       if (bz <= 16) { return Op.i32Store16 }
-//       assert(bz <= 32)
-//       return Op.i32Store
-
-//     case MemType.i64:
-//       bz = (t as IntType).bitsize
-//       if (bz <= 8) { return Op.i64Store8 }
-//       if (bz <= 16) { return Op.i64Store16 }
-//       if (bz <= 32) { return Op.i64Store32 }
-//       assert(bz <= 64)
-//       return Op.i64Store
-
-//     case MemType.f32:
-//       return Op.f32Store
-    
-//     case MemType.f64:
-//       return Op.f64Store
-//   }
-//   return Op.None
-// }
 
 
 export type Aux = ByteStr | Uint8Array | Num
@@ -323,9 +327,11 @@ export class Value {
   constructor(id :int, op :Op, type :BasicType, b :Block, aux :Aux|null) {
     this.id = id
     this.op = op
-    this.type = type ; assert(type instanceof BasicType)
+    this.type = type
     this.b = b
     this.aux = aux
+    assert(type instanceof BasicType)
+    assert(type.size > 0, `ir.Value assigned abstract type ${type}`)
   }
 
   toString() {
@@ -428,18 +434,31 @@ export class Block {
     this.f = f
   }
 
+  // pushValue adds v to the end of the block
+  //
   pushValue(v :Value) {
-    let tv = this.vtail
-    if (tv) {
-      tv.nextv = v
-      v.prevv = tv
+    if (this.vtail) {
+      this.vtail.nextv = v
+      v.prevv = this.vtail
     } else {
       this.vhead = v
     }
     this.vtail = v
   }
 
-  // removeValue removes v from this block
+  // pushValueFront adds v to the top of the block
+  //
+  pushValueFront(v :Value) {
+    if (this.vhead) {
+      this.vhead.prevv = v
+      v.nextv = this.vhead
+    } else {
+      this.vtail = v
+    }
+    this.vhead = v
+  }
+
+  // removeValue removes v from this block.
   // returns the previous sibling, if any.
   //
   removeValue(v :Value) :Value|null {
@@ -464,6 +483,23 @@ export class Block {
     }
 
     return prevv
+  }
+
+  // insertValueBefore inserts newval before refval.
+  // Returns newvval
+  //
+  insertValueBefore(refval :Value, newval :Value) :Value {
+    assert(refval.b === this)
+    assert(newval.b === this)
+    newval.prevv = refval.prevv
+    newval.nextv = refval
+    refval.prevv = newval
+    if (newval.prevv) {
+      newval.prevv.nextv = newval
+    } else {
+      this.vhead = newval
+    }
+    return newval
   }
 
   newPhi(t :BasicType) :Value {
@@ -516,17 +552,19 @@ export class Fun {
   tailb  :Block    // exit block (current block during construction)
   type   :FunType
   name   :ByteStr
+  nargs  :int      // number of arguments
   bid    :int = 0  // block ID allocator
   vid    :int = 0  // value ID allocator
   consts :Map<Num,Value[]>|null = null
     // constants cache, keyed by constant value; users must check value's
     // Op and Type
 
-  constructor(type :FunType, name :ByteStr) {
+  constructor(type :FunType, name :ByteStr, nargs :int) {
     this.entryb = new Block(BlockKind.Plain, 0, this)
     this.tailb = this.entryb
     this.type = type
     this.name = name
+    this.nargs = nargs
   }
 
   newBlock(k :BlockKind) :Block {
@@ -610,6 +648,11 @@ export class Pkg {
 }
 
 
+export interface RegAlloc {
+  visitFun(f :Fun) : void
+}
+
+
 export enum IRFlags {
   Default  = 0,
   Optimize = 1 << 0,  // apply early inline optimizations
@@ -624,12 +667,14 @@ export enum IRFlags {
 // https://pp.info.uni-karlsruhe.de/uploads/publikationen/braun13cc.pdf
 //
 export class IRBuilder {
-  pkg   :Pkg
-  sfile :SrcFile|null = null
-  diagh :DiagHandler|null = null
-  b     :Block       // current block
-  f     :Fun         // current function
-  flags :IRFlags = IRFlags.Default
+  pkg      :Pkg
+  sfile    :SrcFile|null = null
+  diagh    :DiagHandler|null = null
+  regalloc :RegAlloc|null = null
+  b        :Block       // current block
+  f        :Fun         // current function
+  flags    :IRFlags = IRFlags.Default
+  typemap  :Map<BasicType,BasicType> // remapped types
   
   vars :Map<ByteStr,Value>
     // variable assignments in the current block (map from variable symbol
@@ -645,15 +690,31 @@ export class IRBuilder {
     // are not known at the time a block starts, but is known and registered
     // before the block ends.
 
-  init(diagh :DiagHandler|null = null, flags :IRFlags=IRFlags.Default) {
+  init(diagh :DiagHandler|null = null,
+       intsize: int = 4,
+       addrsize: int = 4,
+       regalloc :RegAlloc|null = null,
+       flags :IRFlags=IRFlags.Default
+  ) {
     const r = this
     r.pkg = new Pkg()
     r.sfile = null
     r.diagh = diagh
+    r.regalloc = regalloc
     r.vars = new Map<ByteStr,Value>()
     r.defvars = []
     r.incompletePhis = null
     r.flags = flags
+    // select integer types
+    const [intt_s, intt_u] = types.intTypes(intsize)
+    const [sizet_s, sizet_u] = types.intTypes(addrsize)
+    // populate typemap
+    r.typemap = new Map<BasicType,BasicType>([
+      [types.t_int, intt_s],
+      [types.t_uint, intt_u],
+      [types.t_isize, sizet_s],
+      [types.t_usize, sizet_u],
+    ])
   }
 
   // addTopLevel is the primary interface to builder
@@ -675,7 +736,7 @@ export class IRBuilder {
       if (d.isInit) {
         // Sanity checks (parser has already checked these things)
         assert(d.sig.params.length == 0, 'init fun with parameters')
-        assert(d.sig.result === ast.u_t_nil, 'init fun with result')
+        assert(d.sig.result === t_nil, 'init fun with result')
         assert(d.body, 'missing body')
         r.initCode(d.body as ast.Expr)
       } else if (d.body) {
@@ -774,9 +835,21 @@ export class IRBuilder {
       // perform early dead-code elimination
       optdce(s.f)
     }
+    if (s.regalloc) {
+      // perform register allocation
+      s.regalloc.visitFun(s.f)
+    }
     if (DEBUG) {
       ;(s as any).f = null
     }
+  }
+
+  // normtype normalizes abstract types to concrete types.
+  // E.g. normtype(int) -> i32  (if int->i32 exists in typemap)
+  //
+  normtype(t :BasicType) :BasicType {
+    assert(t instanceof BasicType, `${t} is not a BasicType`)
+    return this.typemap.get(t) || t
   }
 
   // nilValue returns a placeholder value.
@@ -785,16 +858,16 @@ export class IRBuilder {
   //
   nilValue() :Value {
     assert(this.b, "no current block")
-    return this.b.newValue0(Op.None, ast.u_t_nil)
+    return this.b.newValue0(Op.None, t_nil)
   }
 
-  global(v :ast.VarDecl) {
+  global(_ :ast.VarDecl) {
     dlog(`TODO`)
   }
 
-  initCode(body :ast.Expr) {
+  initCode(_body :ast.Expr) {
     // const r = this
-    // const f = r.pkg.init || (r.pkg.init = new Fun([], ast.u_t_nil, 'init'))
+    // const f = r.pkg.init || (r.pkg.init = new Fun([], t_nil, 'init'))
     // r.block(f, null, body, 'init')
     // console.log(`\n-----------------------\n${f}`)
   }
@@ -805,16 +878,20 @@ export class IRBuilder {
     assert(x.type, "unresolved function type")
 
     let funtype = x.type as FunType
-    let f = new Fun(funtype, x.name ? x.name.value : byteStr_anonfun)
+    let f = new Fun(
+      funtype,
+      x.name ? x.name.value : byteStr_anonfun,
+      x.sig.params.length
+    )
     let entryb = f.entryb
 
     // initialize locals
     for (let i = 0; i < x.sig.params.length; i++) {
       let p = x.sig.params[i]
-      if (p.name) {
-        let t = funtype.inputs[i] as BasicType
+      if (p.name && !p.name.value.isUnderscore()) {
+        let t = r.normtype(funtype.inputs[i] as BasicType)
         let name = p.name.value
-        let v = entryb.newValue0(Op.LoadParam, t, i)
+        let v = entryb.newValue0(Op.Arg, t, i)
         if (r.flags & IRFlags.Comments) {
           v.comment = name.toString()
         }
@@ -1107,8 +1184,7 @@ export class IRBuilder {
       assert(s.rhs.length == 0)
       let lhs = s.lhs[0]
 
-      assert(lhs.type instanceof BasicType, `${lhs.type} is not BasicType`)
-      let t = lhs.type as BasicType
+      let t = r.normtype(lhs.type as BasicType)
       let x = r.expr(lhs)
       let y = r.f.constVal(t, 1)
 
@@ -1129,7 +1205,7 @@ export class IRBuilder {
       assert(s.rhs.length == 1)
 
       let lhs = s.lhs[0]
-      let t = lhs.type as BasicType
+      let t = r.normtype(lhs.type as BasicType)
       assert(t instanceof BasicType, "increment operation on complex type")
 
       let op = getop(s.op, t)
@@ -1202,15 +1278,16 @@ export class IRBuilder {
 
   expr(s :ast.Expr) :Value {
     const r = this
+    
     assert(s.type, `type not resolved for ${s}`)
+    const t = r.normtype(s.type as BasicType)
 
     if (s instanceof ast.NumLit) {
-      return r.f.constVal(s.type, s.value)
+      return r.f.constVal(t, s.value)
     }
 
     if (s instanceof ast.Ident) {
-      assert(s.type instanceof BasicType)
-      return r.readVariable(s.value, s.type as BasicType, null)
+      return r.readVariable(s.value, t, null)
     }
 
     if (s instanceof ast.Assignment) {
@@ -1224,7 +1301,6 @@ export class IRBuilder {
       } else {
         // Basic operation
         let left = r.expr(s.x)
-        let t = s.type as BasicType; assert(t instanceof BasicType)
         let op = getop(s.op, t)
         if (s.y) {
           // Basic binary operation
@@ -1360,7 +1436,7 @@ export class IRBuilder {
     contb.preds = [ifb, rightb] // contb <- ifb, rightb
     s.startSealedBlock(contb)
 
-    return s.readVariable(tmpname, ast.u_t_bool, null)
+    return s.readVariable(tmpname, t_bool, null)
   }
 
 
@@ -1388,7 +1464,7 @@ export class IRBuilder {
       let funstr = x.fun.toString() + '/'
       for (let i = 0; i < argvals.length; i++) {
         let v = argvals[i]
-        let v2 = s.b.newValue1(Op.PushParam, v.type, v)
+        let v2 = s.b.newValue1(Op.CallArg, v.type, v)
         let param = fx.sig.params[i]
         if (param.name) {
           v2.comment = funstr + param.name.toString()
@@ -1396,7 +1472,7 @@ export class IRBuilder {
       }
     } else {
       for (let v of argvals) {
-        s.b.newValue1(Op.PushParam, v.type, v)
+        s.b.newValue1(Op.CallArg, v.type, v)
       }
     }
 
@@ -1559,7 +1635,7 @@ export class IRBuilder {
 
     if (same == null) {
       dlog(`${phi.b} ${phi} unreachable or in the start block`)
-      same = new Value(0, Op.None, ast.u_t_nil, phi.b, null) // dummy FIXME
+      same = new Value(0, Op.None, t_nil, phi.b, null) // dummy FIXME
       // same = new Undef() // The phi is unreachable or in the start block
     }
 

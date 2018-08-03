@@ -316,13 +316,13 @@ export class IRVirtualMachine {
       break
     }
 
-    case Op.PushParam: {
+    case Op.CallArg: {
       let a = f.regget(operand(v))
       m.memstack.push(a)
       break
     }
 
-    case Op.LoadParam: {
+    case Op.Arg: {
       let a = m.memstack.pop()
       assert(a !== undefined, 'no param on memstack')
       f.regset(v.id, a as number)

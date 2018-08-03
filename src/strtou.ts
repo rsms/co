@@ -52,7 +52,7 @@ TEST("strtou", () => {
   function t(input :string, base :int, expect :int) {
     let buf = Uint8Array.from(
       input as any as ArrayLike<number>,
-      (v: number, k: number) => input.charCodeAt(k)
+      (_: number, k: number) => input.charCodeAt(k)
     )
     let output = strtou(buf, base, 0, buf.length)
     assert(

@@ -16,7 +16,7 @@ import {
   u_t_u32, u_t_i32, u_t_f32,
   u_t_u16, u_t_i16,
   u_t_u8, u_t_i8,
-  u_t_uint, u_t_uint_itype, u_t_int, u_t_int_itype,
+  u_t_uint, u_t_int,
 } from './ast'
 import { debuglog as dlog } from './util'
 
@@ -48,11 +48,12 @@ const _Int64_SINT8_MIN = SInt64.fromInt32(_Int32_SINT8_MIN)
 export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
   let lossless :bool = false
 
-  // use i and u types for arch-dependent types
+  // if the type is arch dependent, assume 32-bit
+  // TODO: find a way to
   if (t === u_t_int) {
-    t = u_t_int_itype
+    t = u_t_i32
   } else if (t === u_t_uint) {
-    t = u_t_uint_itype
+    t = u_t_u32
   }
 
   if (t === u_t_i64) {

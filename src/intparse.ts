@@ -177,12 +177,12 @@ export class IntParser {
     }
   }
 
-  private parseval_ubig(n :int) {
+  private parseval_ubig(_n :int) {
     // not implemented
     this._ndigitsChunk++
   }
 
-  private parseval_sbig(n :int) {
+  private parseval_sbig(_n :int) {
     // not implemented
     this._ndigitsChunk++
   }

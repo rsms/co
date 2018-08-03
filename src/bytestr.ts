@@ -13,6 +13,11 @@ export class ByteStr {
   readonly bytes :Uint8Array,
   ){}
 
+  isUnderscore() {
+    // Note: Hash constant needs to be updated if hash function changes.
+    return this.hash == 0xda0c1970 && this.bytes[0] == 0x5f
+  }
+
   toString() :string {
     return utf8.decodeToString(this.bytes)
   }

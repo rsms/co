@@ -5,11 +5,11 @@
 * { margin:0; padding:0; font-family:inherit; }
 body {
   background: #fff;
-  color: #22222f;
+  color: #242424;
   font-family: 'Inter UI', -system-ui, system-ui, sans-serif;
   font-size: 14px;
-  line-height: 1.4;
-  letter-spacing: 0.001em;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
   margin-bottom: 4em;
 
   width: 100%;
@@ -18,8 +18,6 @@ body {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 
-  text-rendering: optimizeLegibility;
-  text-rendering: geometricPrecision;
   -moz-font-feature-settings:"kern" 1, "liga" 1; 
   -ms-font-feature-settings:"kern" 1, "liga" 1; 
   -o-font-feature-settings:"kern" 1, "liga" 1; 
@@ -39,7 +37,7 @@ pre, code, tt {
 }
 img { display: block; border: none; vertical-align: bottom; }
 hr { height:1px; border:none; background-color:#ddd; }
-strong, b { font-weight: 600; letter-spacing:0.01em; }
+strong, b { font-weight: 500; letter-spacing:0.013em; color:#111; }
 num { /* number */
   font-feature-settings: 'calt' 1, 'ss01' 1;
   white-space: pre;
@@ -57,22 +55,45 @@ h1 {
   color:#222;
 }
 h2 {
-  /*font-weight: 500;*/
   margin-top: 2em;
+  /*margin-bottom: 1em;*/
 }
 h3 {
-  margin-top: 2em;
+  /*margin-top: 2em;*/
+  margin-bottom: 0.8em;
 }
+h4 {
+  margin-top: 1.8em;
+}
+h1 + h2 { margin-top:1.3em; }
 h2 + h3, h3 + h4, h4 + h5 { margin-top:1em; }
 .anchor { cursor:pointer; }
 .anchor:hover { color: rgb(0,100,255); }
 
 /* type scale */
-h1 { font-size: 2.2em;  font-weight: 600; letter-spacing: -0.01em; }
-h2 { font-size: 1.4em;  font-weight: 600; letter-spacing: -0.01em; }
-h3 { font-size: 1.2em;  font-weight: 600; }
-h4 { font-size: 1.05em; font-weight: 600; }
+/*h1 { font-size: 2.2em;  font-weight: 500; letter-spacing: -0.002em; }
+h2 { font-size: 1.4em;  font-weight: 600; letter-spacing: 0em; }
+h3 { font-size: 1.2em;  font-weight: 500; }
+h4 { font-size: 1em; font-weight: 600; }*/
+
+/*h1, h2, h3, h4 { font-weight: 600; }
+h1, h2 { letter-spacing: -0.018em; }
+        h3, h4 { letter-spacing: -0.01em; }
+h1 { font-size: 4em; letter-spacing: -0.02em; }
+h2 { font-size: 2.5em; }
+h3 { font-size: 1.7em; font-weight:600; }
+h4 { font-size: 1.2em; }*/
+
+h1, h2, h3, h4 { font-weight: 600; letter-spacing: -0.01em; }
+h1 { font-size: 2.5em; }
+h2 { font-size: 2em; padding-top: 0.8em; border-top:1px solid #eaecef; }
+/*h2 { font-size: 2em; padding-bottom: 0.3em;
+  border-bottom:1px solid #eaecef; }*/
+h3 { font-size: 1.3em; font-weight:600; }
+h4 { font-size: 1em; }
+
 small { font-size: 0.833em; letter-spacing: 0.01em; }
+  /* in-sync with sidenote */
 
 h1 > a, h2 > a, h3 > a, h4 > a {
   color: inherit;
@@ -92,17 +113,10 @@ a:hover {
   text-decoration: underline;
 }
 
-section {
-  display: flex;
-  justify-content: center;
+h1 > a[href^="#"]:hover {
+  color: inherit;
+  text-decoration: inherit;
 }
-  section > * {
-    max-width: 800px;
-    margin:0 20px;
-    flex: 1 1 100%;
-    overflow: hidden; /* required for correct flex constraints */
-  }
-  section > * > h2:first-child { margin-top:0; }
 
 
 /* header */
@@ -176,8 +190,6 @@ section {
     color: inherit;
     padding: 15px 0.8em;
     text-decoration: none;
-    text-rendering: optimizeLegibility;
-    text-rendering: geometricPrecision;
     transition: 90ms color cubic-bezier(0.25, 0.47, 0.44, 0.93);
   }
   .header li:last-child a[href] {
@@ -192,7 +204,7 @@ section {
     font-weight: 500;
   }
 
-/* small screens */
+/* header on small screens */
 @media only screen and (max-device-width: 480px) {
   .header {
     /* note: need to be sync'd with style in /play/index.html */
@@ -244,6 +256,8 @@ section {
 /* main */
 #main { margin-bottom: 3em; }
 
+
+/* table */
 table {
   display: block;
   width: 100%;
@@ -266,79 +280,98 @@ table {
 
 /* ---------------------------------------------------------------------- */
 /* main content */
-section.content { padding-top:40px; }
-  section.content:not(.sub) h1:first-child {
+
+/* section */
+section {
+  display: flex;
+  justify-content: center;
+}
+section.content {
+  padding-top:40px;
+}
+  section > * {
+    max-width: 800px;
+    padding:0 20px;
+    flex: 1 1 100%;
+    min-width: 200px; /* required for correct flex constraints */
+    position: relative;
+  }
+  section > * > h2:first-child {
+    margin-top:0;
+  }
+  section:not(.sub) h1:first-child {
     margin-top:0;
   }
   
-  section.content img, section.content iframe {
+  section img, section iframe {
     display:block;
     max-width:100%;
     margin:1em 0;
   }
-  section.content iframe { border:none; }
-  section.content *[align="right"] { margin:0 0 1em 1.5em; }
-  section.content *[align="left"] { margin:0 1.5em 1em 0; }
+  section iframe { border:none; }
+  section *[align="right"] { margin:0 0 1em 1.5em; }
+  section *[align="left"] { margin:0 1.5em 1em 0; }
 
-  section.content ul,
-  section.content ol { margin-bottom: 1.2em; }
-  section.content li { margin-left: 0; margin-bottom: 0.2em; }
-  /*section.content ul > li,
-  section.content ol > li { margin-left: 1em; }*/
-  section.content ul ul > li,
-  section.content ol ul > li,
-  section.content ol ol > li,
-  section.content ul ol > li { margin-left: 0.5em; }
+  section ul,
+  section ol { margin-bottom: 1.2em; }
+  section li { margin-left: 0; margin-bottom: 0.2em; }
+  /*section ul > li,
+  section ol > li { margin-left: 1em; }*/
+  section ul ul > li,
+  section ol ul > li,
+  section ol ol > li,
+  section ul ol > li { margin-left: 0.5em; }
+  section li > ul,
+  section li > ol { margin-top: 0.1em; margin-bottom: 0.1em; }
+  section li > p:first-child { margin:0; }
+  /*section li > p:first-child { margin-top:0; }
+  section li > p:last-child { margin-bottom:0; }*/
 
-  section.content blockquote {
-    border-left:4px solid #ddd;
-    padding:0 0 0 20px;
-    color: #777;
-    text-rendering: optimizelegibility;
-  }
-  section.content div.quotation blockquote { margin-left:-30px; }
-
-  section.content pre,
-  section.content code {
+  section pre,
+  section code {
     background-color: rgba(0,0,0,0.04);
     border-radius: 3px;
   }
 
-  section.content pre > code {
-    background-color: none;
-    border-radius: 0;
-  }
-
-  section.content code, section.content pre {
+  /* code blocks and inline code strips */
+  section code, section pre {
     word-wrap: break-word;
   }
 
-  section.content pre {
+  /* code blocks */
+  section pre > code {
+    background-color: none;
+    border-radius: 0;
+    word-wrap: initial;
+  }
+
+  section pre {
     line-height:1.25;
     overflow-x: auto;
     color: #333;
     padding:16px;
   }
   
-  section.content code {
+  section code {
     padding: 3px 0;
   }
-  section.content code::before,
-  section.content code::after {
+  section code::before,
+  section code::after {
     letter-spacing: -0.2em;
     content: "\00a0";
   }
 
-  section.content pre > code {
+  section pre > code {
     padding:0;
     background-color:transparent;
     border-radius: none;
   }
-  section.content pre > code::before,
-  section.content pre > code::after {
+  section pre > code::before,
+  section pre > code::after {
     letter-spacing: inherit;
     content: none;
   }
+
   @keyframes outline-fade-out {
     0%   { background-color: #fe0; outline-color: #fe0; }
     90%   { background-color: #fe0; outline-color: #fe0; }
@@ -347,7 +380,7 @@ section.content { padding-top:40px; }
       outline-color: rgba(255,255,255,0);
     }
   }
-  section.content *:target {
+  section *:target {
     outline: 4px solid #fe0;
     animation: outline-fade-out 4500ms 1;
     animation-direction: alternate; /* or: normal */
@@ -355,13 +388,13 @@ section.content { padding-top:40px; }
     animation-fill-mode: forwards;
     animation-delay: 0;
   }
-  section.content center {
+  section center {
     margin:2em 0;
     user-select:none;
     cursor: default;
     color: #ccc;
   }
-  section.content a.footnote {
+  section a.footnote {
     display: inline-block;
     padding: 0 1px;
     margin: 0 0 0 1px;
@@ -373,44 +406,142 @@ section.content { padding-top:40px; }
     border-left:1px solid rgba(0,0,0,0.1);
     border-right:1px solid rgba(0,0,0,0.1);
   }
-  section.content sup {
+  section sup {
     vertical-align: super;
     font-size: 65%;
     padding:0;
     margin:0;
   }
-  section.content sup:target {
+  section sup:target {
     background: none;
     animation: none;
     outline: none;
   }
-  section.content sup:target a.footnote {
+  section sup:target a.footnote {
     background-color: #fe0;
   }
-  section.content a.footnote:hover {
+  section a.footnote:hover {
     color: black;
     background: #eee;
     /*text-decoration: underline;*/
   }
-  section.content a.footnote::before {
+  section a.footnote::before {
     letter-spacing: -0.3em; content: "\00a0"; }
-  section.content a.footnote::after {
+  section a.footnote::after {
     letter-spacing: -0.3em; content: "\00a0"; }
-  section.content div.footnotes {
+  section div.footnotes {
     margin-top:3em;
     border-top: 1px solid #eee;
   }
-  section.content div.footnotes li { color:#999; }
-  section.content div.footnotes li > p { margin:0; }
-  section.content div.footnotes li:target { background:#ffc; color:inherit; }
+  section div.footnotes li { color:#999; }
+  section div.footnotes li > p { margin:0; }
+  section div.footnotes li:target { background:#ffc; color:inherit; }
 
-  section.content > div > *:first-child { margin-top:0; }
-  
+  section > div > *:first-child { margin-top:0; }
 
-section.content.sub {
-  margin-top:-50px;
-  padding-top:20px;
+  section.sub {
+    margin-top:-50px;
+    padding-top:20px;
+  }
+
+  section blockquote {
+    padding:0 0 0 20px;
+    color: #777;
+    border-left:4px solid #ddd;
+  }
+  section div.quotation blockquote { margin-left:-30px; }
+
+  /* sidenote */
+  section blockquote.sidenote {
+    display: block;
+    opacity: 0.4;
+    transition: opacity 60ms ease-out;
+    /* override blockquote props:; */
+    padding: 0;
+    color: inherit;
+    margin-before: 0; -webkit-margin-before: 0; -moz-margin-before: 0;
+    margin-after: 0; -webkit-margin-after: 0; -moz-margin-after: 0;
+    margin-start: 0; -webkit-margin-start: 0; -moz-margin-start: 0;
+    margin-end: 0; -webkit-margin-end: 0; -moz-margin-end: 0;
+    font-size: 11px;
+    letter-spacing: 0.01em;
+  }
+  section blockquote.sidenote > p:first-child {
+    margin-top:0;
+  }
+  section blockquote.sidenote > p:last-child {
+    margin-bottom:0;
+  }
+  section blockquote.sidenote code {
+    padding: 0;
+    background-color: inherit;
+    border-radius: initial;
+  }
+  section blockquote.sidenote code::before,
+  section blockquote.sidenote code::after {
+    letter-spacing: inherit;
+    content: none;
+  }
+
+  section blockquote.sidenote.init[data-ref]:hover {
+    opacity: 1;
+    transition: opacity 1ms linear;
+  }
+
+  section .highlighted-by-note {
+    outline: 1px dashed rgba(0,0,0,0.1);
+    outline-offset: 2px;
+  }
+
+/* only when inline */
+@media only screen and (max-width: 1320px) {
+  section blockquote.sidenote {
+    padding: 1em;
+    border: 1px solid #888;
+    border-radius: 2px;
+    max-width: 30rem;
+  }
 }
+
+/* only when in gutter */
+/* .force-side is applied by JS code temporarily for accurate
+   layout calculations. */
+section blockquote.sidenote.force-side {
+  position: absolute;
+  width: 180px;
+  right: -220px;
+  border: none;
+  /*font-size: 10px;
+  letter-spacing: 0.012em;*/
+}
+@media only screen and (min-width: 1321px) {
+  section blockquote.sidenote.init {
+    position: absolute;
+    width: 180px;
+    right: -220px;
+    border: none;
+    /*font-size: 10px;
+    letter-spacing: 0.012em;*/
+  }
+}
+
+
+/*@media only screen and (max-width: 1320px) {
+  section blockquote.sidenote,
+  section blockquote.sidenote.init {
+    position: inherit;
+    width: auto;
+    max-width: 50vw;
+    right: initial;
+    padding-left: 10px;
+    padding-bottom: 0;
+    border-left:1px solid #ccc;
+    margin-top: 2em !important;  override margin set by js-generated rule 
+    margin-bottom: 2em;
+    font-size: inherit;
+    letter-spacing: inherit;
+  }
+}*/
 
 /* pygments theme */
 .highlight .c,  /* Comment */

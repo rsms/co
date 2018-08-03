@@ -1112,7 +1112,7 @@ export class Scanner extends ErrorReporter {
   //   return true
   // }
 
-  scanFloatNumber(seenDecimal :bool, modc :int) {
+  scanFloatNumber(seenDecimal :bool, _modc :int) {
     // float_lit = decimals "." [ decimals ] [ exponent ] |
     //             decimals exponent |
     //             "." decimals [ exponent ] .

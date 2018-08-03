@@ -29,32 +29,47 @@
 // }
 
 
-fun constfold int {
-  k i32 = 2
-  a i32 = 1 + k
-  a * -9
-  // becomes just "-27"
-}
+// // ------------------------------
+// fun constfold int {
+//   k i32 = 2
+//   a i32 = 1 + k
+//   a * -9
+//   // becomes just "-27"
+// }
 
-fun main {
-  // This function does not return a value, meaning the
-  // function call here is an "unused expression".
-  // This tests the dead-code elimination process to verify
-  // that the function call is not eliminated even though
-  // it's unused.
-  // This test should be updated when/if the
-  // dead-code-eliminiation process supports eliminating
-  // function calls that are pure (no side effects.)
-  // Currently DCE assumes all calls have side effects, and
-  // so no calls are ever eliminated.
-  constfold()
-}
-// fun main int {
-//   // Complement to the above, with a return type, that
-//   // makes the function call "live" and thus never gets
-//   // eliminated by DCE.
+// fun main {
+//   // This function does not return a value, meaning the
+//   // function call here is an "unused expression".
+//   // This tests the dead-code elimination process to verify
+//   // that the function call is not eliminated even though
+//   // it's unused.
+//   // This test should be updated when/if the
+//   // dead-code-eliminiation process supports eliminating
+//   // function calls that are pure (no side effects.)
+//   // Currently DCE assumes all calls have side effects, and
+//   // so no calls are ever eliminated.
 //   constfold()
 // }
+// // fun main int {
+// //   // Complement to the above, with a return type, that
+// //   // makes the function call "live" and thus never gets
+// //   // eliminated by DCE.
+// //   constfold()
+// // }
+// // ------------------------------
+
+type A i32    // concrete
+type B = i32  // alias
+
+fun foo(x, _, y int) int {
+  // a = x + y
+  // d = a
+  // c = a + d
+
+  a = x + y
+  b = a - a
+  c = a * b
+}
 
 
 // fun foo(x, y int) int {

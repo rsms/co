@@ -44,7 +44,7 @@ function bufcopy(bytes :ArrayLike<byte>, addlSize :int) {
 export function asciibuf(s :string) :Uint8Array {
   return Uint8Array.from(
     s as any as ArrayLike<number>,
-    (v: number, k: number) => s.charCodeAt(k)
+    (_: number, k: number) => s.charCodeAt(k)
   )
 }
 
@@ -261,5 +261,13 @@ export const debuglog = DEBUG ? function(...v :any[]) {
 
   v.splice(0, 0, prefix)
   console.log.apply(console, v)
-} : function(...v :any[]){}
+} : function(..._ :any[]){}
 
+
+// is2pow returns true if n is a power-of-two number.
+// n must be a positive non-zero integer.
+//
+export function is2pow(n :int) :bool {
+  assert(n > 0)
+  return (n & (n - 1)) == 0
+}

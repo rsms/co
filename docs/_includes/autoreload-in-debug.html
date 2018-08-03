@@ -8,10 +8,9 @@ if (current_etag !== null) { current_etag = current_etag[1]; }
 var scrolly = qs.match(/scrolly=([0-9]+)/);
 if (scrolly) {
   scrolly = parseInt(scrolly[1]);
-  window.scrollTo(window.scrollX, scrolly);
-  setTimeout(function () {
+  window.addEventListener('load', function(){
     window.scrollTo(window.scrollX, scrolly);
-  }, 10);
+  })
 }
 
 function check() {

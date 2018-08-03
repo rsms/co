@@ -11,8 +11,9 @@ import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 import { IRBuilder, IRFlags } from './ir'
 import * as ir from './ir'
+import { NaiveRegAlloc } from './ir_regalloc_naive'
 import { printir, fmtir } from './ir-repr'
-import { IRVirtualMachine } from './irvm'
+import { IRVirtualMachine } from './ir_vm'
 import './all_tests'
 
 
@@ -33,6 +34,7 @@ try {
   } else {
     readFileSync = (fn :string, options? :{[k:string]:any}) => {
       // FIXME
+      console.log('TODO read', fn, 'options:', options)
       return new Uint8Array(0)
     }
   }
@@ -156,9 +158,10 @@ interface MainResult {
   diagnostics :diaginfo[]
   ast?        :Package
   ir?         :ir.Pkg
+  error?      :Error
 }
 
-function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
+async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   const strSet = new ByteStrSet()
   const typeSet = new TypeSet()
   const universe = new Universe(strSet, typeSet)
@@ -170,79 +173,81 @@ function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   // clear diagnostics from past run (this is a global var)
   diagnostics = []
 
-  let p = parsePkg("example", _sources, universe, parser, typeres).then(r => {
-    if (!r.success) {
-      return { success: false, diagnostics, ast: r.pkg }
-    }
-    if (noIR) {
-      return { success: true, diagnostics, ast: r.pkg }
-    }
-
-    const irb = new IRBuilder()
-    irb.init(diagh, IRFlags.Comments | IRFlags.Optimize)
-
-    // print AST & build IR
-    try {
-      for (let file of r.pkg.files) {
-
-        if (isNodeJsLikeEnv) {
-          banner(
-            `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`
-          )
-          console.log(astRepr(r.pkg, reprOptions))
-          // for (let decl of file.decls) {
-          //   console.log(astRepr(decl, reprOptions))
-          // }
-          banner(`ssa-ir ${file.sfile.name}`)
-        }
-
-        // build IR
-        let sfile = file.sfile
-        for (let d of file.decls) {
-          let fn = irb.addTopLevel(sfile, d)
-          if (isNodeJsLikeEnv) {
-            if (fn) {
-              console.log(`\n-----------------------\n`)
-              printir(fn)
-            }
-          }
-        }
-      }
-
-      // Run in development VM
-      banner(`vm`)
-      const vm = new IRVirtualMachine(irb.pkg, diagh)
-      let mainfun = irb.pkg.mainFun() || null
-      if (mainfun) {
-        vm.execFun(mainfun)
-      } else {
-        console.warn('no main function found in package -- not executing')
-      }
-
-      return {
-        success: true,
-        diagnostics,
-        ast: r.pkg,
-        ir: irb.pkg,
-        // code: codegen.something
-      }
-    } catch (error) {
-      if (isNodeJsLikeEnv) {
-        throw error
-      }
-      return { success: false, error, diagnostics, ast: r.pkg }
-    }
-  })
-
-  if (!sources && isNodeJsLikeEnv) {
-    return p.catch(err => {
-      console.error(err.stack || ''+err)
-      process.exit(1)
-      return { success: false, diagnostics }
-    })
+  let r = await parsePkg("example", _sources, universe, parser, typeres)
+  if (!r.success) {
+    return { success: false, diagnostics, ast: r.pkg }
+  }
+  if (noIR) {
+    return { success: true, diagnostics, ast: r.pkg }
   }
 
-  return p
+  const regalloc = null // new NaiveRegAlloc()
+  const irb = new IRBuilder()
+  irb.init(diagh, 4, 8, regalloc, IRFlags.Comments | IRFlags.Optimize)
+
+  // print AST & build IR
+  try {
+    for (let file of r.pkg.files) {
+
+      if (isNodeJsLikeEnv) {
+        banner(
+          `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`
+        )
+        console.log(astRepr(r.pkg, reprOptions))
+        // for (let decl of file.decls) {
+        //   console.log(astRepr(decl, reprOptions))
+        // }
+        banner(`ssa-ir ${file.sfile.name}`)
+      }
+
+      // build IR
+      let sfile = file.sfile
+      for (let d of file.decls) {
+        let fn = irb.addTopLevel(sfile, d)
+        if (isNodeJsLikeEnv && fn) {
+          console.log(`\n-----------------------\n`)
+          printir(fn)
+        }
+      }
+
+      // run regalloc as separate pass for debugging (normally run inline IRB)
+      if (isNodeJsLikeEnv) {
+        banner(`ssa-ir ${file.sfile.name} regalloc`)
+      }
+      const regalloc = new NaiveRegAlloc()
+      for (let [_, fn] of irb.pkg.funs) {
+        regalloc.visitFun(fn)
+        if (isNodeJsLikeEnv && fn) {
+          console.log(`\n-----------------------\n`)
+          printir(fn)
+        }
+      }
+
+    }
+
+    // Run in development VM
+    banner(`vm`)
+    const vm = new IRVirtualMachine(irb.pkg, diagh)
+    let mainfun = irb.pkg.mainFun() || null
+    if (mainfun) {
+      vm.execFun(mainfun)
+    } else {
+      console.warn('no main function found in package -- not executing')
+    }
+
+    return {
+      success: true,
+      diagnostics,
+      ast: r.pkg,
+      ir: irb.pkg,
+      // code: codegen.something
+    }
+  } catch (error) {
+    if (isNodeJsLikeEnv) {
+      throw error
+    }
+    return { success: false, error, diagnostics, ast: r.pkg }
+  }
 }
 
 
@@ -274,7 +279,18 @@ if (isNodeJsLikeEnv) {
   if (process.argv.includes('-test-only')) {
     console.log('only running unit tests')
   } else {
-    main()
+    // if (!sources && isNodeJsLikeEnv) {
+    //   return p.catch(err => {
+    //     console.error(err.stack || ''+err)
+    //     process.exit(1)
+    //     return { success: false, diagnostics }
+    //   })
+    // }
+    main().catch(err => {
+      console.error(err.stack || ''+err)
+      process.exit(1)
+      // return { success: false, diagnostics }
+    })
   }
 } else {
   global['colang'] = {

@@ -12,5 +12,6 @@ kramdown:
   auto_ids: true
   hard_wrap: false
   # transliterated_header_ids: true
+  syntax_highlighter: null
   # syntax_highlighter_opts:
   #     disable: true

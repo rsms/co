@@ -7,7 +7,7 @@ import { debuglog as dlog } from './util'
 // evaluation code in here.
 //
 
-export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
+export function optcf_op1(_b :Block, _op :Op, _x :Value) :Value|null {
   // TODO implement unary operations
   return null
 }

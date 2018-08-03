@@ -8,7 +8,6 @@ import { Universe } from './universe'
 import { debuglog as dlog } from './util'
 import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
-import { Num, numconv, numEval } from './num'
 import {
   File,
   Scope,
@@ -391,7 +390,7 @@ export class Parser extends scanner.Scanner {
     return imports
   }
 
-  importDecl = (group :Group|null) :ImportDecl => {
+  importDecl = (_ :Group|null) :ImportDecl => {
     const p = this
     let localIdent :Ident|null = null
     let hasLocalIdent = false
@@ -419,7 +418,6 @@ export class Parser extends scanner.Scanner {
     }
 
     const d = new ImportDecl(p.pos, p.scope, path, localIdent)
-    // d.Group = group
 
     if (hasLocalIdent && localIdent) {
       p.declare(p.filescope, localIdent, d, null)
@@ -497,7 +495,7 @@ export class Parser extends scanner.Scanner {
     return true
   }
 
-  typeDecl = (group :Group|null, nth :int) :TypeDecl => {
+  typeDecl = (group :Group|null, _ :int) :TypeDecl => {
     // TypeSpec = "type" identifier [ "=" ] Type
     const p = this
     const pos = p.pos
@@ -1958,6 +1956,10 @@ export class Parser extends scanner.Scanner {
           t                                   // "(a, b)"
         )
         break
+
+      case token.LBRACE:
+        dlog(`TODO: parse struct type def`)
+        return null
 
       default:
         return null

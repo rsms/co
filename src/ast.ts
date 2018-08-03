@@ -288,17 +288,17 @@ export class VarDecl extends Decl {
   }
 }
 
-export class TypeDecl extends Decl {
-  // Ident Type
-  constructor(pos :Pos, scope :Scope,
-  public ident  :Ident,
-  public alias  :bool,
-  public type   :Expr,
-  public group  :Group|null, // nil = not part of a group
-  ) {
-    super(pos, scope)
-  }
-}
+// export class TypeDecl extends Decl {
+//   // Ident Type
+//   constructor(pos :Pos, scope :Scope,
+//   public ident  :Ident,
+//   public alias  :bool,
+//   public type   :Expr,
+//   public group  :Group|null, // nil = not part of a group
+//   ) {
+//     super(pos, scope)
+//   }
+// }
 
 
 // ——————————————————————————————————————————————————————————————————
@@ -640,6 +640,36 @@ export class TypeConvExpr extends Expr {
 
 
 // ——————————————————————————————————————————————————————————————————
+// -- WORK IN PROGRESS --
+
+// this already exists. Built for top-level typedefs
+export class TypeDecl extends Decl {
+  // Ident Type
+  constructor(pos :Pos, scope :Scope,
+  public ident  :Ident,
+  public alias  :bool,
+  public type   :Expr,
+  public group  :Group|null, // nil = not part of a group
+  ) {
+    super(pos, scope)
+  }
+}
+
+
+// TypeDef defines a type
+//
+export class TypeDef extends Expr {
+  ent :Ent|null = null
+  t   :Type
+
+  constructor(pos :Pos, scope :Scope, t :Type) {
+    super(pos, scope)
+    this.t = t
+  }
+}
+
+
+// ——————————————————————————————————————————————————————————————————
 // Types
 
 export class Type extends Expr {
@@ -693,19 +723,37 @@ export class UnresolvedType extends Type {
 
 // storage type needed for a basic type
 export enum MemType {
+  None,
+  i8,
+  i16,
   i32,
   i64,
   f32,
-  f64
+  f64,
 }
 
+const memTypeSizes = [
+  0,   // None
+  8,   // i8
+  16,  // i16
+  32,  // i32
+  64,  // i64
+  32,  // f32
+  64,  // f64
+]
+
+
 export class BasicType extends Type {
+  size :int
+
   constructor(
-    public bitsize :int,
+    // public bitsize :int,
     public memtype :MemType,
     public name :string, // only used for debugging and printing
   ) {
     super(0, nilScope)
+    this.size = memTypeSizes[memtype]
+    assert(this.size !== undefined)
   }
 
   toString() :string {
@@ -725,36 +773,42 @@ export class NumType extends BasicType {
 
 
 export class IntType extends NumType {
-  constructor(bitsize :int, memtype :MemType, name :string,
-    public signed :bool, // true if type is signed
-  ) {
-    super(bitsize, memtype, name)
+  signed :bool // true if type is signed
+  constructor(memtype :MemType, name :string, signed :bool) {
+    super(memtype, name)
+    this.signed = signed
   }
 }
 
 // basic type constants
-const uintz :number = 32 // TODO: target-dependant
-const uintmemtype = uintz <= 32 ? MemType.i32 : MemType.i64
+// const uintz :number = 32 // TODO: target-dependant
+// const uintmemtype = uintz <= 32 ? MemType.i32 : MemType.i64
 
 export const
-  u_t_auto = new BasicType(0,    MemType.i32, 'auto') // special
-, u_t_nil  = new BasicType(0,    MemType.i32, 'nil') // special, aka "void"
-, u_t_bool = new BasicType(1,    MemType.i32, 'bool')
-, u_t_u8  = new IntType(8,       MemType.i32, 'u8', false)
-, u_t_i8  = new IntType(7,       MemType.i32, 'i8', true)
-, u_t_u16 = new IntType(16,      MemType.i32, 'u16', false)
-, u_t_i16 = new IntType(15,      MemType.i32, 'i16', true)
-, u_t_u32 = new IntType(32,      MemType.i32, 'u32', false)
-, u_t_i32 = new IntType(31,      MemType.i32, 'i32', true)
-, u_t_u64 = new IntType(64,      MemType.i64, 'u64', false)
-, u_t_i64 = new IntType(63,      MemType.i64, 'i64', true)
-, u_t_f32 = new NumType(32,    MemType.f32, 'f32')
-, u_t_f64 = new NumType(64,    MemType.f64, 'f64')
-, u_t_uint = new IntType(uintz,  uintmemtype, 'uint', false)
-, u_t_int  = new IntType(uintz-1,uintmemtype, 'int', true)
-, u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64
-, u_t_int_itype = uintmemtype == MemType.i32 ? u_t_i32 : u_t_i64
-
+  u_t_auto  = new BasicType(MemType.None, 'auto') // special
+, u_t_nil   = new BasicType(MemType.None, 'nil') // special, aka "void"
+, u_t_bool  = new IntType(MemType.i8,   'bool', false)
+, u_t_u8    = new IntType(MemType.i8,   'u8', false)
+, u_t_i8    = new IntType(MemType.i8,   'i8', true)
+, u_t_u16   = new IntType(MemType.i16,  'u16', false)
+, u_t_i16   = new IntType(MemType.i16,  'i16', true)
+, u_t_u32   = new IntType(MemType.i32,  'u32', false)
+, u_t_i32   = new IntType(MemType.i32,  'i32', true)
+, u_t_u64   = new IntType(MemType.i64,  'u64', false)
+, u_t_i64   = new IntType(MemType.i64,  'i64', true)
+, u_t_f32   = new NumType(MemType.f32,  'f32')
+, u_t_f64   = new NumType(MemType.f64,  'f64')
+, u_t_uint  = new IntType(MemType.None, 'uint', false)
+, u_t_int   = new IntType(MemType.None, 'int', true)
+, u_t_usize = new IntType(MemType.None, 'usize', false)
+, u_t_isize = new IntType(MemType.None, 'isize', true)
+// , u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64
+// , u_t_int_itype = uintmemtype == MemType.i32 ? u_t_i32 : u_t_i64
+//
+// , u_t_uint = new IntType(uintz,  uintmemtype, 'uint', false)
+// , u_t_int  = new IntType(uintz-1,uintmemtype, 'int', true)
+// , u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64
+// , u_t_int_itype = uintmemtype == MemType.i32 ? u_t_i32 : u_t_i64
 
 export class StrType extends Type {
   constructor(

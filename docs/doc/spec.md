@@ -536,9 +536,6 @@ int64       the set of all signed 64-bit integers
 float32     the set of all IEEE-754 32-bit floating-point numbers
 float64     the set of all IEEE-754 64-bit floating-point numbers
 
-ratio       the set of all non-zero integers divided by the set of all non-zero
-            integers
-
 byte        alias for uint8
 char        alias for int32
 ```
@@ -549,15 +546,22 @@ The value of an n-bit integer is n bits wide and represented using
 There is also a set of predeclared numeric types with implementation-specific sizes:
 
 ```
-uint    either 32 or 64 bits
+uint    either 8, 16, 32 or 64 bits
 int     same size as uint
+usize   address-sized unsigned integer
+isize   address-sized signed integer
 ```
 
 To avoid portability issues all numeric types are distinct except `byte`,
-which is an alias for `uint8`, and `char`, which is an alias for `int32`.
+which is an alias for `u8`, and `char`, which is an alias for `u32`.
 Conversions are required when different numeric types are mixed in an expression
-or assignment. For instance, `int32` and `int` are not the same type even though
+or assignment. For instance, `i32` and `int` are not the same type even though
 they may have the same size on a particular architecture.
+
+Notes:
+- The size of `uint` & `int` may be different than the size of
+  `usize` & `isize`.
+- `usize` is large enough to store the uninterpreted bits of a pointer value.
 
 
 ### Strings

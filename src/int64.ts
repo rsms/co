@@ -907,8 +907,8 @@ export class UInt64 extends Int64Base {
   }
 
   // These are replaced later with common implementations
-  static fromBytesLE(b :ArrayLike<byte>) :Int64 { return U64_ZERO }
-  static fromBytesBE(b :ArrayLike<byte>) :Int64 { return U64_ZERO }
+  static fromBytesLE(_ :ArrayLike<byte>) :Int64 { return U64_ZERO }
+  static fromBytesBE(_ :ArrayLike<byte>) :Int64 { return U64_ZERO }
 
   readonly isSigned :bool = false
   isNeg() :bool { return false }

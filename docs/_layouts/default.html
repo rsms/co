@@ -61,28 +61,7 @@ endcapture %}<!DOCTYPE HTML>
     {{ content }}
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=UA-105091131-3"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function g(){dataLayer.push(arguments);}
-      g('js', new Date());
-      g('config', 'UA-105091131-3');
-
-      var a, e, i, L = 1, m = 5, v;
-      while (L < m) {
-        v = document.querySelectorAll('.content h'+(L++)+'[id]');
-        i = 0;
-        for (; i < v.length; ++i) {
-          e = v[i];
-          if (e.id) {
-            a = document.createElement('a')
-            a.href = '#' + e.id
-            a.innerHTML = e.innerHTML
-            e.innerText = ''
-            e.appendChild(a)
-          }
-        }
-      }
-    </script>
+    <script src="{{url_root}}r/initdoc.js?v={{ build_version }}"></script>
     {% include autoreload-in-debug.html %}
   </body>
 </html>

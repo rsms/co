@@ -1,17 +1,16 @@
 import { SrcFileSet, Pos, NoPos } from './pos'
-import { TypeCompat, basicTypeCompat, Universe } from './universe'
+import { Universe } from './universe'
+import { TypeCompat, basicTypeCompat } from './typecompat'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { debuglog as dlog } from './util'
 import { token } from './token'
-import { Num, numconv, numEvalU32 } from './num'
+import { Num, numEvalU32 } from './num'
 import {
-  Scope,
-  Ent,
   ReturnStmt,
 
   Expr,
   Ident,
-  NumLit,
+  // NumLit,
   // ParenExpr,
   RestExpr,
   FunExpr,
@@ -30,7 +29,7 @@ import {
   Type,
   UnresolvedType,
   BasicType,
-  IntType,
+  // IntType,
   StrType,
   RestType,
   TupleType,
@@ -40,26 +39,24 @@ import {
 
   u_t_nil,
   u_t_bool,
-  u_t_int,
-  u_t_u32,
   u_t_str,
   u_t_optstr,
 } from './ast'
 
 
 
-type Evaluator = (op :token, x :EvalArg, y? :EvalArg) => EvalArg|null
+// type Evaluator = (op :token, x :EvalArg, y? :EvalArg) => EvalArg|null
 
-type EvalArg = LiteralExpr | EvalConst
+// type EvalArg = LiteralExpr | EvalConst
 
-// EvalConst is a simple struct for holding evaluator results
-//
-class EvalConst {}
-class IntEvalConst extends EvalConst {
-  constructor(
-    public value :int,
-  ) { super() }
-}
+// // EvalConst is a simple struct for holding evaluator results
+// //
+// class EvalConst {}
+// class IntEvalConst extends EvalConst {
+//   constructor(
+//     public value :int,
+//   ) { super() }
+// }
 
 
 export class TypeResolver extends ErrorReporter {
@@ -229,7 +226,7 @@ export class TypeResolver extends ErrorReporter {
     }
 
     if (n instanceof TupleExpr) {
-      return r.maybeResolveTupleType(n.pos, n.scope, n.exprs)
+      return r.maybeResolveTupleType(n.exprs)
     }
 
     if (n instanceof RestExpr) {
@@ -296,7 +293,7 @@ export class TypeResolver extends ErrorReporter {
       //   t = a, b = 1, 2.3
       //   typeof(t)  // => (i32, f64)
       //
-      return r.maybeResolveTupleType(n.pos, n.scope, n.lhs)
+      return r.maybeResolveTupleType(n.lhs)
     }
 
     if (n instanceof ReturnStmt) {
@@ -318,7 +315,7 @@ export class TypeResolver extends ErrorReporter {
   }
 
 
-  maybeResolveTupleType(pos :Pos, scope :Scope, exprs :Expr[]) :TupleType|null {
+  maybeResolveTupleType(exprs :Expr[]) :TupleType|null {
     const r = this
     let types :Type[] = []
     for (const x of exprs) {
