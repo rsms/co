@@ -1,5 +1,6 @@
-import { Pkg, Fun, Block, BlockKind, Value, Op } from './ir'
-import { Style, stdoutStyle, style, noStyle } from './termstyle'
+import { Style, stdoutStyle, style, noStyle } from '../termstyle'
+import { Pkg, Fun, Block, BlockKind, Value } from './ssa'
+import { Op } from './op'
 
 export type LineWriter = (s :string) => any
 
@@ -19,7 +20,7 @@ class IRFmt {
 
 function fmtval(f :IRFmt, v :Value) :string {
   let s = `v${v.id} = `
-  s += Op[v.op]
+  s += v.op.name
   if (f.types) {
     s += ' ' + f.style.grey(`<${v.type}>`)
   }
@@ -120,7 +121,7 @@ function printblock(f :IRFmt, b :Block, indent :string) {
 function printfun(f :IRFmt, fn :Fun) {
   f.println(
     f.style.white(fn.toString()) +
-    ' (' + fn.type.inputs.join(' ') + ')->' + fn.type.result
+    ' (' + fn.type.args.join(' ') + ')->' + fn.type.result
   )
   printblock(f, fn.entryb, /*indent*/'  ')
 }

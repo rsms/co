@@ -5,14 +5,19 @@ import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { debuglog as dlog } from './util'
 import { token } from './token'
 import { Num, numEvalU32 } from './num'
+import * as ast from './ast'
 import {
   ReturnStmt,
 
+  TypeDecl,
+  VarDecl,
+
   Expr,
   Ident,
+  Field,
   // NumLit,
   // ParenExpr,
-  RestExpr,
+  RestTypeExpr,
   FunExpr,
   LiteralExpr,
   TupleExpr,
@@ -26,10 +31,28 @@ import {
   IndexExpr,
   SliceExpr,
   
+  // Type,
+  // UnresolvedType,
+  // BasicType,
+  // // IntType,
+  // StrType,
+  // RestType,
+  // TupleType,
+  // FunType,
+  // OptionalType,
+  // UnionType,
+
+  // t_nil,
+  // u_t_bool,
+  // u_t_str,
+  // u_t_optstr,
+} from './ast'
+
+import {
   Type,
+
   UnresolvedType,
   BasicType,
-  // IntType,
   StrType,
   RestType,
   TupleType,
@@ -37,26 +60,20 @@ import {
   OptionalType,
   UnionType,
 
-  u_t_nil,
-  u_t_bool,
-  u_t_str,
-  u_t_optstr,
-} from './ast'
+  // FloatType,
+  // SIntType,
+  // UIntType,
+
+  t_nil, t_bool,
+  t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
+  t_uint, t_int, t_usize, t_isize,
+  t_str0, t_str, t_stropt
+} from './types'
 
 
-
-// type Evaluator = (op :token, x :EvalArg, y? :EvalArg) => EvalArg|null
-
-// type EvalArg = LiteralExpr | EvalConst
-
-// // EvalConst is a simple struct for holding evaluator results
-// //
-// class EvalConst {}
-// class IntEvalConst extends EvalConst {
-//   constructor(
-//     public value :int,
-//   ) { super() }
-// }
+function isResolvedType(t :Type|null) :t is Type {
+  return t ? t.constructor !== UnresolvedType : false
+}
 
 
 export class TypeResolver extends ErrorReporter {
@@ -66,6 +83,7 @@ export class TypeResolver extends ErrorReporter {
 
   constructor() {
     super('E_RESOLVE')
+    this.setupResolvers()
   }
 
   init(fset :SrcFileSet, universe :Universe, errh :ErrorHandler|null) {
@@ -103,8 +121,8 @@ export class TypeResolver extends ErrorReporter {
   getOptionalUnionType2(l :OptionalType, r :OptionalType) :UnionType {
     return this.universe.internType(
       new UnionType(new Set<Type>([
-        l.type instanceof StrType && l.type.length != -1 ? u_t_optstr : l,
-        r.type instanceof StrType && r.type.length != -1 ? u_t_optstr : r,
+        l.type instanceof StrType && l.type.length != -1 ? t_stropt : l,
+        r.type instanceof StrType && r.type.length != -1 ? t_stropt : r,
       ]))
     )
   }
@@ -112,33 +130,39 @@ export class TypeResolver extends ErrorReporter {
   getUnionType2(l :Type, r :Type) :UnionType {
     return this.universe.internType(
       new UnionType(new Set<Type>([
-        l instanceof StrType && l.length != -1 ? u_t_str : l,
-        r instanceof StrType && r.length != -1 ? u_t_str : r,
+        l instanceof StrType && l.length != -1 ? t_str : l,
+        r instanceof StrType && r.length != -1 ? t_str : r,
       ]))
     )
   }
 
-  getFunType(inputs :Type[], result :Type) :FunType {
-    return this.universe.internType(new FunType(inputs, result))
+  getFunType(args :Type[], result :Type) :FunType {
+    return this.universe.internType(new FunType(args, result))
   }
 
   getOptionalType(t :Type) {
     return (
       t instanceof OptionalType ? t :
-      t instanceof StrType ? u_t_optstr :
+      t instanceof StrType ? t_stropt :
       this.universe.internType(new OptionalType(t))
+    )
+  }
+
+  getStrType(length :int) :StrType {
+    return (
+      length < 0 ? t_str :
+      length == 0 ? t_str0 :
+      this.universe.internType(new StrType(length))
     )
   }
 
   // resolve attempts to resolve or infer the type of n.
   // Returns UnresolvedType if the type refers to an undefined identifier.
-  // May mutate n.type, and may call ErrorHandler for undefined fields.
+  //
+  // This function may mutate n.type, and may call ErrorHandler for undefined
+  // fields.
   //
   resolve(n :Expr) :Type {
-    if (n instanceof Type) {
-      return n
-    }
-
     if (n.type instanceof Type /*&& (n.type.constructor !== UnresolvedType)*/) {
       if (n.type instanceof UnresolvedType) {
         n.type.addRef(n)
@@ -169,6 +193,34 @@ export class TypeResolver extends ErrorReporter {
     return t
   }
 
+  resolvers = new Map<Function,(n:any)=>Type|null>()
+
+  // setupResolvers defines all resolvers.
+  // Called by constructor
+  //
+  setupResolvers() {
+    const r = this
+
+    // nodes which has a TypeExpr "type" field
+    r.resolvers.set(ast.Field,    r.maybeResolveNodeWithTypeExpr)
+    r.resolvers.set(ast.VarDecl,  r.maybeResolveNodeWithTypeExpr)
+    r.resolvers.set(ast.TypeDecl, r.maybeResolveNodeWithTypeExpr)
+
+    r.resolvers.set(ast.Ident, r.maybeResolveIdent)
+    r.resolvers.set(ast.Block, r.maybeResolveBlock)
+    r.resolvers.set(ast.FunExpr, r.maybeResolveFunExpr)
+    r.resolvers.set(ast.TupleExpr, r.maybeResolveTupleExpr)
+    r.resolvers.set(ast.RestTypeExpr, r.maybeResolveRestTypeExpr)
+    r.resolvers.set(ast.CallExpr, r.maybeResolveCallExpr)
+    r.resolvers.set(ast.Assignment, r.maybeResolveAssignment)
+    r.resolvers.set(ast.Operation, r.maybeResolveOperation)
+    r.resolvers.set(ast.IndexExpr, r.maybeResolveIndexExpr)
+    r.resolvers.set(ast.IfExpr, r.maybeResolveIfExpr)
+
+    // r.resolvers.set(ast.ReturnStmt, r.maybeResolveReturnStmt)
+  }
+
+
   // maybeResolve attempts to resolve or infer the type of n.
   // Returns null if the type can't be resolved or inferred.
   // May mutate n.type and may call ErrorHandler.
@@ -176,138 +228,15 @@ export class TypeResolver extends ErrorReporter {
   maybeResolve(n :Expr|ReturnStmt) :Type|null {
     const r = this
 
-    if (n instanceof Type) {
-      return n
-    }
-
-    if (n.type && n.type.constructor !== UnresolvedType) {
-      return r.resolve(n.type)
-    }
-
-    if (n instanceof Ident) {
-      if (n.ent) {
-        const tx = n.ent.getTypeExpr()
-        return tx && r.maybeResolve(tx) || null
-      }
-      // else: unresolved -- unknown type
-      return null
-    }
-
-    // if (n instanceof ParenExpr) {
-    //   return r.resolve(n.x)
-    // }
-
-    if (n instanceof Block) {
-      // type of block is the type of the last statement, or in the case
-      // of return, the type of the returned value.
-      if (n.list.length == 0) {
-        // empty block
-        return u_t_nil //u_t_void
-      }
-      let s = n.list[n.list.length-1]
-      if (s instanceof Expr) {
-        return r.resolve(s)
-      }
-      // last statement is a declaration
-      // dlog(`TODO handle Block with declaration at end`)
-      return u_t_nil //u_t_void
-    }
-
-    if (n instanceof FunExpr) {
-      const s = n.sig
-      let t = r.getFunType(
-        s.params.map(field => r.resolve(field.type)),
-        r.resolve(s.result)
-      )
-      if (t.result instanceof UnresolvedType) {
-        t.result.addRef(t)
-      }
-      return t
-    }
-
-    if (n instanceof TupleExpr) {
-      return r.maybeResolveTupleType(n.exprs)
-    }
-
-    if (n instanceof RestExpr) {
-      if (n.expr) {
-        let t = r.resolve(n.expr)
-        return r.getRestType(t)
-      }
-      return null
-    }
-
-    if (n instanceof CallExpr) {
-      const funtype = r.resolve(n.fun)
-      for (let arg of n.args) {
-        r.resolve(arg)
-      }
-      if (funtype instanceof FunType) {
-        return funtype.result
-      }
-      return null  // unknown
-    }
-
-    if (n instanceof Operation) {
-      const xt = r.resolve(n.x)
-      if (!n.y) {
-        // unary
-        return xt
-      } else {
-        const yt = r.resolve(n.y)
-
-        if (n.op > token.cmpop_beg && n.op < token.cmpop_end) {
-          // comparison operations always yield boolean values
-          return u_t_bool
-        }
-
-        if (xt instanceof UnresolvedType || yt instanceof UnresolvedType) {
-          // operation's effective type not yet know
-          return null
-        }
-
-        if (xt === yt || xt.equals(yt)) {
-          // both operands types are equivalent
-          return xt
-        }
-
-        let x = r.convert(xt, n.y)
-        if (x) {
-          return x === n.y ? yt : r.resolve(x)
-        }
-
-        r.error(`invalid operation (mismatched types ${xt} and ${yt})`, n.pos)
-      }
-      return null
-    }
-
-    if (n instanceof Assignment) {
-      if (n.lhs.length == 1) {
-        // single assignment (common case)
-        return r.resolve(n.lhs[0])
-      }
-      // multi-assignment yields tuple
-      // E.g.
-      //   a i32
-      //   b f64
-      //   t = a, b = 1, 2.3
-      //   typeof(t)  // => (i32, f64)
-      //
-      return r.maybeResolveTupleType(n.lhs)
-    }
-
-    if (n instanceof ReturnStmt) {
-      // return expressions always represents type of its results, if any
-      return n.result ? r.resolve(n.result) : u_t_nil //u_t_void
-    }
-
-    if (n instanceof IfExpr) {
-      return r.maybeResolveIfExpr(n)
-    }
-
-    if (n instanceof IndexExpr) {
-      r.resolveIndex(n)
+    if (isResolvedType(n.type)) {
+      // already resolved
       return n.type
+    }
+
+    // map node type to resolver function
+    const resolver = r.resolvers.get(n.constructor)
+    if (resolver) {
+      return n.type = resolver(n)
     }
 
     dlog(`TODO handle ${n.constructor.name}`)
@@ -315,7 +244,82 @@ export class TypeResolver extends ErrorReporter {
   }
 
 
-  maybeResolveTupleType(exprs :Expr[]) :TupleType|null {
+  // maybeResolveReturnStmt = (n :ast.ReturnStmt) => {
+  //   // return expressions always represents type of its results, if any
+  //   const r = this
+  //   return n.result ? r.resolve(n.result) : t_nil
+  // }
+
+
+  maybeResolveNodeWithTypeExpr = (n :ast.Field|ast.VarDecl|ast.TypeDecl) => {
+    // nodes which has a TypeExpr "type" field
+    const r = this
+    return n.type ? n.type.type : null
+  }
+
+
+  maybeResolveIdent = (n :ast.Ident) => {
+    const r = this
+    if (n.ent) {
+      if (isResolvedType(n.ent.type)) {
+        return n.ent.type
+      }
+      const tx = n.ent.getTypeExpr()
+      if (tx) {
+        return r.maybeResolve(tx)
+      }
+    }
+    return null
+  }
+
+
+  maybeResolveBlock = (n :ast.Block) => {
+    const r = this
+    // type of block is the type of the last statement, or in the case
+    // of return, the type of the returned value.
+    if (n.list.length == 0) {
+      // empty block
+      return t_nil
+    }
+    let s = n.list[n.list.length-1]
+    if (s instanceof Expr) {
+      return r.resolve(s)
+    }
+    // last statement is a declaration
+    // dlog(`TODO handle Block with declaration at end`)
+    return t_nil
+  }
+
+
+  maybeResolveFunExpr = (n :ast.FunExpr) => {
+    const r = this
+
+    const s = n.sig
+    let restype :Type = t_nil
+    if (s.result) {
+      restype = r.resolve(s.result)
+    } else {
+      // automatic result type
+      if (n.body) {
+        restype = r.resolve(n.body)
+      } // else: leave restype as t_nil
+    }
+
+    let argtypes = s.params.map(field => r.resolve(field.type))
+    let t = r.getFunType(argtypes, restype)
+
+    if (t.result instanceof UnresolvedType) {
+      t.result.addRef(t)
+    }
+    return t
+  }
+
+
+  maybeResolveTupleExpr = (n :ast.TupleExpr) => {
+    return this.maybeResolveTupleType(n.exprs)
+  }
+
+  maybeResolveTupleType(exprs :Expr[]) {
     const r = this
     let types :Type[] = []
     for (const x of exprs) {
@@ -328,6 +332,219 @@ export class TypeResolver extends ErrorReporter {
     }
     return r.getTupleType(types)
   }
+
+
+  maybeResolveRestTypeExpr = (n :ast.RestTypeExpr) => {
+    const r = this
+    let t = r.maybeResolve(n.expr)
+    return isResolvedType(t) ? r.getRestType(t) : t
+  }
+
+
+  maybeResolveCallExpr = (n :ast.CallExpr) => {
+    const r = this
+    const funtype = r.resolve(n.fun)
+    // resolve argument types
+    for (let arg of n.args) {
+      // r.resolve(arg)
+      r.maybeResolve(arg)
+    }
+    if (funtype instanceof FunType) {
+      return funtype.result
+    }
+    return null
+  }
+
+
+  maybeResolveAssignment = (n :ast.Assignment) => {
+    const r = this
+    if (n.lhs.length == 1) {
+      // single assignment (common case)
+      return r.resolve(n.lhs[0])
+    }
+    // multi-assignment yields tuple
+    // E.g.
+    //   a i32
+    //   b f64
+    //   t = a, b = 1, 2.3
+    //   typeof(t)  // => (i32, f64)
+    //
+    return r.maybeResolveTupleType(n.lhs)
+  }
+
+
+  maybeResolveOperation = (n :ast.Operation) => {
+    const r = this
+    const xt = r.resolve(n.x)
+    if (!n.y) {
+      // unary
+      return xt
+    } else {
+      const yt = r.resolve(n.y)
+
+      if (n.op > token.cmpop_beg && n.op < token.cmpop_end) {
+        // comparison operations always yield boolean values
+        return t_bool
+      }
+
+      if (xt instanceof UnresolvedType || yt instanceof UnresolvedType) {
+        // operation's effective type not yet know
+        return null
+      }
+
+      if (xt === yt || xt.equals(yt)) {
+        // both operands types are equivalent
+        return xt
+      }
+
+      let x = r.convert(xt, n.y)
+      if (x) {
+        return x === n.y ? yt : r.resolve(x)
+      }
+
+      r.error(`invalid operation (mismatched types ${xt} and ${yt})`, n.pos)
+    }
+    return null
+  }
+
+
+  // resolveIndex attempts to resolve the type of an index expression.
+  //
+  maybeResolveIndexExpr = (n :ast.IndexExpr) => {
+    const r = this
+
+    // resolve operand type
+    let opt = r.resolve(n.operand)
+
+    if (opt instanceof UnresolvedType) {
+      // defer to bind stage
+      dlog(`[index type] deferred to bind stage`)
+    } else if (opt instanceof TupleType) {
+      r.maybeResolveTupleAccess(n)
+    } else {
+      dlog(`[index type] operand is not a tuple; opt = ${opt}`)
+    }
+
+    return n.type
+  }
+
+
+  maybeResolveIfExpr = (n :ast.IfExpr) => {
+    const r = this
+
+    // resolve "then" branch type
+    let thentyp = r.resolve(n.then)
+
+    if (!n.els_) {
+      // e.g. `if x A => A`
+
+      // with only a single then branch, the result type is that branch.
+      // if the branch is not taken, the result is a zero-initialized T.
+
+      // special case: if thentyp is a string constant, we must resolve to
+      // just "str" (length only known at runtime) since if the branch is
+      // not taken, a zero-initialized string is returned, which is zero.
+      if (thentyp instanceof StrType && thentyp.length != 0) {
+        return t_str
+      }
+
+      return thentyp
+    }
+
+    // resolve "else" branch type
+    let eltyp = r.resolve(n.els_)
+    
+    if (eltyp.equals(thentyp)) {
+      // e.g. `if x A else A => A`
+      // e.g. `if x A? else A? => A?`
+      return thentyp
+    }
+
+    if (eltyp === t_nil) {
+      if (thentyp === t_nil) {
+        // both branches are nil/void
+        // e.g. `if x nil else nil => nil`
+        return t_nil
+      }
+      // e.g. `if x A else nil => A?`
+      if (thentyp instanceof BasicType) {
+        // e.g. `if x int else nil`
+        r.error(`mixing ${thentyp} and optional type`, n.pos, 'E_CONV')
+      }
+      // makes the type optional
+      return r.getOptionalType(thentyp)
+    }
+
+    if (thentyp === t_nil) {
+      // e.g. `if x nil else A => A?`
+      if (eltyp instanceof BasicType) {
+        // e.g. `if x nil else int`
+        r.error(`mixing optional and ${eltyp} type`, n.pos, 'E_CONV')
+      }
+      return r.getOptionalType(eltyp)
+    }
+
+    if (eltyp instanceof OptionalType) {
+      if (thentyp instanceof OptionalType) {
+        // e.g. `if x A? else B? => A?|B?`
+        //
+        // Invariant: NOT eltyp.type.equals(thentyp.type)
+        //   since we checked that already above with eltyp.equals(thentyp)
+        //
+
+        if (eltyp.type instanceof StrType &&
+            thentyp.type instanceof StrType
+        ) {
+          // e.g. `a str?; b str?; if x a else b => str`
+          assert(eltyp.type.length != thentyp.type.length,
+            "str type matches but StrType.equals failed")
+          return t_stropt
+        }
+
+        return r.getOptionalUnionType2(thentyp, eltyp)
+      }
+      // e.g. `if x A else B? => A?|B?`
+      // e.g. `if x A else A? => A?`
+      // e.g. `if x A|B else A? => A?|B?`
+      return r.joinOptional(n.pos, eltyp, thentyp)
+    }
+
+    if (thentyp instanceof OptionalType) {
+      // e.g. `if x A? else B => A?|B?`
+      // e.g. `if x A? else B|C => A?|B?|C?`
+      return r.joinOptional(n.pos, thentyp, eltyp)
+    }
+
+    if (eltyp instanceof StrType && thentyp instanceof StrType) {
+      // e.g. `if x "foo" else "x" => str`
+      return t_str
+    }
+
+    if (eltyp instanceof UnionType) {
+      if (thentyp instanceof OptionalType) {
+        // e.g. `if x A? else B|C => A?|B?|C?`
+        return r.joinOptional(n.pos, thentyp, eltyp)
+      }
+      if (thentyp instanceof UnionType) {
+        // e.g. `if x A|B else A|C => A|B|C`
+        // e.g. `if x A|B? else A|C => A?|B?|C?`
+        return r.mergeUnions(thentyp, eltyp)
+      }
+      // else: e.g. `if x A else B|C => B|C|A`
+      eltyp.add(thentyp)
+      return eltyp
+    }
+
+    if (thentyp instanceof UnionType) {
+      // e.g. `if x A|B else C => A|B|C`
+      thentyp.add(eltyp)
+      return thentyp
+    }
+
+    // e.g. `if x A else B => A|B`
+    return r.getUnionType2(thentyp, eltyp)
+  }
+
 
 
   // joinOptional takes two types, one of them optional and the other not,
@@ -348,7 +565,7 @@ export class TypeResolver extends ErrorReporter {
         "str type matches but StrType.equals failed")
       // if the optional type is a string and the compile-time length
       // differs, return an optional string type with unknown length.
-      return u_t_optstr
+      return t_stropt
     }
 
     if (t instanceof UnionType) {
@@ -413,123 +630,6 @@ export class TypeResolver extends ErrorReporter {
     return r.universe.internType(ut)
   }
 
-
-  maybeResolveIfExpr(n :IfExpr) :Type|null {
-    const r = this
-
-    // resolve "then" branch type
-    let thentyp = r.resolve(n.then)
-
-    if (!n.els_) {
-      // e.g. `if x A => A`
-
-      // with only a single then branch, the result type is that branch.
-      // if the branch is not taken, the result is a zero-initialized T.
-
-      // special case: if thentyp is a string constant, we must resolve to
-      // just "str" (length only known at runtime) since if the branch is
-      // not taken, a zero-initialized string is returned, which is zero.
-      if (thentyp instanceof StrType && thentyp.length != 0) {
-        return u_t_str
-      }
-
-      return thentyp
-    }
-
-    // resolve "else" branch type
-    let eltyp = r.resolve(n.els_)
-    
-    if (eltyp.equals(thentyp)) {
-      // e.g. `if x A else A => A`
-      // e.g. `if x A? else A? => A?`
-      return thentyp
-    }
-
-    if (eltyp === u_t_nil) {
-      if (thentyp === u_t_nil) {
-        // both branches are nil/void
-        // e.g. `if x nil else nil => nil`
-        return u_t_nil
-      }
-      // e.g. `if x A else nil => A?`
-      if (thentyp instanceof BasicType) {
-        // e.g. `if x int else nil`
-        r.error(`mixing ${thentyp} and optional type`, n.pos, 'E_CONV')
-      }
-      // makes the type optional
-      return r.getOptionalType(thentyp)
-    }
-
-    if (thentyp === u_t_nil) {
-      // e.g. `if x nil else A => A?`
-      if (eltyp instanceof BasicType) {
-        // e.g. `if x nil else int`
-        r.error(`mixing optional and ${eltyp} type`, n.pos, 'E_CONV')
-      }
-      return r.getOptionalType(eltyp)
-    }
-
-    if (eltyp instanceof OptionalType) {
-      if (thentyp instanceof OptionalType) {
-        // e.g. `if x A? else B? => A?|B?`
-        //
-        // Invariant: NOT eltyp.type.equals(thentyp.type)
-        //   since we checked that already above with eltyp.equals(thentyp)
-        //
-
-        if (eltyp.type instanceof StrType &&
-            thentyp.type instanceof StrType
-        ) {
-          // e.g. `a str?; b str?; if x a else b => str`
-          assert(eltyp.type.length != thentyp.type.length,
-            "str type matches but StrType.equals failed")
-          return u_t_optstr
-        }
-
-        return r.getOptionalUnionType2(thentyp, eltyp)
-      }
-      // e.g. `if x A else B? => A?|B?`
-      // e.g. `if x A else A? => A?`
-      // e.g. `if x A|B else A? => A?|B?`
-      return r.joinOptional(n.pos, eltyp, thentyp)
-    }
-
-    if (thentyp instanceof OptionalType) {
-      // e.g. `if x A? else B => A?|B?`
-      // e.g. `if x A? else B|C => A?|B?|C?`
-      return r.joinOptional(n.pos, thentyp, eltyp)
-    }
-
-    if (eltyp instanceof StrType && thentyp instanceof StrType) {
-      // e.g. `if x "foo" else "x" => str`
-      return u_t_str
-    }
-
-    if (eltyp instanceof UnionType) {
-      if (thentyp instanceof OptionalType) {
-        // e.g. `if x A? else B|C => A?|B?|C?`
-        return r.joinOptional(n.pos, thentyp, eltyp)
-      }
-      if (thentyp instanceof UnionType) {
-        // e.g. `if x A|B else A|C => A|B|C`
-        // e.g. `if x A|B? else A|C => A?|B?|C?`
-        return r.mergeUnions(thentyp, eltyp)
-      }
-      // else: e.g. `if x A else B|C => B|C|A`
-      eltyp.add(thentyp)
-      return eltyp
-    }
-
-    if (thentyp instanceof UnionType) {
-      // e.g. `if x A|B else C => A|B|C`
-      thentyp.add(eltyp)
-      return thentyp
-    }
-
-    // e.g. `if x A else B => A|B`
-    return r.getUnionType2(thentyp, eltyp)
-  }
-
   // resolveIndex attempts to resolve the type of an index expression.
   // returns x as a convenience.
   //
@@ -543,7 +643,7 @@ export class TypeResolver extends ErrorReporter {
       // defer to bind stage
       dlog(`[index type] deferred to bind stage`)
     } else if (opt instanceof TupleType) {
-      r.tupleAccess(x)
+      r.maybeResolveTupleAccess(x)
     } else {
       dlog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
     }
@@ -623,10 +723,11 @@ export class TypeResolver extends ErrorReporter {
     return true
   }
 
-  // tupleAccess attempts to evaluate a tuple access.
+  // maybeResolveTupleAccess attempts to evaluate a tuple access.
   // x.index must be constant.
+  // Return true if resolution succeeded.
   //
-  tupleAccess(x :IndexExpr) :bool {
+  maybeResolveTupleAccess(x :IndexExpr) :bool {
     const p = this
 
     let tupletype = x.operand.type as TupleType
@@ -668,7 +769,7 @@ export class TypeResolver extends ErrorReporter {
   // Does NOT set expr.type but instead returns an UnresolvedType object.
   //
   markUnresolved(expr :Expr) :UnresolvedType {
-    const t = new UnresolvedType(expr.pos, expr.scope, expr)
+    const t = new UnresolvedType(expr)
     dlog(`expr ${expr} at ${this.fset.position(expr.pos)}`)
     this.unresolved.add(t)
     return t

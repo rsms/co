@@ -14,15 +14,14 @@ import {
   ReturnStmt,
   WhileStmt,
 
-  // Decl,
   ImportDecl,
   VarDecl,
   TypeDecl,
   MultiDecl,
 
   Expr,
+  Atom,
   Ident,
-  RestExpr,
   NumLit,
   StringLit,
   FunExpr,
@@ -33,23 +32,33 @@ import {
   Assignment,
   Operation,
   CallExpr,
-  // ParenExpr,
   TupleExpr,
   BadExpr,
+  TypeExpr,
+  BadTypeExpr,
+  RestTypeExpr,
   SelectorExpr,
   IndexExpr,
   SliceExpr,
   TypeConvExpr,
-
-  Type,
-  UnresolvedType,
-  BasicType,
-  // StrType,
-  RestType,
-  TupleType,
-  FunType,
-  // UnionType,
 } from './ast'
+
+import {
+  Type,
+  t_nil,
+  // BasicType,
+  // FloatType,
+  // IntType,
+  // NumType,
+  // SIntType,
+  // UIntType,
+  // FunType,
+  // StrType,
+  // UnresolvedType,
+  // UnionType,
+  // TupleType,
+  // RestType,
+} from './types'
 
 
 class ReprCtx {
@@ -123,53 +132,10 @@ function reprfile(n :File, nl :string, c :ReprCtx) :string {
 }
 
 
-function _reprt(t :Type, nl :string, c :ReprCtx) :string {
-  if (t instanceof BasicType) {
-    return c.style.bold(t.name)
-  }
-  if (t instanceof TupleType) {
-    return '(' + t.types.map(t => _reprt(t, nl, c)).join(', ') + ')'
-  }
-  if (t instanceof RestType) {
-    return '...' + _reprt(t.type, nl, c)
-  }
-  if (t instanceof FunType) {
-    return (
-      '(' + t.inputs.map(it => _reprt(it, nl, c)).join(', ') + ')' +
-      '->' + _reprt(t.result, nl, c)
-    )
-  }
-  if (t instanceof UnresolvedType) {
-    return '~'
-  }
-  return t.toString()
-}
-
-
-function reprt0(tx :Expr|null, nl :string, c :ReprCtx) :string {
-  if (!tx) {
-    return '?'
-  }
-
-  let t :Type|null = (
-    tx instanceof Type ? tx :
-    tx.type && tx.type !== tx && tx.type instanceof Type ? tx.type :
-    null
-  )
-
-  if (t) {
-    c.typedepth++
-    const v = _reprt(t, nl, c)
-    c.typedepth--
-    return v
-  }
-
-  // unresolved
-  return '~' + repr1(tx, nl, c)
-}
-
-function reprt(tx :Expr|null, newline :string, c :ReprCtx) :string {
-  return c.style.blue(`<${reprt0(tx, newline, c)}>`)
+// reprt formats a type
+//
+function reprt(t :Type|null, _newline :string, c :ReprCtx) :string {
+  return c.style.blue(`<${t || 'nil'}>`)
 }
 
 
@@ -197,7 +163,7 @@ function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :st
 // }
 
 
-function reprid(id :Ident, _ :ReprCtx) :string {
+function reprid(id :Ident, c :ReprCtx) :string {
   return (
     utf8.decodeToString(id.value.bytes)
     // + c.style.pink(subscriptnum(id.ver))
@@ -213,7 +179,7 @@ function reprcons(n :Node, c :ReprCtx) :string {
 function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   assert(n)
 
-  if (n instanceof BasicType) {
+  if (n instanceof Atom) {
     return c.style.purple(c.style.bold(n.name))
   }
 
@@ -230,12 +196,24 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return (c.typedepth ? '' : reprt(n.type, newline, c)) + reprid(n, c)
   }
 
-  if (n instanceof RestExpr) {
+  if (n instanceof RestTypeExpr) {
     return '...' + repr1(n.expr, newline, c)
+  }
+
+  if (n instanceof TypeExpr) {
+    return reprt(n.type, newline, c)
   }
 
   if (n instanceof BadExpr) {
     return 'BAD'
+  }
+
+  if (n instanceof BadTypeExpr) {
+    return 'BAD_TYPE'
+  }
+
+  if (n instanceof Type) {
+    return c.style.blue(n.toString())
   }
 
   const nl2 = newline + c.ind
@@ -292,7 +270,8 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   // }
 
   if (n instanceof FunSig) {
-    return reprv(n.params, nl2, c) + ' -> ' + reprt(n.result, nl2, c)
+    const restype = n.result ? n.result.type : t_nil
+    return reprv(n.params, nl2, c) + ' -> ' + reprt(restype, nl2, c)
   }
 
   if (n instanceof Assignment) {
@@ -310,10 +289,6 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   if (n instanceof MultiDecl) {
     return newline + `(${reprcons(n, c)}` + ' ' + reprv(n.decls, nl2, c, '') + ')'
   }
-
-  // if (n instanceof UnresolvedType) {
-  //   return '<~>'
-  // }
 
   if (n instanceof SelectorExpr) {
     return (
@@ -393,10 +368,10 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
       s += ' [#' + c.groupId(n.group) + ']'
     }
     if (n.type) {
-      s += reprt(n.type, newline, c) + ' ' + reprv(n.idents, nl2, c)
+      s += reprt(n.type.type, newline, c) + ' ' + reprv(n.idents, nl2, c)
     } else {
       s += ' (' + n.idents.map(id =>
-        reprt(id, newline, c) + reprid(id, c)
+        reprt(id.type, newline, c) + reprid(id, c)
       ).join(' ') + ')'
     }
     if (n.values) {

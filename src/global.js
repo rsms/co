@@ -20,6 +20,27 @@ function _stackTrace(cons) {
   return x.stack
 }
 
+// _parseStackFrame(sf :string) : StackFrameInfo | null
+// interface StackFrameInfo {
+//   func :string
+//   file :string
+//   line :int
+//   col  :int
+// }
+//
+function _parseStackFrame(sf) {
+  let m = /^\s*at\s+([^\s]+)\s+\((?:.+\/(src\/[^\:]+)|([^\:]+))\:(\d+)\:(\d+)\)$/.exec(sf)
+  if (m) {
+    return {
+      func: m[1],
+      file: m[2] || m[3],
+      line: parseInt(m[4]),
+      col:  parseInt(m[5]),
+    }
+  }
+  return null
+}
+
 function exit(status) {
   if (typeof process != 'undefined') {
     process.exit(status)
@@ -42,9 +63,28 @@ function assert() {
       , cons = arguments[2] || assert
     if (!cond) {
       if (!assert.throws && typeof process != 'undefined') {
-        var e, stack = _stackTrace(cons)
+        var stack = _stackTrace(cons)
         console.error('assertion failure:', msg || cond)
-        console.error(_stackTrace(cons))
+        var sf = _parseStackFrame(stack.substr(0, stack.indexOf('\n') >>> 0))
+        if (sf) {
+          try {
+            const fs = require('fs')
+            const lines = fs.readFileSync(sf.file, 'utf8').split(/\n/)
+            const line_before = lines[sf.line - 2]
+            const line        = lines[sf.line - 1]
+            const line_after  = lines[sf.line]
+            let context = [' > ' + line]
+            if (typeof line_before == 'string') {
+              context.unshift('   ' + line_before)
+            }
+            if (typeof line_after == 'string') {
+              context.push('   ' + line_after)
+            }
+            console.error(sf.file + ':' + sf.line + ':' + sf.col)
+            console.error(context.join('\n') + '\n\nStack trace:')
+          } catch (_) {}
+        }
+        console.error(stack)
         exit(3)
       } else {
         var e = new Error('assertion failure: ' + (msg || cond))

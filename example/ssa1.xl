@@ -58,31 +58,31 @@
 // // }
 // // ------------------------------
 
-type A i32    // concrete
-type B = i32  // alias
+// type A i32    // concrete
+// type B = i32  // alias
 
-fun foo(x, _, y int) int {
-  // a = x + y
-  // d = a
-  // c = a + d
+// fun foo(x, _, y int) int {
+//   // a = x + y
+//   // d = a
+//   // c = a + d
 
-  a = x + y
-  b = a - a
-  c = a * b
-}
-
-
-// fun foo(x, y int) int {
-//   a = x     // alias-only
-//   b = y * 1 // unused
-//   c = b + b + 8 // unused
-//   d = a + y
-//   if x > 30 / 10 {
-//     d = a + 2
-//     h = a + d // unused
-//   }
-//   d
+//   a = x + y
+//   b = a - a
+//   c = a * b
 // }
+
+
+fun foo(x, y int) int {
+  a = x     // alias-only
+  b = y * 1 // unused
+  c = b + b + 8 // unused
+  d = a + y
+  if x > 30 / 10 {
+    d = a + 2
+    h = a + d // unused
+  }
+  d
+}
 
 // fun dist(x, y int) int {
 //   if x > 3 {

@@ -1,24 +1,33 @@
 import { Int64, SInt64, UInt64 } from './int64'
 import { token } from './token'
+import { debuglog as dlog } from './util'
 import {
   Ent,
-
   Expr,
   NumLit,
   Ident,
   Operation,
-
-  BasicType,
-  NumType, MemType,
-  IntType,
-
-  u_t_u64, u_t_i64, u_t_f64,
-  u_t_u32, u_t_i32, u_t_f32,
-  u_t_u16, u_t_i16,
-  u_t_u8, u_t_i8,
-  u_t_uint, u_t_int,
 } from './ast'
-import { debuglog as dlog } from './util'
+import {
+  Mem,
+  Type,
+  FloatType,
+  IntType,
+  NumType,
+  SIntType,
+  UIntType,
+  FunType,
+  StrType,
+  UnresolvedType,
+  UnionType,
+  TupleType,
+  RestType,
+
+  t_nil,
+  t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
+  t_uint, t_int, t_usize, t_isize,
+  t_f32, t_f64,
+} from './types'
 
 export type Num = number | Int64
 
@@ -45,18 +54,17 @@ const _Int64_SINT8_MIN = SInt64.fromInt32(_Int32_SINT8_MIN)
 // Conversion always succeeds but might be lossy;
 // returns [Num,true] when lossless, [Num,false] when conversion was lossy.
 //
-export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
+export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
   let lossless :bool = false
 
-  // if the type is arch dependent, assume 32-bit
-  // TODO: find a way to
-  if (t === u_t_int) {
-    t = u_t_i32
-  } else if (t === u_t_uint) {
-    t = u_t_u32
+  // TODO FIXME if the type is arch dependent, assume 32-bit
+  if (t === t_int) {
+    t = t_i32
+  } else if (t === t_uint) {
+    t = t_u32
   }
 
-  if (t === u_t_i64) {
+  if (t === t_i64) {
     // ? -> i64
     if (typeof v == 'number') {
       if (v === (v | 0) || v === v >>> 0) {
@@ -79,7 +87,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       v = v.toSigned()
     }
 
-  } else if (t === u_t_u64) {
+  } else if (t === t_u64) {
     // ? -> u64
     if (typeof v == 'number') {
       if (v === v >>> 0) {
@@ -102,7 +110,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       v = v.toUnsigned()
     }
 
-  } else if (t === u_t_i32) {
+  } else if (t === t_i32) {
     // ? -> i32
     if (typeof v == 'number') {
       let v2 = v | 0
@@ -114,7 +122,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       v = v.toInt32()
     }
 
-  } else if (t === u_t_u32) {
+  } else if (t === t_u32) {
     // ? -> u32
     if (typeof v == 'number') {
       let v2 = v >>> 0
@@ -126,7 +134,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       v = v.toUInt32()
     }
 
-  } else if (t === u_t_i16) {
+  } else if (t === t_i16) {
     // ? -> i16
     if (typeof v == 'number') {
       let v2 = v | 0
@@ -139,7 +147,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       assert(v >= _Int32_SINT16_MIN && v <= _Int32_SINT16_MAX)
     }
 
-  } else if (t === u_t_u16) {
+  } else if (t === t_u16) {
     // ? -> u16
     if (typeof v == 'number') {
       let v2 = v >>> 0
@@ -152,7 +160,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       assert(v >= 0 && v <= _Int32_UINT16_MAX)
     }
 
-  } else if (t === u_t_i8) {
+  } else if (t === t_i8) {
     // ? -> i8
     if (typeof v == 'number') {
       let v2 = v | 0
@@ -165,7 +173,7 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       assert(v >= _Int32_SINT8_MIN && v <= _Int32_SINT8_MAX)
     }
 
-  } else if (t === u_t_u8) {
+  } else if (t === t_u8) {
     // ? -> u8
     if (typeof v == 'number') {
       let v2 = v >>> 0
@@ -178,14 +186,14 @@ export function numconv(v :Num, t :BasicType) :[Num,bool] {  // -> v2, lossless
       assert(v >= 0 && v <= _Int32_UINT8_MAX)
     }
 
-  } else if (t === u_t_f64) {
+  } else if (t === t_f64) {
     // ? -> f64
     lossless = true
     if (typeof v != 'number') {
       v = v.toFloat64()
     }
 
-  } else if (t === u_t_f32) {
+  } else if (t === t_f32) {
     // ? -> f32
     lossless = true
     if (typeof v != 'number') {
@@ -212,7 +220,7 @@ export function numEvalU32(x :Expr) :int {
     return -2
   }
 
-  let [i, lossless] = numconv(n, u_t_u32)
+  let [i, lossless] = numconv(n, t_u32)
   assert(typeof i == 'number')
   assert(i >= 0, 'negative value of u32')
 
@@ -324,25 +332,25 @@ export function numEvalOpBitSh(
   } else {
     // convert b to u32
     let lossless :bool = false
-    ;[nbits, lossless] = numconv(b, u_t_u32) as [int,bool]
+    ;[nbits, lossless] = numconv(b, t_u32) as [int,bool]
     if (!lossless) {
       return null
     }
   }
 
   if (typeof a == 'number') {
-    assert(t.memtype == MemType.i32)
+    assert(t.mem == Mem.i32 || t.mem == Mem.i16 || t.mem == Mem.i8)
     if (op == token.SHL) {
       return a << nbits
     }
     assert(op == token.SHR)
     return (
-      (t as IntType).signed ? a >> nbits :  // sign-extending
+      t.isSignedInt ? a >> nbits :  // sign-extending
       a >>> nbits  // zero-replicating
     )
   }
 
-  assert(t.memtype == MemType.i64)
+  assert(t.mem == Mem.i64)
   assert(a instanceof SInt64 || a instanceof UInt64)
   if (op == token.SHL) {
     return (a as Int64).shl(nbits) // <<
@@ -358,11 +366,11 @@ export function numEvalOpBin(
   b :Num,
   op :token
 ) :Num|null {
-  if (t.memtype == MemType.i32) {
+  if (t.mem == Mem.i32) {
     assert(t instanceof IntType)
     assert(typeof a == 'number')
     assert(typeof b == 'number')
-    if ((t as IntType).signed) {
+    if (t.isSignedInt) {
       return numEvalOpBinS32(a as int, b as int, op)
     }
     assert(a >= 0)
@@ -370,9 +378,9 @@ export function numEvalOpBin(
     return numEvalOpBinU32(a as int, b as int, op)
   }
 
-  if (t.memtype == MemType.i64) {
+  if (t.mem == Mem.i64) {
     assert(t instanceof IntType)
-    if ((t as IntType).signed) {
+    if (t.isSignedInt) {
       assert(a instanceof SInt64)
       assert(b instanceof SInt64)
     } else {
@@ -476,16 +484,16 @@ export function numEvalOpBinFloat(a :number, b :number, op :token) :Num|null {
 
 
 export function numEvalOpUnary(t :NumType, n :Num, op :token) :Num|null {
-  if (t.memtype == MemType.i32) {
+  if (t.mem == Mem.i32) {
     assert(typeof n == 'number')
     assert(t instanceof IntType)
-    if ((t as IntType).signed) {
+    if (t.isSignedInt) {
       return numEvalOpUnaryS32(n as int, op)
     }
     return numEvalOpUnaryU32(n as int, op)
   }
 
-  if (t.memtype == MemType.i64) {
+  if (t.mem == Mem.i64) {
     assert(typeof n == 'object')
     assert(n instanceof UInt64 || n instanceof SInt64)
     assert(t instanceof IntType)

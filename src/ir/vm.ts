@@ -1,8 +1,9 @@
-import { ByteStr } from './bytestr'
-import { DiagHandler } from './diag'
-import { Pkg, Fun, Block, BlockKind, Value, Op } from './ir'
-import { fmtir } from './ir-repr'
-import { debuglog as dlog } from './util'
+import { ByteStr } from '../bytestr'
+import { DiagHandler } from '../diag'
+import { debuglog as dlog } from '../util'
+import { Pkg, Fun, Block, BlockKind, Value } from './ssa'
+import { Op } from './op'
+import { fmtir } from './repr'
 
 
 function nnil<T>(v :T|null) :T {

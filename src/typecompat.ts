@@ -6,8 +6,8 @@
 //
 // The result can be
 //
-import { BasicType } from './ast'
 import {
+  BasicType,
   t_uint,
   t_int,
   t_i8,

@@ -9,13 +9,11 @@ import {
   Package,
   Ent,
   Ident,
-
   FunSig,
   ImportDecl,
   Expr,
-  UnresolvedType,
-  FunType,
 } from './ast'
+import { FunType, UnresolvedType } from './types'
 
 
 // An Importer resolves import paths to package entities.
@@ -121,7 +119,7 @@ class pkgBinder extends ErrorReporter {
       // (do not re-use pkg in the file scope but create
       // a new ent instead; the Decl field is different
       // for different files)
-      f.scope.declareEnt(new Ent(name, imp, null, pkg.data))
+      f.scope.declareEnt(new Ent(name, imp, null, null, pkg.data))
     }
   }
 
@@ -162,7 +160,8 @@ class pkgBinder extends ErrorReporter {
           if (ref instanceof FunSig || ref instanceof FunType) {
             ref.result = id.type
           } else {
-            ref.type = id.type
+            assert(ref instanceof Expr)
+            ;(ref as Expr).type = id.type
           }
         }
       }
@@ -175,27 +174,28 @@ class pkgBinder extends ErrorReporter {
 
     for (let ut of b.types.unresolved) {
       // console.log('types.unresolved.size = ', b.types.unresolved.size)
-      const t = ut.expr.type
+      const expr = ut.def as Expr ; assert(expr instanceof Expr)
+      const t = expr.type
 
       if (!(t instanceof UnresolvedType)) {
         // was probably resolved during step 2
         continue
       }
 
-      if (b.undef && ut.expr instanceof Ident && b.undef.has(ut.expr)) {
+      if (b.undef && expr instanceof Ident && b.undef.has(expr)) {
         continue
       }
   
       // attempt to resolve the type now that we can see the entire package
-      ut.expr.type = null // clear so resolve can progress
-      const restyp = b.types.maybeResolve(ut.expr)
+      expr.type = null // clear so resolve can progress
+      const restyp = b.types.maybeResolve(expr)
 
       if (!restyp) {
-        ut.expr.type = t // restore original which might have refs
+        expr.type = t // restore original which might have refs
         // Note: This normally happens when the expression contains something
         // that itself failed to resolve, like an undefined variable.
         dlog(
-          `cannot resolve type of ${ut.expr} ${b.fset.position(ut.expr.pos)}`
+          `cannot resolve type of ${expr} ${b.fset.position(expr.pos)}`
         )
         continue
       }
@@ -206,7 +206,8 @@ class pkgBinder extends ErrorReporter {
         if (ref instanceof FunSig || ref instanceof FunType) {
           ref.result = restyp
         } else {
-          ref.type = restyp
+          assert(ref instanceof Expr)
+          ;(ref as Expr).type = restyp
         }
       }
     }

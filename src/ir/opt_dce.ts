@@ -1,4 +1,5 @@
-import { Fun, Value, Op } from './ir'
+import { Fun, Value } from './ssa'
+import { ops } from './op'
 
 // import { fmtir } from './ir-repr'
 // import { debuglog as dlog } from './util'
@@ -31,7 +32,7 @@ export function optdce(fn :Fun) {
       // have to assume all calls have side effects, thus we never elminiate
       // calls.
       //
-      if (v.op === Op.Call || v.op === Op.TailCall || live.delete(v)) {
+      if (v.op === ops.Call || v.op === ops.TailCall || live.delete(v)) {
         // register operands as being live (since they are read)
         // dlog(`${v} is live  ${fmtir(v)}`)
         if (v.args) for (let operand of v.args) {

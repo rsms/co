@@ -4,6 +4,16 @@ import { token, tokstr } from './token'
 import * as utf8 from './utf8'
 import { Num, numconv } from './num'
 import { Int64 } from './int64'
+import {
+  Type,
+  NativeType,
+  NumType,
+  IntType,
+  FloatType,
+  RestType,
+  StrType,
+} from './types'
+import * as types from './types'
 
 // ——————————————————————————————————————————————————————————————————
 // AST type hierarchy
@@ -28,8 +38,6 @@ import { Int64 } from './int64'
 //        FunExpr
 //        Assignment
 //        ...
-//        Type
-//          ...
 //
 
 let nextgid = 0
@@ -58,7 +66,7 @@ export class Node {
 //       Type
 export class Field extends Node {
   constructor(pos :Pos, scope :Scope,
-  public type :Expr,
+  public type :TypeExpr,
   public name :Ident|null,
     // nil means anonymous field/parameter (structs/parameters),
     // or embedded interface (interfaces)
@@ -92,26 +100,57 @@ export class Field extends Node {
 //
 //
 export class Ent {
+  name  :ByteStr
+  decl  :Node
+  value :Expr|null
+  data  :any
+  type  :Type|null
+
   writes :int = 0  // Tracks stores
   nreads :int = 0  // Tracks loads
     // writes and reads does NOT include the definition/declaration itself.
 
   constructor(
-    public name  :ByteStr,
-    public decl  :Node,
-    public value :Expr|null,
-    public data  :any = null,
-    public type  :Type|null = null, // TODO: use this
-  ) {}
+    name  :ByteStr,
+    decl  :Node,
+    value :Expr|null,
+    type  :Type|null = null,
+    data  :any = null,
+  ) {
+    if (!type) {
+      // assign by best effort
+      type = (
 
+        ( decl &&
+          ( decl instanceof Field || decl instanceof VarDecl ) &&
+          decl.type &&
+          decl.type.type ) ||
+
+        ( value &&
+          value.type &&
+          value.type ) ||
+
+        null
+      )
+    }
+    this.name = name
+    this.decl = decl
+    this.value = value
+    this.data = data
+    this.type = type
+  }
+
+  // getTypeExpr returns the Expr which type should represent this
+  // Ent's type.
+  //
+  // This is used by the parser and type resolver only when .type=null
+  //
   getTypeExpr() :Expr | null {
     return (
       ( this.decl && (
         this.decl instanceof Field ||
         this.decl instanceof VarDecl
       ) && this.decl.type) ||
-
-      ( this.value && this.value.type) ||
 
       this.value
     )
@@ -125,6 +164,7 @@ export class Ent {
     return this.decl.scope
   }
 }
+
 
 export class Scope {
   fun :FunExpr | null = null // when set, scope if function scope
@@ -220,6 +260,42 @@ export class Scope {
 // used by intrinsics
 const nilScope = new Scope(null)
 
+
+// File corresponds to a source file
+//
+export class File {
+  constructor(
+    public sfile      :SrcFile,
+    public scope      :Scope,
+    public imports    :ImportDecl[] | null,  // imports in this file
+    public decls      :(Decl|FunExpr)[],     // top-level declarations
+    public unresolved :Set<Ident> | null,    // unresolved references
+  ) {}
+
+  toString() :string {
+    return (
+      `File("${this.sfile.name}"; ${this.decls.length} decls` +
+      ( this.imports ? `; ${this.imports.length} imports)` : '' )
+    )
+  }
+}
+
+export class Package {
+  files :File[] = []
+
+  constructor(
+    public name :string,
+    public scope :Scope,
+    // public imports
+    // public exports
+  ) {}
+
+  toString() {
+    return `Package(${this.name})`
+  }
+}
+
+
 // ——————————————————————————————————————————————————————————————————
 // Statements
 //
@@ -235,8 +311,8 @@ export class NoOpStmt extends Stmt {}
 
 export class ReturnStmt extends Stmt {
   constructor(pos :Pos, scope :Scope,
-  public result :Expr, // u_t_nil means no explicit return values
-  public type :Type,  // effective type. null until resolved.
+  public result :Expr, // t_nil means no explicit return values
+  public type :Type | null,  // effective type. null until resolved.
   ) {
     super(pos, scope)
   }
@@ -280,25 +356,25 @@ export class ImportDecl extends Decl {
 export class VarDecl extends Decl {
   constructor(pos :Pos, scope :Scope,
   public idents  :Ident[],
-  public group   :Group|null,         // null means not part of a group
-  public type    :Expr|null = null,   // null means no type
-  public values  :Expr[]|null = null, // null means no values
+  public group   :Group|null,           // null means not part of a group
+  public type    :TypeExpr|null = null, // null means no type
+  public values  :Expr[]|null = null,   // null means no values
   ) {
     super(pos, scope)
   }
 }
 
-// export class TypeDecl extends Decl {
-//   // Ident Type
-//   constructor(pos :Pos, scope :Scope,
-//   public ident  :Ident,
-//   public alias  :bool,
-//   public type   :Expr,
-//   public group  :Group|null, // nil = not part of a group
-//   ) {
-//     super(pos, scope)
-//   }
-// }
+export class TypeDecl extends Decl {
+  // Ident Type
+  constructor(pos :Pos, scope :Scope,
+  public ident  :Ident,
+  public alias  :bool,
+  public type   :TypeExpr,
+  public group  :Group|null, // nil = not part of a group
+  ) {
+    super(pos, scope)
+  }
+}
 
 
 // ——————————————————————————————————————————————————————————————————
@@ -308,9 +384,45 @@ export class Expr extends Stmt {
   type :Type|null = null  // effective type of expression. null until resolved.
 }
 
-// Placeholder for an expression that failed to parse correctly and
-// where we can't provide a better node.
+// BadExpr is a placeholder for an expression that failed to parse correctly
+// and where we can't provide a better node.
+//
 export class BadExpr extends Expr {}
+
+
+// TypeExpr simply represents a type
+//
+export class TypeExpr extends Expr {
+  type :Type
+
+  constructor(pos :Pos, scope :Scope, type :Type) {
+    super(pos, scope)
+    this.type = type
+  }
+}
+
+
+// BadTypeExpr is a placeholder for a type expression that failed to parse
+// correctly and where we can't provide a better node.
+//
+export class BadTypeExpr extends TypeExpr {
+  constructor(pos :Pos, scope :Scope) {
+    super(pos, scope, types.t_nil)
+  }
+}
+
+
+// "..." TypeExpr
+//
+export class RestTypeExpr extends TypeExpr {
+  type :RestType
+  expr :TypeExpr
+
+  constructor(pos :Pos, scope :Scope, expr :TypeExpr, type :RestType) {
+    super(pos, scope, type)
+    this.expr = expr
+  }
+}
 
 
 export class Ident extends Expr {
@@ -318,7 +430,7 @@ export class Ident extends Expr {
 
   constructor(pos :Pos, scope :Scope,
     public value :ByteStr, // interned in ByteStrSet
-    public ver :int = 0,   // SSA version
+    public ver :int = 0,   // SSA-like version
   ) {
     super(pos, scope)
   }
@@ -459,51 +571,20 @@ export class SliceExpr extends Expr {
 }
 
 
-export class RestExpr extends Expr {
-  // ...expr
-  constructor(pos :Pos, scope :Scope,
-    public expr :Expr,
-  ) {
-    super(pos, scope)
-  }
-}
-
 export class LiteralExpr extends Expr {}
 
 
 export class NumLit extends LiteralExpr {
-  //
-  // kind = INT | INT_BIN | INT_OCT | INT_HEX | FLOAT | CHAR
-  //
+  value :Int64 | number
+  type  :NumType
 
-  type :NumType  // type is always known
-
-  // Note: kind is only needed for Universe.basicLitType
-  // so when we get rid of that function, we can get rid of "kind"
-
-  constructor(pos :Pos, scope :Scope,
-    public kind  :token,
-    public value :Int64|number,
-    type         :NumType,
-  ) {
+  constructor(pos :Pos, scope :Scope, value: Int64 | number, type :NumType) {
     super(pos, scope)
-    assert(token.literal_basic_beg < kind && kind < token.literal_basic_end)
+    this.value = value
     this.type = type
   }
 
-  toString() :string {
-    return this.value.toString()
-  }
-
-  isInt() :bool {
-    return this.type instanceof IntType
-  }
-
-  isFloat() :bool {
-    return !this.isInt()
-  }
-
-  // convertTo coverts the value of the literal to the provided basic type.
+  // convertToType coverts the value of the literal to the provided basic type.
   // Returns true if the conversion was lossless.
   //
   convertToType(t :NumType) :bool {
@@ -512,31 +593,77 @@ export class NumLit extends LiteralExpr {
     this.value = v
     return lossless
   }
-
-  // // castToType returns a new NumLit of type t.
-  // // Returns null if the conversion would be lossy.
-  // // Note: Returns a new NumLit even when this.type==t
-  // //
-  // castToType(t :NumType) :NumLit|null {
-  //   let [v, lossless] = numconv(this.value, t)
-  //   this.type = t
-  //   this.value = v
-  //   return lossless
-  // }
 }
 
-// export const ImplicitOne = new NumLit(
+
+export class IntLit extends NumLit {
+  kind  :token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX
+  type  :IntType  // type is always known
+
+  constructor(pos :Pos, scope :Scope,
+    value :Int64 | number,
+    type  :IntType,
+    kind  :token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX,
+  ) {
+    super(pos, scope, value, type)
+    this.kind = kind
+  }
+
+  toString() :string {
+    switch (this.kind) {
+      case token.INT_HEX: return '0x' + this.value.toString(16)
+      case token.INT_OCT: return '0o' + this.value.toString(8)
+      case token.INT_BIN: return '0b' + this.value.toString(2)
+      default:            return this.value.toString(10)
+    }
+  }
+}
+
+
+export class CharLit extends NumLit {
+  value :int
+  type  :typeof types.t_char
+
+  constructor(pos :Pos, scope :Scope, value :number) {
+    super(pos, scope, value, types.t_char)
+  }
+
+  toString() :string {
+    // TODO: clever printing of safe chars, \u and \U sequences, etc.
+    return '0x' + this.value.toString(16)
+  }
+}
+
+
+export class FloatLit extends NumLit {
+  value :number
+  type  :FloatType
+
+  constructor(pos :Pos, scope :Scope, value :number, type :FloatType) {
+    super(pos, scope, value, type)
+  }
+
+  toString() :string {
+    return this.value.toString()
+  }
+}
+
+
+// export const ImplicitOne = new IntLit(
 //   0,
 //   nilScope,
 //   token.INT,
 //   null as any as Uint8Array,
 // )
 
+
 export class StringLit extends LiteralExpr {
-  constructor(pos :Pos, scope :Scope,
-    public value :Uint8Array
-  ) {
+  type  :StrType
+  value :Uint8Array
+
+  constructor(pos :Pos, scope :Scope, value :Uint8Array, type :StrType) {
     super(pos, scope)
+    this.type = type
   }
 
   toString() :string {
@@ -612,19 +739,9 @@ export class FunExpr extends Expr {
 export class FunSig extends Node {
   constructor(pos :Pos, scope :Scope,
   public params :Field[],
-  public result :Expr,
+  public result :TypeExpr | null,  // null = auto
   ) {
     super(pos, scope)
-  }
-}
-
-
-export class IntrinsicVal extends Expr {
-  constructor(
-    public name :string,
-    public type :Type,
-  ) {
-    super(0, nilScope)
   }
 }
 
@@ -639,405 +756,80 @@ export class TypeConvExpr extends Expr {
 }
 
 
-// ——————————————————————————————————————————————————————————————————
-// -- WORK IN PROGRESS --
-
-// this already exists. Built for top-level typedefs
-export class TypeDecl extends Decl {
-  // Ident Type
-  constructor(pos :Pos, scope :Scope,
-  public ident  :Ident,
-  public alias  :bool,
-  public type   :Expr,
-  public group  :Group|null, // nil = not part of a group
-  ) {
-    super(pos, scope)
-  }
-}
-
-
-// TypeDef defines a type
+// NativeTypeExpr represents basic/bottom types
 //
-export class TypeDef extends Expr {
-  ent :Ent|null = null
-  t   :Type
-
-  constructor(pos :Pos, scope :Scope, t :Type) {
-    super(pos, scope)
-    this.t = t
+export class NativeTypeExpr extends TypeExpr {
+  type :NativeType
+  constructor(type :NativeType) {
+    super(0, nilScope, type)
   }
 }
 
 
-// ——————————————————————————————————————————————————————————————————
-// Types
-
-export class Type extends Expr {
-  ent :Ent|null = null
-
-  constructor(pos :Pos, scope :Scope) {
-    super(pos, scope)
-    this.type = this
-  }
-
-  // accepts returns true if the other type is compatible with this type.
-  // essentially: "this >= other"
-  // For instance, if the receiver is the same as `other`
-  // or a superset of `other`, true is returned.
-  //
-  accepts(other :Type) :bool {
-    return this.equals(other)
-  }
-
-  // equals returns true if the receiver is equivalent to `other`
-  //
-  equals(other :Type) :bool {
-    return this === other
-  }
-}
-
-export class UnresolvedType extends Type {
-  refs :Set<Expr|FunSig>|null = null  // things that references this type
-
-  constructor(pos :Pos, scope :Scope,
-    public expr :Expr,
-  ) {
-    super(pos, scope)
-  }
-
-  addRef(x :Expr|FunSig) {
-    assert(x !== this.expr)
-    // if (x !== this.expr) {
-    if (!this.refs) {
-      this.refs = new Set<Expr|FunSig>([x])
-    } else {
-      this.refs.add(x)
-    }
-    // }
-  }
-
-  toString() {
-    return '~' + this.expr.toString()
-  }
-}
-
-// storage type needed for a basic type
-export enum MemType {
-  None,
-  i8,
-  i16,
-  i32,
-  i64,
-  f32,
-  f64,
-}
-
-const memTypeSizes = [
-  0,   // None
-  8,   // i8
-  16,  // i16
-  32,  // i32
-  64,  // i64
-  32,  // f32
-  64,  // f64
-]
-
-
-export class BasicType extends Type {
-  size :int
-
-  constructor(
-    // public bitsize :int,
-    public memtype :MemType,
-    public name :string, // only used for debugging and printing
-  ) {
-    super(0, nilScope)
-    this.size = memTypeSizes[memtype]
-    assert(this.size !== undefined)
-  }
-
-  toString() :string {
-    return this.name
-  }
-
-  equals(other :Type) :bool {
-    return this === other
-  }
-
-  // TODO: accepts(other :Type) :bool
-}
-
-
-export class NumType extends BasicType {
-}
-
-
-export class IntType extends NumType {
-  signed :bool // true if type is signed
-  constructor(memtype :MemType, name :string, signed :bool) {
-    super(memtype, name)
-    this.signed = signed
-  }
-}
-
-// basic type constants
-// const uintz :number = 32 // TODO: target-dependant
-// const uintmemtype = uintz <= 32 ? MemType.i32 : MemType.i64
-
-export const
-  u_t_auto  = new BasicType(MemType.None, 'auto') // special
-, u_t_nil   = new BasicType(MemType.None, 'nil') // special, aka "void"
-, u_t_bool  = new IntType(MemType.i8,   'bool', false)
-, u_t_u8    = new IntType(MemType.i8,   'u8', false)
-, u_t_i8    = new IntType(MemType.i8,   'i8', true)
-, u_t_u16   = new IntType(MemType.i16,  'u16', false)
-, u_t_i16   = new IntType(MemType.i16,  'i16', true)
-, u_t_u32   = new IntType(MemType.i32,  'u32', false)
-, u_t_i32   = new IntType(MemType.i32,  'i32', true)
-, u_t_u64   = new IntType(MemType.i64,  'u64', false)
-, u_t_i64   = new IntType(MemType.i64,  'i64', true)
-, u_t_f32   = new NumType(MemType.f32,  'f32')
-, u_t_f64   = new NumType(MemType.f64,  'f64')
-, u_t_uint  = new IntType(MemType.None, 'uint', false)
-, u_t_int   = new IntType(MemType.None, 'int', true)
-, u_t_usize = new IntType(MemType.None, 'usize', false)
-, u_t_isize = new IntType(MemType.None, 'isize', true)
-// , u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64
-// , u_t_int_itype = uintmemtype == MemType.i32 ? u_t_i32 : u_t_i64
+// Atom is a value that identifies itself
 //
-// , u_t_uint = new IntType(uintz,  uintmemtype, 'uint', false)
-// , u_t_int  = new IntType(uintz-1,uintmemtype, 'int', true)
-// , u_t_uint_itype = uintmemtype == MemType.i32 ? u_t_u32 : u_t_u64
-// , u_t_int_itype = uintmemtype == MemType.i32 ? u_t_i32 : u_t_i64
+// i.e. true, false, nil
+//
+export class Atom extends Expr {
+  name :string
+  type :Type
 
-export class StrType extends Type {
-  constructor(
-    public length :int, // -1 == length only known at runtime
-  ) {
+  constructor(name :string, type :Type) {
     super(0, nilScope)
-  }
-
-  toString() :string {
-    return this.length > -1 ? `str<${this.length}>` : 'str'
-  }
-
-  equals(other :Type) :bool {
-    // TODO: break this up, partly into accepts(), so its truly "equals",
-    // e.g. "cstr<4> != str"
-    return (
-      this === other ||
-      ( other instanceof StrType &&
-        this.length == other.length
-      )
-    )
-  }
-}
-
-
-export const u_t_str = new StrType(-1)  // heap-allocated string
-
-
-
-export class RestType extends Type {
-  // ...type
-  constructor(
-    public type :Type,
-  ) {
-    super(0, nilScope)
+    this.name = name
     this.type = type
   }
 
-  toString() :string {
-    return `...${this.type}`
-  }
-
-  equals(other :Type) :bool {
-    return (
-      this === other ||
-      ( other instanceof RestType &&
-        this.type.equals(other.type)
-      )
-    )
-  }
-}
-
-export class TupleType extends Type {
-  // TupleType = "(" Type ("," Type)+ ")"
-  constructor(
-  public types :Type[],
-  ) {
-    super(0, nilScope)
-  }
-
-  toString() :string {
-    return '(' + this.types.map(t => t.toString()).join(', ') + ')'
-  }
-
-  equals(other :Type) :bool {
-    return (
-      this === other ||
-      ( other instanceof TupleType &&
-        this.types.length == other.types.length &&
-        this.types.every((t, i) => t.equals(other.types[i]))
-      )
-    )
-  }
-}
-
-export class FunType extends Type {
-  // FunType = ( Type | TupleType ) "->" Type
-  constructor(
-  public inputs :Type[],
-  public result :Type,
-  ) {
-    super(0, nilScope)
-  }
-
-  equals(other :Type) :bool {
-    return (
-      this === other ||
-      ( other instanceof FunType &&
-        this.inputs.length == other.inputs.length &&
-        this.result.equals(other.result) &&
-        this.inputs.every((t, i) => t.equals(other.inputs[i]))
-      )
-    )
-  }
-}
-
-export class UnionType extends Type {
-  constructor(
-    public types :Set<Type>,
-  ) {
-    super(0, nilScope)
-  }
-
-  add(t :Type) {
-    assert(!(t instanceof UnionType))
-    this.types.add(t)
-  }
-
-  toString() :string {
-    let s = '(U ', first = true
-    for (let t of this.types) {
-      if (first) {
-        first = false
-      } else {
-        s += '|'
-      }
-      s += t.toString()
-    }
-    return s + ')'
-  }
-
-  equals(other :Type) :bool {
-    if (this === other) {
-      return true
-    }
-    if (!(other instanceof UnionType) || other.types.size != this.types.size) {
-      return false
-    }
-    // Note: This relies on type instances being singletons (being interned)
-    for (let t of this.types) {
-      if (!other.types.has(t)) {
-        return false
-      }
-    }
-    return true
-  }
-
-  accepts(other :Type) :bool {
-    if (this === other) {
-      return true
-    }
-    if (!(other instanceof UnionType)) {
-      return false
-    }
-    // Note: This relies on type instances being singletons (being interned)
-    // make sure that we have at least the types of `other`.
-    // e.g.
-    //   (int|f32|bool) accepts (int|f32) => true
-    //   (int|f32) accepts (int|f32|bool) => false
-    for (let t of other.types) {
-      if (!this.types.has(t)) {
-        return false
-      }
-    }
-    return true
-  }
-}
-
-
-export class OptionalType extends Type {
-  constructor(
-    public type :Type,
-  ) {
-    super(0, nilScope)
-    assert(!(type instanceof OptionalType))
-    assert(!(type instanceof UnionType))
-    assert(!(type instanceof BasicType))
-  }
-
-  toString() :string {
-    return this.type.toString() + '?'
-  }
-
-  equals(other :Type) :bool {
-    return (
-      this === other ||
-      ( other instanceof OptionalType &&
-        this.type.equals(other.type)
-      )
-    )
-  }
-
-  accepts(other :Type) :bool {
-    return (
-      this.equals(other) ||       // e.g. "x str?; y str?; x = y"
-      this.type.equals(other) ||  // e.g. "x str?; y str; x = y"
-      other === u_t_nil           // e.g. "x str?; x = nil"
-    )
-  }
-}
-
-
-export const u_t_optstr = new OptionalType(u_t_str)
-
-
-
-// ——————————————————————————————————————————————————————————————————
-// File
-
-// A File corresponds to a source file
-//
-export class File {
-  constructor(
-    public sfile      :SrcFile,
-    public scope      :Scope,
-    public imports    :ImportDecl[] | null,  // imports in this file
-    public decls      :(Decl|FunExpr)[],     // top-level declarations
-    public unresolved :Set<Ident> | null,    // unresolved references
-  ) {}
-
-  toString() :string {
-    return (
-      `File("${this.sfile.name}"; ${this.decls.length} decls` +
-      ( this.imports ? `; ${this.imports.length} imports)` : '' )
-    )
-  }
-}
-
-export class Package {
-  files :File[] = []
-
-  constructor(
-    public name :string,
-    public scope :Scope,
-    // public imports
-    // public exports
-  ) {}
-
   toString() {
-    return `Package(${this.name})`
+    return this.name
   }
+}
+
+
+// built-in, predefined types
+export const builtInTypes : {[name :string] :TypeExpr} = {
+  "nil":   new NativeTypeExpr(types.t_nil),
+  "bool":  new NativeTypeExpr(types.t_bool),
+  "u8":    new NativeTypeExpr(types.t_u8),
+  "i8":    new NativeTypeExpr(types.t_i8),
+  "u16":   new NativeTypeExpr(types.t_u16),
+  "i16":   new NativeTypeExpr(types.t_i16),
+  "u32":   new NativeTypeExpr(types.t_u32),
+  "i32":   new NativeTypeExpr(types.t_i32),
+  "u64":   new NativeTypeExpr(types.t_u64),
+  "i64":   new NativeTypeExpr(types.t_i64),
+  "uint":  new NativeTypeExpr(types.t_uint),
+  "int":   new NativeTypeExpr(types.t_int),
+  "usize": new NativeTypeExpr(types.t_usize),
+  "isize": new NativeTypeExpr(types.t_isize),
+  "f32":   new NativeTypeExpr(types.t_f32),
+  "f64":   new NativeTypeExpr(types.t_f64),
+
+  "byte":  new NativeTypeExpr(types.t_byte),
+  "char":  new NativeTypeExpr(types.t_char),
+
+  "str":   new NativeTypeExpr(types.t_str),
+}
+
+
+const typeToBuiltInTypes = new Map<Type,TypeExpr>()
+for (let k in builtInTypes) {
+  let x = (builtInTypes)[k]
+  typeToBuiltInTypes.set(x.type, x)
+}
+
+// getTypeExpr returns an interned TypeExpr for t if one exists,
+// or creates a new TypeExpr that references t.
+//
+export function GetTypeExpr(t :Type) :TypeExpr {
+  let x = typeToBuiltInTypes.get(t)
+  return x || new TypeExpr(0, nilScope, t)
+}
+
+
+// built-in, predefined values
+export const builtInValues : {[name :string] :Expr} = {
+  "true":  new Atom("true",  types.t_bool),
+  "false": new Atom("false", types.t_bool),
+  "nil":   new Atom("nil",   types.t_nil),
 }

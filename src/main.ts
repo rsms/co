@@ -4,16 +4,18 @@ import * as scanner from './scanner'
 import { Position, SrcFileSet } from './pos'
 import { ByteStrSet } from './bytestr'
 import { TypeSet } from './typeset'
-import { astRepr } from './ast-repr'
 import { Package, Scope, Ent } from './ast'
+import { astRepr } from './ast_repr'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
-import { IRBuilder, IRFlags } from './ir'
-import * as ir from './ir'
-import { NaiveRegAlloc } from './ir_regalloc_naive'
-import { printir, fmtir } from './ir-repr'
-import { IRVirtualMachine } from './ir_vm'
+
+import { Pkg as IRPkg } from './ir/ssa'
+// import { NaiveRegAlloc } from './ir/regalloc_naive'
+import { IRBuilder, IRBuilderFlags } from './ir/builder'
+import { printir, fmtir } from './ir/repr'
+// import { IRVirtualMachine } from './ir/vm'
+
 import './all_tests'
 
 
@@ -157,7 +159,7 @@ interface MainResult {
   success     :bool
   diagnostics :diaginfo[]
   ast?        :Package
-  ir?         :ir.Pkg
+  ir?         :IRPkg
   error?      :Error
 }
 
@@ -183,7 +185,9 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
 
   const regalloc = null // new NaiveRegAlloc()
   const irb = new IRBuilder()
-  irb.init(diagh, 4, 8, regalloc, IRFlags.Comments | IRFlags.Optimize)
+
+  const irbflags = IRBuilderFlags.Comments | IRBuilderFlags.Optimize
+  irb.init(diagh, 4, 8, regalloc, irbflags)
 
   // print AST & build IR
   try {
@@ -211,29 +215,29 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
       }
 
       // run regalloc as separate pass for debugging (normally run inline IRB)
-      if (isNodeJsLikeEnv) {
-        banner(`ssa-ir ${file.sfile.name} regalloc`)
-      }
-      const regalloc = new NaiveRegAlloc()
-      for (let [_, fn] of irb.pkg.funs) {
-        regalloc.visitFun(fn)
-        if (isNodeJsLikeEnv && fn) {
-          console.log(`\n-----------------------\n`)
-          printir(fn)
-        }
-      }
+      // if (isNodeJsLikeEnv) {
+      //   banner(`ssa-ir ${file.sfile.name} regalloc`)
+      // }
+      // const regalloc = new NaiveRegAlloc()
+      // for (let [_, fn] of irb.pkg.funs) {
+      //   regalloc.visitFun(fn)
+      //   if (isNodeJsLikeEnv && fn) {
+      //     console.log(`\n-----------------------\n`)
+      //     printir(fn)
+      //   }
+      // }
 
     }
 
     // Run in development VM
-    banner(`vm`)
-    const vm = new IRVirtualMachine(irb.pkg, diagh)
-    let mainfun = irb.pkg.mainFun() || null
-    if (mainfun) {
-      vm.execFun(mainfun)
-    } else {
-      console.warn('no main function found in package -- not executing')
-    }
+    // banner(`vm`)
+    // const vm = new IRVirtualMachine(irb.pkg, diagh)
+    // let mainfun = irb.pkg.mainFun() || null
+    // if (mainfun) {
+    //   vm.execFun(mainfun)
+    // } else {
+    //   console.warn('no main function found in package -- not executing')
+    // }
 
     return {
       success: true,
