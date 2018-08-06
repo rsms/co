@@ -2,6 +2,8 @@
 *.a
 *.d
 *.gz
+/*.sublime-*
+src/*.wast.wasm
 _local
 out
 .DS_Store

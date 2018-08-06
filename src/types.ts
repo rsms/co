@@ -4,24 +4,30 @@
 export enum Mem {
   None = -1,  // zero-width; not a concrete type
   Ptr  =  0,  // pointer (actual size defined by IR)
-  i8   =  8,  // 8-bit integer
-  i16  = 16,  // 16-bit integer
-  i32  = 32,  // 32-bit integer
-  i64  = 64,  // 64-bit integer
-  f32  = 32,  // 32-bit floating-point
-  f64  = 64,  // 64-bit floating-point
+  i8   =  1,  // 8-bit integer
+  i16  =  2,  // 16-bit integer
+  i32  =  4,  // 32-bit integer
+  i64  =  8,  // 64-bit integer
+  f32  =  5,  // 32-bit floating-point
+  f64  =  9,  // 64-bit floating-point
 }
 
 
 export class Type {
 
   // descriptor properties
-  mem :Mem = Mem.None   // memory size and type
-  isFloat = false       // true for floating-point numbers
-  isInt = false         // true for bool and integers
-  isSignedInt = false   // true for signed integers
-  isUnsignedInt = false // true for unsigned integers
+  mem :Mem               // memory type
+  size :int              // size in bytes
+  isFloat = false        // true for floating-point numbers
+  isInt = false          // true for bool and integers
+  isSignedInt = false    // true for signed integers
+  isUnsignedInt = false  // true for unsigned integers
   //isUnresolved = false  // true for unresolved types
+
+  constructor(mem :Mem = Mem.None) {
+    this.mem = mem
+    this.size = this.mem as int
+  }
 
   // accepts returns true if the other type is compatible with this type.
   // essentially: "this >= other"
@@ -36,6 +42,10 @@ export class Type {
   //
   equals(other :Type) :bool {
     return this === other
+  }
+
+  isTuple() : this is TupleType {
+    return this instanceof TupleType
   }
 }
 
@@ -88,8 +98,7 @@ export class BasicType extends NativeType {
   name :string
 
   constructor(mem :Mem, name :string) {
-    super()
-    this.mem = mem
+    super(mem)
     this.name = name
   }
 
@@ -103,6 +112,7 @@ export class NumType extends BasicType {
 
 export class FloatType extends NumType {
   isFloat = true
+  size = this.mem - 1
 }
 
 export class IntType extends NumType {
@@ -233,6 +243,10 @@ export class TupleType extends Type {
         this.types.every((t, i) => t.equals(other.types[i]))
       )
     )
+  }
+
+  isTuple() : this is TupleType {
+    return true
   }
 }
 

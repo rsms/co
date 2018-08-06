@@ -1,5 +1,5 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
-import { Pkg, Fun, Block, BlockKind, Value } from './ssa'
+import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
 import { Op } from './op'
 
 export type LineWriter = (s :string) => any
@@ -45,21 +45,37 @@ function printval(f :IRFmt, v :Value, indent :string) {
 function printblock(f :IRFmt, b :Block, indent :string) {
   let label = b.toString()
   let preds = ''
+  let meta = ''
 
   if (b.preds && b.preds.length) {
     preds = f.larr + b.preds.map(b => 
-      f.style.lightyellow(b.toString()) ).join(', ')
+      f.style.lightyellow(b.toString())
+    ).join(', ')
+
     f.println('')
   } // else: entry block
 
   let comment = b.comment ? f.style.grey('  // ' + b.comment) : ''
-  f.println(indent + f.style.lightyellow(label + ':') + preds + comment)
+  f.println(indent + f.style.lightyellow(label + ':') + preds + meta + comment)
 
   let valindent = indent + '  '
   let v = b.vhead
   while (v) {
     printval(f, v, valindent)
     v = v.nextv
+  }
+
+  const fmtsucc = (b :Block) => {
+    let s = f.style.lightyellow(b.toString())
+    switch (b.likely) {
+      case BranchPrediction.Likely:
+        s += f.style.grey(' (likely)')
+        break
+      case BranchPrediction.Unlikely:
+        s += f.style.grey(' (unlikely)')
+        break
+    }
+    return s
   }
 
   switch (b.kind) {
@@ -74,7 +90,7 @@ function printblock(f :IRFmt, b :Block, indent :string) {
       f.println(
         indent +
         f.style.cyan('cont') + f.rarr +
-        f.style.lightyellow(contb.toString())
+        fmtsucc(contb)
       )
       break
     }
@@ -92,8 +108,7 @@ function printblock(f :IRFmt, b :Block, indent :string) {
         indent +
         f.style.cyan('if') +
         ` ${b.control}${f.rarr}` +
-        f.style.lightyellow(thenb.toString()) + ' ' +
-        f.style.lightyellow(elseb.toString())
+        fmtsucc(thenb) + ', ' + fmtsucc(elseb)
       )
       break
     }
@@ -111,10 +126,6 @@ function printblock(f :IRFmt, b :Block, indent :string) {
     default:
       assert(false, `unexpected block kind ${BlockKind[b.kind]}`)
   }
-
-  if (b.next) {
-    printblock(f, b.next, indent)
-  }
 }
 
 
@@ -123,7 +134,9 @@ function printfun(f :IRFmt, fn :Fun) {
     f.style.white(fn.toString()) +
     ' (' + fn.type.args.join(' ') + ')->' + fn.type.result
   )
-  printblock(f, fn.entryb, /*indent*/'  ')
+  for (let b of fn.blocks) {
+    printblock(f, b, /*indent*/'  ')
+  }
 }
 
 

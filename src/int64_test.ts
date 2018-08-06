@@ -1,6 +1,13 @@
 import { SInt64, UInt64, Int64 } from './int64'
+import { sint64rand, uint64rand, seed as int64rand_seed } from './int64_rand'
 import { asciibuf } from './util'
-import { assertEq, assertEqList, assertEqObj, assertThrows } from './test'
+import {
+  assertEq,
+  assertEqList,
+  assertEqObj,
+  assertThrows,
+  quickcheck,
+} from './test'
 
 
 TEST('basic', () => {
@@ -424,6 +431,7 @@ let js_div_s = (SInt64.prototype as any)._js_div as (x:Int64)=>SInt64
 let js_div_u = (UInt64.prototype as any)._js_div as (x:Int64)=>UInt64
 let js_mod_s = (SInt64.prototype as any)._js_mod as (x:Int64)=>SInt64
 // let js_mod_u = (UInt64.prototype as any)._js_mod as (x:Int64)=>UInt64
+let js_popcnt = (SInt64.prototype as any)._js_popcnt as ()=>int
 // TODO test js_mod_u
 
 
@@ -513,6 +521,48 @@ TEST('msb-unsigned', () => {
   assert(u.eq(SInt64.MIN) == false)
   assertEq(u.toString(), "9223372036854775808")
 })
+
+
+TEST('popcnt/s/quickcheck', () => {
+  // slow, naïve and reliable popcnt implementation used as a reference
+  function popcnt_naive(n :Int64) {
+    let c = 0
+    while (!n.isZero()) {
+      n = n.and(n.sub(SInt64.ONE))  // clear the least significant bit set
+      // n = n & n - 1
+      c++
+    }
+    return c
+  }
+
+  quickcheck<SInt64>({ timeout: 100, size: Infinity, gen: sint64rand }, n =>
+    n.popcnt() == popcnt_naive(n))
+
+  quickcheck<SInt64>({ timeout: 100, size: Infinity, gen: sint64rand }, n =>
+    js_popcnt.call(n) == popcnt_naive(n))
+})
+
+
+TEST('popcnt/u/quickcheck', () => {
+  // slow, naïve and reliable popcnt implementation used as a reference
+  function popcnt_naive(n :Int64) {
+    let c = 0
+    while (!n.isZero()) {
+      n = n.and(n.sub(UInt64.ONE))  // clear the least significant bit set
+      // n = n & n - 1
+      c++
+    }
+    return c
+  }
+
+  quickcheck<UInt64>({ timeout: 100, size: Infinity, gen: uint64rand }, n =>
+    n.popcnt() == popcnt_naive(n))
+
+  quickcheck<UInt64>({ timeout: 100, size: Infinity, gen: uint64rand }, n =>
+    js_popcnt.call(n) == popcnt_naive(n))
+})
+
+
 
 // ---------------------------------------------------------------------------
 // The remaining tests comes from Google Closure Library's goog/math/long

@@ -1,3 +1,4 @@
+// import jscheck from './test_jscheck'
 
 export function assertEq(actual :any, expected :any, context? :string) {
   assert(
@@ -64,60 +65,137 @@ export function assertThrows(fn :()=>any) {
   }
 }
 
-
-export interface QuickCheck<T> {
-  gen(i :int) :T
-  check(v :T) :bool
-  timeLimit? :int
+// quickcheck options
+export interface QCOptions {
+  timeout? :int  // milliseconds; default is 1000
 }
 
-export function quickcheck<T>(
-  range :[int,int],
-  c :QuickCheck<T>
-) {
-  let timeLimit = c.timeLimit ? Math.max(100, c.timeLimit) : 1000 // min 100ms
+// quickcheck generator
+export interface QCGen<T> extends QCOptions {
+  size: int
+  gen(i? :int) :T
+}
 
-  let left, right
-  if (range[0] < range[1]) {
-    left = range[0]
-    right = range[1]
-  } else {
-    left = range[1]
-    right = range[0]
+
+class QCGenBase<T> {
+  size: int
+
+  constructor(size :int = 0) {
+    this.size = size >>> 0
   }
 
-  let midpoint = Math.ceil((left + right) / 2)
-  let i = 0
-  let timeStarted = Date.now()
+  gen(i? :int) :T {
+    return undefined as any as T
+  }
+}
 
-  while (i > -1 && left < midpoint && right >= midpoint) {
-    let seq :int = 0
-    if (i % 2 == 0) {
-      seq = left
-      left++
-    } else {
-      seq = right
-      right--
+
+class QCF64Gen extends QCGenBase<number> {
+  constructor(a :number, b :number) {
+    if (a > b) {
+      let t = a ; a = b ; b = t
     }
+    super(Math.ceil(b - a))
+    this.gen = () =>
+      Math.random() * (b - a) + a
+  }
+}
 
-    let input = c.gen(seq)
-    let ok = c.check(input)
+class QCS32Gen extends QCGenBase<int> {
+  constructor(a :int, b :int) {
+    a = a | 0
+    b = b | 0
+    if (a > b) {
+      let t = a ; a = b ; b = t
+    }
+    super(b - a)
+    this.gen = () =>
+      Math.floor(Math.random() * (b + 1 - a) + a) | 0
+  }
+}
 
+class QCU32Gen extends QCGenBase<int> {
+  constructor(a :int, b :int) {
+    a = a >>> 0
+    b = b >>> 0
+    if (a > b) {
+      let t = a ; a = b ; b = t
+    }
+    super(b - a)
+    this.gen = () =>
+      Math.floor(Math.random() * (b + 1 - a) + a) >>> 0
+  }
+}
+
+const monotime :()=>number = (
+  typeof performance != 'undefined' ? () => performance.now() :
+  () => Date.now()
+)
+
+export function quickcheck<T>(
+  gen :QCGen<T> | [T,T],
+  check :((i :T)=>bool)) :void
+
+export function quickcheck<T>(
+  gen :QCGen<T> | [T,T],
+  options :QCOptions,
+  check :((i :T)=>bool)) :void
+
+export function quickcheck<T>(
+  gen :QCGen<T> | [T,T],
+  arg1 :QCOptions | ((i :T)=>bool),
+  arg2? :(i :T)=>bool,
+) :void
+{
+  let check = arg2 as (i :T)=>bool
+  let options = arg1 as QCOptions
+  if (arg2 === undefined) {
+    check = arg1 as (i :T)=>bool
+    options = {}
+  } else if (!options || typeof options != 'object') {
+    throw new Error('argument 2 is not an options object')
+  }
+
+  const opt = Object.assign({
+    // default options
+    timeout: 1000,
+  }, gen as QCOptions, options)
+
+  opt.timeout = Math.max(0, opt.timeout as number)
+
+  let g = gen as QCGen<T>
+
+  if (Array.isArray(gen)) {
+    let [a, b] = gen
+    if (typeof a == 'number' && typeof b == 'number') {
+      if (Math.round(a) != a) {
+        g = new QCF64Gen(a, b) as any as QCGen<T>
+      } else if (Math.min(a, b) < 0) {
+        g = new QCS32Gen(a, b) as any as QCGen<T>
+      } else {
+        g = new QCU32Gen(a, b) as any as QCGen<T>
+      }
+    } else {
+      throw new Error(`unexpected range type ${typeof a}`)
+    }
+  }
+
+  let i = 0
+  let timeStarted = monotime()
+
+  for (let i = 0; i < g.size; i++) {
+    let v = g.gen(i)
+    let ok = check(v)
     if (!ok) {
       assert(
         false,
-        `failure for ${JSON.stringify(input)} (quickcheck #${i} seq=${seq})`,
+        `quickcheck failure for input ${v}, generation ${i}`,
         quickcheck
       )
     }
-
-    i++
-
-    if (i % 100 == 0) {
-      if (Date.now() - timeStarted > timeLimit) {
-        console.log(`qc time limit`)
-        break
-      }
+    if (opt.timeout && i % 100 == 0 && monotime() - timeStarted > opt.timeout) {
+      // console.log(`qc time limit`)
+      break
     }
   }
 }

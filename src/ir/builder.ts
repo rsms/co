@@ -22,9 +22,10 @@ import { optcf_op1, optcf_op2 } from './opt_cf'
 
 
 import { ops, Op } from './op'
-import { Aux, Value, Block, BlockKind, Fun, Pkg } from './ssa'
+import { Aux, Value, Block, BlockKind, Fun, Pkg, BranchPrediction } from './ssa'
 import { RegAlloc } from './regalloc'
 import { opselect1, opselect2 } from './opselect'
+import { Config } from './config'
 
 
 const bitypes = ast.builtInTypes
@@ -32,7 +33,6 @@ const bitypes = ast.builtInTypes
 
 export enum IRBuilderFlags {
   Default  = 0,
-  Optimize = 1 << 0,  // apply early inline optimizations
   Comments = 1 << 1,  // include comments in some values, for formatting
 }
 
@@ -44,6 +44,8 @@ export enum IRBuilderFlags {
 // https://pp.info.uni-karlsruhe.de/uploads/publikationen/braun13cc.pdf
 //
 export class IRBuilder {
+  config   :Config
+
   pkg      :Pkg
   sfile    :SrcFile|null = null
   diagh    :DiagHandler|null = null
@@ -66,13 +68,13 @@ export class IRBuilder {
     // are not known at the time a block starts, but is known and registered
     // before the block ends.
 
-  init(diagh :DiagHandler|null = null,
-       intsize: int = 4,
-       addrsize: int = 4,
+  init(config :Config,
+       diagh :DiagHandler|null = null,
        regalloc :RegAlloc|null = null,
        flags :IRBuilderFlags = IRBuilderFlags.Default
   ) {
     const r = this
+    r.config = config
     r.pkg = new Pkg()
     r.sfile = null
     r.diagh = diagh
@@ -81,9 +83,10 @@ export class IRBuilder {
     r.defvars = []
     r.incompletePhis = null
     r.flags = flags
+
     // select integer types
-    const [intt_s, intt_u] = types.intTypes(intsize)
-    const [sizet_s, sizet_u] = types.intTypes(addrsize)
+    const [intt_s, intt_u] = types.intTypes(config.intSize)
+    const [sizet_s, sizet_u] = types.intTypes(config.addrSize)
 
     this.concreteType = (t :Type) :BasicType => {
       switch (t) {
@@ -212,13 +215,13 @@ export class IRBuilder {
   endFun() {
     const s = this
     assert(s.f, "ending function without a current function")
-    if (s.flags & IRBuilderFlags.Optimize) {
+    if (s.config.optimize) {
       // perform early dead-code elimination
       optdce(s.f)
     }
     if (s.regalloc) {
       // perform register allocation
-      s.regalloc.visitFun(s.f)
+      s.regalloc.regallocFun(s.f)
     }
     if (DEBUG) {
       ;(s as any).f = null
@@ -264,7 +267,6 @@ export class IRBuilder {
       x.name ? x.name.value : null,
       x.sig.params.length
     )
-    let entryb = f.entryb
 
     // initialize locals
     for (let i = 0; i < x.sig.params.length; i++) {
@@ -272,7 +274,7 @@ export class IRBuilder {
       if (p.name && !p.name.value.isUnderscore()) {
         let t = r.concreteType(funtype.args[i])
         let name = p.name.value
-        let v = entryb.newValue0(ops.Arg, t, i)
+        let v = f.entry.newValue0(ops.Arg, t, i)
         if (r.flags & IRBuilderFlags.Comments) {
           v.comment = name.toString()
         }
@@ -281,7 +283,7 @@ export class IRBuilder {
     }
 
     r.startFun(f)
-    r.startSealedBlock(entryb)
+    r.startSealedBlock(f.entry)
 
     let bodyval = r.block(x.body as ast.Expr)
 
@@ -300,9 +302,14 @@ export class IRBuilder {
       r.endBlock()
     }
 
-    assert((r as any).b == null, "function exit block not ended")
-    assert(f.tailb.kind == BlockKind.Ret,
+    assert((r as any).b == null,
+      "function exit block not ended")
+
+    assert(f.blocks[f.blocks.length-1].kind == BlockKind.Ret,
       "last block in function is not BlockKind.Ret")
+    // assert(f.tailb.kind == BlockKind.Ret,
+    //   "last block in function is not BlockKind.Ret")
+
     r.endFun()
 
     r.pkg.funs.set(f.name, f)
@@ -690,7 +697,7 @@ export class IRBuilder {
         let right = r.expr(s.y)
         let op = opselect2(s.op, left.type, right.type)
 
-        if (r.flags & IRBuilderFlags.Optimize) {
+        if (r.config.optimize) {
           // attempt to evaluate constant expression
           let v = optcf_op2(r.b, op, left, right)
           if (v) {
@@ -704,7 +711,7 @@ export class IRBuilder {
       // Basic unary operation
       let op = opselect1(s.op, left.type)
 
-      if (r.flags & IRBuilderFlags.Optimize) {
+      if (r.config.optimize) {
         // attempt to evaluate constant expression
         let v = optcf_op1(r.b, op, left)
         if (v) {
@@ -793,9 +800,13 @@ export class IRBuilder {
 
     if (n.op == token.OROR) {
       // flip branches; equivalent to "ifFalse"/"ifz"
+      contb.likely = BranchPrediction.Likely
+      rightb.likely = BranchPrediction.Unlikely
       ifb.succs = [contb, rightb] // if -> contb, rightb
     } else {
       assert(n.op == token.ANDAND)
+      rightb.likely = BranchPrediction.Likely
+      contb.likely = BranchPrediction.Unlikely
       ifb.succs = [rightb, contb] // if -> rightb, contb
     }
 
@@ -1019,13 +1030,15 @@ export class IRBuilder {
 
     if (same == null) {
       dlog(`${phi.b} ${phi} unreachable or in the start block`)
-      same = new Value(0, ops.Invalid, t_nil, phi.b, null) // dummy FIXME
+      same = new Value(0, phi.b, ops.Invalid, t_nil, null) // dummy FIXME
       // same = new Undef() // The phi is unreachable or in the start block
     }
 
     let users = phi.users;  // Remember all users
     dlog(`${phi.b} replace ${phi} with ${same} (aux = ${same.aux})`)
-    phi.replaceBy(same) // Reroute all uses of phi to same and remove phi
+    // Reroute all uses of phi to same and remove phi
+    phi.b.replaceValue(phi, same)
+    //phi.replaceBy(same)
     assert(phi.uses == 0, `still used even after Value.replaceBy`)
 
     // Try to recursively remove all phi users, which might have become trivial

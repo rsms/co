@@ -34,6 +34,7 @@ export interface Int64 {
   isNeg() :bool  // true if negative (always false for UInt64)
   isPos() :bool  // true if positive (always true for UInt64)
   isOdd() :bool  // true if odd number
+  isZero() :bool // true if zero
 
   neg() :Int64 // -N negation
 
@@ -51,6 +52,8 @@ export interface Int64 {
   sub(x :Int64) :Int64 // this - x
   mul(x :Int64) :Int64 // this * x
   div(x :Int64) :Int64 // this / x
+
+  popcnt() :int  // count number of set bits
 
   toSigned() :SInt64
   toUnsigned() :UInt64
@@ -90,30 +93,29 @@ interface Uint64Wasm {
   div_s(alo :int, ahi :int, dlo: int, dhi :int) :int  // returns lower
   rem_u(alo :int, ahi :int, dlo: int, dhi :int) :int  // returns lower
   rem_s(alo :int, ahi :int, dlo: int, dhi :int) :int  // returns lower
+  popcnt(lo :int, hi :int) :int
   get_high() :int
 }
 
 var wasm :Uint64Wasm
 try {
   wasm = new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([
-    // contents of int64.wasm
-    0, 97, 115, 109, 1, 0, 0, 0, 1, 13, 2, 96, 0, 1, 127, 96, 4, 127,
-    127, 127, 127, 1, 127, 3, 7, 6, 0, 1, 1, 1, 1, 1, 6, 6, 1, 127, 1, 65,
-    0, 11, 7, 50, 6, 3, 109, 117, 108, 0, 1, 5, 100, 105, 118, 95, 115, 0,
-    2, 5, 100, 105, 118, 95, 117, 0, 3, 5, 114, 101, 109, 95, 115, 0, 4, 5,
-    114, 101, 109, 95, 117, 0, 5, 8, 103, 101, 116, 95, 104, 105, 103, 104,
-    0, 0, 10, 191, 1, 6, 4, 0, 35, 0, 11, 36, 1, 1, 126, 32, 0, 173, 32, 1,
-    173, 66, 32, 134, 132, 32, 2, 173, 32, 3, 173, 66, 32, 134, 132, 126,
-    34, 4, 66, 32, 135, 167, 36, 0, 32, 4, 167, 11, 36, 1, 1, 126, 32, 0,
-    173, 32, 1, 173, 66, 32, 134, 132, 32, 2, 173, 32, 3, 173, 66, 32, 134,
-    132, 127, 34, 4, 66, 32, 135, 167, 36, 0, 32, 4, 167, 11, 36, 1, 1, 126,
-    32, 0, 173, 32, 1, 173, 66, 32, 134, 132, 32, 2, 173, 32, 3, 173, 66,
-    32, 134, 132, 128, 34, 4, 66, 32, 135, 167, 36, 0, 32, 4, 167, 11, 36,
-    1, 1, 126, 32, 0, 173, 32, 1, 173, 66, 32, 134, 132, 32, 2, 173, 32, 3,
-    173, 66, 32, 134, 132, 129, 34, 4, 66, 32, 135, 167, 36, 0, 32, 4, 167,
-    11, 36, 1, 1, 126, 32, 0, 173, 32, 1, 173, 66, 32, 134, 132, 32, 2, 173,
-    32, 3, 173, 66, 32, 134, 132, 130, 34, 4, 66, 32, 135, 167, 36, 0, 32,
-    4, 167, 11
+    //!<wasmdata src="int64.wast">
+    0,97,115,109,1,0,0,0,1,19,3,96,0,1,127,96,2,127,127,1,127,96,4,127,127,
+    127,127,1,127,3,8,7,0,1,2,2,2,2,2,6,6,1,127,1,65,0,11,7,59,7,8,103,101,
+    116,95,104,105,103,104,0,0,3,109,117,108,0,2,5,100,105,118,95,115,0,3,5,
+    100,105,118,95,117,0,4,5,114,101,109,95,115,0,5,5,114,101,109,95,117,0,6,
+    6,112,111,112,99,110,116,0,1,10,218,1,7,4,0,35,0,11,16,1,1,126,32,0,173,
+    32,1,173,66,32,134,132,123,167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,
+    132,32,2,173,32,3,173,66,32,134,132,126,33,4,32,4,66,32,135,167,36,0,32,4,
+    167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,
+    134,132,127,33,4,32,4,66,32,135,167,36,0,32,4,167,11,38,1,1,126,32,0,173,
+    32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,134,132,128,33,4,32,4,66,
+    32,135,167,36,0,32,4,167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,
+    2,173,32,3,173,66,32,134,132,129,33,4,32,4,66,32,135,167,36,0,32,4,167,11,
+    38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,134,
+    132,130,33,4,32,4,66,32,135,167,36,0,32,4,167,11
+    //!</wasmdata>
   ])), {}).exports as any as Uint64Wasm
 } catch (_) {
   // no wasm support
@@ -366,8 +368,16 @@ class Int64Base {
     return new I((c16 << 16) | c00, (c48 << 16) | c32)
   }
 
+  popcnt() :int {
+    return popcnt32(this._low) + popcnt32(this._high)
+  }
+
   isOdd() :bool {
     return (this._low & 1) == 1
+  }
+
+  isZero() :bool {
+    return this._low == 0 && this._high == 0
   }
 
   // toUInt32 returns the lower part as a 32-bit unsigned value
@@ -407,6 +417,15 @@ class Int64Base {
     b[++i] = this._low        & 0xff
     return b
   }
+}
+
+
+// popcnt32 returns the number of set bits in n
+//
+function popcnt32(n :int) :int {
+  n = n - ((n >> 1) & 0x55555555)
+  n = (n & 0x33333333) + ((n >> 2) & 0x33333333)
+  return ((n + (n >> 4) & 0xF0F0F0F) * 0x1010101) >> 24
 }
 
 
@@ -1040,6 +1059,7 @@ if (wasm != null) {
     UInt64x._js_div = UInt64.prototype.div
     SInt64x._js_mod = SInt64.prototype.mod
     UInt64x._js_mod = UInt64.prototype.mod
+    SInt64x._js_popcnt = Int64Base.prototype.popcnt
   }
 
   SInt64.prototype.mul = function mul(m :Int64) :SInt64 {
@@ -1077,6 +1097,10 @@ if (wasm != null) {
   UInt64.prototype.mod = function mod(d :Int64) :UInt64 {
     let low = wasm.rem_u(this._low, this._high, d._low, d._high)
     return new UInt64(low, wasm.get_high())
+  }
+
+  Int64Base.prototype.popcnt = function popcnt() :int {
+    return wasm.popcnt(this._low, this._high)
   }
 }
 

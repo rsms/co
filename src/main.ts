@@ -11,10 +11,13 @@ import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 
 import { Pkg as IRPkg } from './ir/ssa'
-// import { NaiveRegAlloc } from './ir/regalloc_naive'
+import { NaiveRegAlloc } from './ir/regalloc_naive'
 import { IRBuilder, IRBuilderFlags } from './ir/builder'
 import { printir, fmtir } from './ir/repr'
+import { Config as IRConfig } from './ir/config'
 // import { IRVirtualMachine } from './ir/vm'
+
+import { archs } from './arch/all'
 
 import './all_tests'
 
@@ -179,15 +182,25 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   if (!r.success) {
     return { success: false, diagnostics, ast: r.pkg }
   }
+
+  // skip code generation?
   if (noIR) {
     return { success: true, diagnostics, ast: r.pkg }
   }
 
-  const regalloc = null // new NaiveRegAlloc()
-  const irb = new IRBuilder()
+  // select target arch and build configuration
+  console.log('available target archs:', Object.keys(archs).join(', '))
+  const arch = archs['covm']
+  const config = arch.config({
+    optimize: true,
+  })
+  console.log(`selected target config: ${config}`)
 
-  const irbflags = IRBuilderFlags.Comments | IRBuilderFlags.Optimize
-  irb.init(diagh, 4, 8, regalloc, irbflags)
+
+  const regalloc = null // new NaiveRegAlloc()
+  const irb = new IRBuilder()  // reusable
+
+  irb.init(config, diagh, regalloc, IRBuilderFlags.Comments)
 
   // print AST & build IR
   try {
@@ -215,17 +228,17 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
       }
 
       // run regalloc as separate pass for debugging (normally run inline IRB)
-      // if (isNodeJsLikeEnv) {
-      //   banner(`ssa-ir ${file.sfile.name} regalloc`)
-      // }
-      // const regalloc = new NaiveRegAlloc()
-      // for (let [_, fn] of irb.pkg.funs) {
-      //   regalloc.visitFun(fn)
-      //   if (isNodeJsLikeEnv && fn) {
-      //     console.log(`\n-----------------------\n`)
-      //     printir(fn)
-      //   }
-      // }
+      if (isNodeJsLikeEnv) {
+        banner(`ssa-ir ${file.sfile.name} regalloc`)
+      }
+      const regalloc = new NaiveRegAlloc(config)
+      for (let [_, fn] of irb.pkg.funs) {
+        regalloc.regallocFun(fn)
+        if (isNodeJsLikeEnv && fn) {
+          console.log(`\n-----------------------\n`)
+          printir(fn)
+        }
+      }
 
     }
 

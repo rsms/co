@@ -532,32 +532,28 @@ TEST('int/neg-base10-quickcheck', () => {
   }
 
   // negative i64s
-  quickcheck<string>([-1, 808], {
-    gen: negI64Gen,
-    check(src :string) {
-      let s = sourceScanner(src)
-      s.next()
-      return (
-        s.tok == token.INT &&
-        isNaN(s.int32val) &&
-        s.int64val != null &&
-        s.int64val.toString() === src
-      )
-    },
+  quickcheck([-1, 808], i => {
+    let src = negI64Gen(i)
+    let s = sourceScanner(src)
+    s.next()
+    return (
+      s.tok == token.INT &&
+      isNaN(s.int32val) &&
+      s.int64val != null &&
+      s.int64val.toString() === src
+    )
   })
 
   // negative bigs
-  quickcheck<string>([809, 10000], {
-    gen: negI64Gen,
-    check(src :string) {
-      let s = sourceScanner(src)
-      s.next()
-      return (
-        s.tok == token.INT &&
-        isNaN(s.int32val) &&
-        s.int64val == null
-      )
-    },
+  quickcheck([809, 10000], i => {
+    let src = negI64Gen(i)
+    let s = sourceScanner(src)
+    s.next()
+    return (
+      s.tok == token.INT &&
+      isNaN(s.int32val) &&
+      s.int64val == null
+    )
   })
 
 })

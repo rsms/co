@@ -23,11 +23,11 @@ import {
 } from '../types'
 
 
-// Instruction set borrowed from
-//   go/src/cmd/compile/internal/ssa/gen/genericOps.go
-//
 // Strategy borrowed from
 //   go/src/cmd/compile/internal/ssa/op.go
+//
+// Instruction set inspired by
+//   go/src/cmd/compile/internal/ssa/gen/genericOps.go
 //
 
 
@@ -43,76 +43,63 @@ export enum SymEffect {
   ReadWrite = 1 | 2,  // Read | Write
 }
 
-const OpPrototype = {
-  name: "" as string,
-    // printed name
+
+export class Op {
+  name: string // printed name
+  argLen: int
+  type = null as BasicType|null // default result type
+  aux = null as NativeType|null // type of aux field
+    // number of arguments, if -1, then this operation has a variable number
+    // of arguments
+  constant = false as bool // true if the value is a constant. Value in aux
+  commutative = false as bool
+    // this operation is commutative on its first 2 arguments (e.g. addition)
+  resultInArg0 = false as bool
+    // (first, if a tuple) output of v and v.Args[0] must be allocated to the
+    // same register
+  resultNotInArgs = false as bool
+    // outputs must not be allocated to the same registers as inputs
+  rematerializeable = false as bool
+    // whether a register allocator can recompute a value instead of
+    // spilling/restoring it.
+  clobberFlags = false as bool // this op clobbers flags register
+  call = false as bool         // is a function call
+  nilCheck = false as bool     // this op is a nil check on arg0
+  faultOnNilArg0 = false as bool
+    // this op will fault if arg0 is nil (and aux encodes a small offset)
+  faultOnNilArg1 = false as bool
+    // this op will fault if arg1 is nil (and aux encodes a small offset)
+  usesScratch = false as bool  // this op requires scratch memory space
+  hasSideEffects = false as bool
+    // for "reasons", not to be eliminated.  E.g., atomic store.
+  zeroWidth = false as bool
+    // op never translates into any machine code. example: copy, which may
+    // sometimes translate to machine code, is not zero-width.
+  symEffect = SymEffect.None as SymEffect
+    // effect this op has on symbol in aux
+  // reg =           null, // regInfo
+  // asm =            "", // string
+
+  constructor(name :string, argLen :int, props? :Partial<Op>) {
+    if (props) for (let k in props) {
+      ;(this as any)[k] = (props as any)[k]
+    }
+    this.name = name
+    this.argLen = argLen || 0
+  }
 
   toString() :string {
     return this.name
-  },
+  }
 }
 
-
-export const defaultOp = {
-  __proto__: OpPrototype,
-
-  type:              null as BasicType|null,
-    // default result type
-  aux:               null as NativeType|null,
-    // ?
-  argLen:            0 as int,
-    // number of arguments, if -1, then this operation has a variable number
-    // of arguments
-  constant:          false as bool,
-    // true if the value is a constant. Value in aux
-  commutative:       false as bool,
-    // this operation is commutative on its first 2 arguments (e.g. addition)
-  resultInArg0:      false as bool,
-    // (first, if a tuple) output of v and v.Args[0] must be allocated to the
-    // same register
-  resultNotInArgs:   false as bool,
-    // outputs must not be allocated to the same registers as inputs
-  clobberFlags:      false as bool,
-    // this op clobbers flags register
-  call:              false as bool,
-    // is a function call
-  nilCheck:          false as bool,
-    // this op is a nil check on arg0
-  faultOnNilArg0:    false as bool,
-    // this op will fault if arg0 is nil (and aux encodes a small offset)
-  faultOnNilArg1:    false as bool,
-    // this op will fault if arg1 is nil (and aux encodes a small offset)
-  usesScratch:       false as bool,
-    // this op requires scratch memory space
-  hasSideEffects:    false as bool,
-    // for "reasons", not to be eliminated.  E.g., atomic store.
-  zeroWidth:         false as bool,
-    // op never translates into any machine code. example: copy, which may
-    // sometimes translate to machine code, is not zero-width.
-  symEffect:         SymEffect.None as SymEffect,
-    // effect this op has on symbol in aux
-
-  // reg?            null, // regInfo
-  // asm:            "", // string
-}
 
 const t_addr = t_usize
 
-export type Op = typeof OpPrototype & typeof defaultOp
-
-export const genericOps :Op[] = []
-
 function op(name :string, argLen :int, props? :Partial<Op>) :Op {
-  const op = {} as Op
-  Object.assign(op, defaultOp)
-  if (props) {
-    Object.assign(op, props as Op)
-  }
-  op.name = name
-  op.argLen = argLen || 0
-  genericOps.push(op)
-  return op
+  return new Op(name, argLen, props)
 }
+
 
 // operations
 export const ops = {

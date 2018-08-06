@@ -1,6 +1,13 @@
-import { RegAlloc, Fun, Block, Value, Op } from './ir'
-import { u_t_int, u_t_uint, u_t_i32, u_t_u32, u_t_u64 } from './ast'
-import { debuglog as dlog } from './util'
+import { debuglog as dlog } from '../util'
+import { UInt64 } from '../int64'
+import { Mem, t_int, t_uint, t_i32, t_u32, t_u64, intTypes } from '../types'
+import { Fun, Block, Value } from './ssa'
+import { Op, ops } from './op'
+import { RegAlloc } from './regalloc'
+import { Register, Reg, RegSet, fmtRegSet, emptyRegSet } from './reg'
+import { Config } from './config'
+import { layoutRegallocOrder } from './layout'
+import { fmtir } from './repr'
 
 // NaiveRegAlloc performs naïve register allocation, meaning that for
 // every operation, its operands are loaded into registers and--
@@ -36,34 +43,190 @@ import { debuglog as dlog } from './util'
 //   v4 = i32Sub <i32> v1 v3
 //   v5 = i32Mul <i32> v3 v4
 //   ret v5
-// 
 //
-export class NaiveRegAlloc implements RegAlloc {
-  // int types for 32-bit targets
-  readonly sint_type = u_t_i32
-  readonly uint_type = u_t_u32
-  readonly addr_type = u_t_u64
 
-  // normtype lowers target-dependent v.type to specific type.
-  //
-  normtype(v :Value) {
-    const a = this
-    if (v.type === u_t_int) {
-      v.type = a.sint_type
-    } else if (v.type === u_t_uint) {
-      v.type = a.uint_type
+
+const maxregs = 64  // maximum number of registers we can manage
+const noReg :Reg = 255 >>> 0  // symbolizes "none"
+
+
+// countRegs returns the number of set bits in the register mask.
+//
+function countRegs(m :RegSet) :int {
+  return m.popcnt()
+  // let n = 0
+  // while (m != 0) {
+  //   n += m & 1
+  //   m >>= 1
+  // }
+  // return n
+}
+
+
+// pickReg picks an arbitrary register from the register mask.
+//
+function pickReg(m :RegSet) :Reg {
+  // pick the lowest one
+  if (m.isZero()) {
+    panic("can't pick a register from an empty set")
+  }
+  for (let i :Reg = 0; ; i++) {
+    if (!m.and(UInt64.ONE).isZero()) {
+      return i
     }
+    m = m.shr(1) // m = m >> 1
+  }
+}
+
+interface Use {
+  dist :int      // distance from start of the block to a use of a value
+  next :Use|null // linked list of uses of a value in nondecreasing dist order
+  // pos  :Pos   // source position of the use
+}
+
+// A valState records the register allocation state for a (pre-regalloc) value.
+class ValState {
+  regs       = emptyRegSet as RegSet
+    // the set of registers holding a Value (usually just one)
+  uses       = null as Use|null   // list of uses in this block
+  spill      = null as Value|null // spilled copy of the Value (if any)
+  restoreMin = 0 as int  // minimum of all restores' blocks' sdom.entry
+  restoreMax = 0 as int  // maximum of all restores' blocks' sdom.exit
+  needReg    = false as bool // cached value of
+    // !v.Type.IsMemory() && !v.Type.IsVoid() && !.v.Type.IsFlags()
+  rematerializeable = false as bool  // cached value of v.rematerializeable()
+}
+
+
+export class NaiveRegAlloc implements RegAlloc {
+  readonly config :Config
+  readonly addrsize :Mem
+  readonly addrtype = t_u32
+
+  // labels :Map<Value,int>  // maps values to addresses
+
+  readonly registers   :Register[]  // registers of the target architecture
+  readonly numregs     :int         // always == registers.length
+  readonly allocatable :RegSet      // registers we are allowed to allocate
+
+  f          :Fun  // function being processed
+  visitOrder :Block[] = []
+
+  SPReg :Reg  // the SP register
+  SBReg :Reg  // the SB register
+  GReg  :Reg  // the g register (current coroutine)
+
+  // current state of each (preregalloc) Value
+  values :ValState[] = []
+
+  sp :int // ID of SP register Value
+  sb :int // ID of SB register Value
+
+  nospill :RegSet  // registers that contain values which can't be kicked out
+  used    :RegSet  // registers currently in use
+  tmpused :RegSet  // registers used in the current instruction
+
+  constructor(config :Config) {
+    const a = this
+
+    this.config = config
+    this.addrtype = intTypes(config.addrSize)[1]
+    this.addrsize = config.addrSize
+
+    // TODO provide registers as an argument
+    this.registers = config.registers
+    this.numregs = config.registers.length
+    if (a.numregs == 0 || a.numregs > maxregs) {
+      panic(`invalid number of registers: ${a.numregs}`)
+    }
+
+    // Locate SP, SB, and g registers.
+    this.SPReg = noReg
+    this.SBReg = noReg
+    this.GReg = noReg
+    for (let r :Reg = 0; r < a.numregs; r++) {
+      switch (a.registers[r].name) {
+        case "SP": a.SPReg = r; break
+        case "SB": a.SBReg = r; break
+        case "g":  if (config.hasGReg) { a.GReg = r }; break
+      }
+    }
+    if (a.SPReg == noReg) { panic("no SP register found") }
+    if (a.SBReg == noReg) { panic("no SB register found") }
+    if (config.hasGReg && a.GReg == noReg) { panic("no g register found") }
+
+    // Figure out which registers we're allowed to use.
+    const config_gpRegMask = 0xffffff
+    this.allocatable = config.gpRegMask.or(config.fpRegMask.or(config.specialRegMask))
+
+    // .allocatable &^= 1 << s.SPReg
+    // .allocatable = .allocatable & ~(1 << s.SPReg)
+    this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SPReg).not())
+    this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SBReg).not())
+    this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.GReg).not())
+
+    dlog(`allocatable:`, fmtRegSet(a.allocatable))
+    process.exit(0)
   }
 
-  visitFun(f :Fun) {
+  init(f :Fun) {
     const a = this
+    a.f = f
+  }
+
+  regallocFun(f :Fun) {
+    const a = this
+    a.init(f)
 
     // Add SP (stack pointer) value to the top of the entry block.
     // TODO: track the need for this when generating the initial IR.
     // Some functions do not need SP.
     // Also consider always adding this during IR construction.
-    const SP = f.newValue(Op.SP, a.addr_type, f.entryb, null)
-    f.entryb.pushValueFront(SP)
+    const SP = f.newValue(f.entry, ops.SP, a.addrtype, null)
+    f.entry.pushValueFront(SP)
+
+    // Linear scan register allocation can be influenced by the order in which
+    // blocks appear.
+    // Decouple the register allocation order from the generated block order.
+    // This also creates an opportunity for experiments to find a better order.
+    a.visitOrder = layoutRegallocOrder(f)
+    if (a.config.optimize) {
+      // update function block order with new layout
+      f.blocks = a.visitOrder
+    }
+
+    // Compute block order. This array allows us to distinguish forward edges
+    // from backward edges and compute how far they go.
+    let blockOrder = new Array<int>(f.numBlocks())
+    for (let i = 0; i < a.visitOrder.length; i++) {
+      blockOrder[a.visitOrder[i].id] = i >>> 0
+    }
+
+    // s.regs = make([]regState, s.numRegs)
+    a.values = new Array<ValState>(f.numValues())
+    // s.orig = make([]*Value, f.NumValues())
+    // s.copies = make(map[*Value]bool)
+    for (let b of a.visitOrder) {
+      let v :Value|null = b.vhead
+      for (; v; v = v.nextv) {
+        let t = v.type
+        let val = new ValState()
+        a.values[v.id] = val
+        // if (!t.isMemory() && !t.IsVoid() && !t.IsFlags() && !t.IsTuple())
+        if (t.mem > 0 && !t.isTuple()) {
+          val.needReg = true
+          val.rematerializeable = v.rematerializeable()
+          // a.orig[v.id] = v
+        }
+      }
+    }
+    // dlog('a.values:', a.values)
+
+
+    // argalign defines address alignment for args.
+    // Must not be larger than address size.
+    let argalign = 4
+    assert(argalign <= a.addrsize, "argalign larger than address size")
 
     // argoffs tracks bytes relative to a frame's SP
     // where we are operating. It starts with the return address.
@@ -71,19 +234,18 @@ export class NaiveRegAlloc implements RegAlloc {
     // Note: args are at the very beginning of the entry block, thus
     // the while condition op==Arg.
     //
-    let argoffs = a.addr_type.size
+    let argoffs = a.addrsize
     let v = SP.nextv; // SP is at top of entry block
-    while (v && v.op === Op.Arg) {
-      a.normtype(v)
+    while (v && v.op === ops.Arg) {
       v.aux = argoffs
       // v.args = [SP] ; SP.uses++ ; SP.users.push(v)
-      assert(v.type.size > 0)
+      assert(v.type.size > 0, `abstract type ${v.type}`)
       argoffs += v.type.size
       v = v.nextv
     }
     
     // visit function's entry block
-    a.block(f.entryb, SP)
+    a.block(f.blocks[0], SP)
   }
 
   block(b :Block, _SP :Value) {
@@ -96,16 +258,15 @@ export class NaiveRegAlloc implements RegAlloc {
     while (v && limit--) {
 
       // normalize target-dependent types
-      a.normtype(v)
       dlog(`v ${v}`)
 
       // switch on operation
       switch (v.op) {
 
-      case Op.Arg: // ignore arg (handled early on)
+      case ops.Arg: // ignore arg (handled early on)
         break
 
-      case Op.i32Add:
+      case ops.AddI32: {
         assert(v.args)
 
         let operands = v.args as Value[]
@@ -121,8 +282,9 @@ export class NaiveRegAlloc implements RegAlloc {
         operands[1] = b.insertValueBefore(v, loadreg)
 
         // RegStore
-        let storeaddr = b.f.constVal(a.addr_type, localoffs)
-        let storereg = b.f.newValue(Op.RegStore, v.type, b, 1)
+        dlog(`v=${v}, v.type=${v.type}`)
+        let storeaddr = b.f.constVal(a.addrtype, localoffs)
+        let storereg = b.f.newValue(b, ops.Store, v.type, 1)
         storereg.args = [storeaddr] ; storeaddr.uses++ ; storeaddr.users.push(storereg)
 
         // let operands = v.args as Value[]
@@ -132,8 +294,8 @@ export class NaiveRegAlloc implements RegAlloc {
         // if (loadv0 !== loadv1) {
         //   loadv1.replaceBy(a.loadreg(b, loadv1, 2, -16))
         // }
-
-        break
+      }
+      break
 
       }
 
@@ -142,8 +304,9 @@ export class NaiveRegAlloc implements RegAlloc {
   }
 
   loadreg(b :Block, v :Value, reg :int) :Value {
-    let regload = b.f.newValue(Op.RegLoad, v.type, b, reg)
-    regload.args = [v] ; v.uses++ ; v.users.push(regload)
+    let regload = b.f.newValue(b, ops.Load, v.type, reg)
+    regload.args = [v]
+    v.uses++ ; v.users.push(regload)
     return regload
   }
 
