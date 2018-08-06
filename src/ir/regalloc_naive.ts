@@ -166,7 +166,7 @@ export class NaiveRegAlloc implements RegAlloc {
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.GReg).not())
 
     dlog(`allocatable:`, fmtRegSet(a.allocatable))
-    process.exit(0)
+    // process.exit(0)
   }
 
   init(f :Fun) {
