@@ -1,0 +1,14 @@
+<script>
+  var n,i,L,cn,v = document.getElementsByTagName('pre');
+  for (i=0,L=v.length;i<L;++i) {
+    n = v.item(i);
+    n.className = 'highlight';
+    if ((cn = n.firstChild) && cn.nodeName == 'CODE') {
+      if (cn.className.indexOf("none") !== -1 || cn.className.indexOf("txt") !== -1) {
+        cn.className = 'nohighlight';
+      }
+    }
+    n.id = 'snippet-' + i
+  }
+</script>
+<script async src="{{ url_root }}r/highlight.js?v={{ build_version }}"></script>

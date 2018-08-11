@@ -23,13 +23,11 @@ endcapture %}<!DOCTYPE HTML>
     <meta property="og:title" content="{{ page.title }}">
     <meta name="twitter:title" content="{{ page.title }}">
     {% if page.description %}
-    <meta name="description" content="{{ page.description }}">
-    <meta name="og:description" content="{{ page.description }}">
-    <meta name="twitter:description" content="{{ page.description }}">
-    {% else if content %}
-    <meta name="description" content="{{ content | strip_html | truncatewords: 25 }}">
-    <meta name="og:description" content="{{ content | strip_html | truncatewords: 25 }}">
-    <meta name="twitter:description" content="{{ content | strip_html | truncatewords: 25 }}">
+    <meta name="description" content="{{ page.description | trim }}">
+    <meta name="og:description" content="{{ page.description | trim }}">
+    <meta name="twitter:description" content="{{ page.description | trim }}">
+    {% else %}
+    <meta name="description" content="Programming language">
     {% endif %}
     {% else %}
     <meta name="description" content="Programming language">
@@ -43,12 +41,37 @@ endcapture %}<!DOCTYPE HTML>
     <meta property="og:type" content="article">
     <meta property="og:locale" content="en_US" />
   </head>
-  <body>
-    <section class="header">
+  <body class="{{ page.style }}">
+    {% if page.header == "minimal" %}
+    <a class="logo-label minimal" href="{{url_root}}" title="The Co programming language">
+      {% include icons/logo.svg %}
+    </a>
+    {% else %}
+    <a class="logo-label" href="{{url_root}}" title="The Co programming language">
+      {% include icons/logo.svg %}
+    </a>
+    <ul class="menu">
+      <li><a
+        title="Documentation"
+        href="{{url_root}}doc/"
+        {% if page.url contains "/doc/" %}class="active"{% endif %}
+        >Doc</a></li>
+      <li><a
+        title="Playground"
+        href="{{url_root}}play/"
+        {% if page.url contains "/play/" %}class="active"{% endif %}
+        >Try</a></li>
+      <li><a
+        title="Source code"
+        href="https://github.com/rsms/co"
+        >Src</a></li>
+    </ul>
+    <!--
+    <section class="header{% if page.header %} {{ page.header }}{% endif %}">
       <div>
         <h1><a href="{{url_root}}">
           {% include icons/logo.svg %}
-          <span>The Co programming language</span>
+          <span class="title">The Co programming language</span>
         </a></h1>
         <ul>
           <li><a href="{{url_root}}doc/"{% if page.url contains "/doc/" %}class="active"{% endif %}>Docs</a></li>
@@ -56,12 +79,14 @@ endcapture %}<!DOCTYPE HTML>
           <li><a href="https://github.com/rsms/co">Source</a></li>
         </ul>
       </div>
-    </section>
+    </section>-->
+    {% endif %}
 
     {{ content }}
 
     <script async src="https://www.googletagmanager.com/gtag/js?id=UA-105091131-3"></script>
     <script src="{{url_root}}r/initdoc.js?v={{ build_version }}"></script>
+    {% include highlight.html %}
     {% include autoreload-in-debug.html %}
   </body>
 </html>

@@ -1,0 +1,1155 @@
+---
+layout: default
+style: app
+title: regalloc
+---
+{% capture build_version
+  %}{{ site.time | date: "%Y%m%d%H%M%S" }}{%
+endcapture %}{%
+capture url_root
+  %}{% if site.safe == false %}/{% else %}/co/{% endif
+%}{%
+endcapture %}
+
+<link rel="stylesheet" href="{{url_root}}r/ted.css?v={{ build_version }}" type="text/css">
+<link rel="stylesheet" href="index.css?v={{ build_version }}" type="text/css">
+<script src="common.js"></script>
+<script src="{{url_root}}r/ted.js?v={{ build_version }}"></script>
+<script src="svg.js?v={{ build_version }}"></script>
+<script src="chaitin.js?v={{ build_version }}"></script>
+<script src="slc.js?v={{ build_version }}"></script>
+<script src="uibindings.js?v={{ build_version }}"></script>
+
+<div class="main">
+  <div class="code">
+    <div class="files"></div>
+    <div class="config">
+      <div class="inputs">
+        <label title="Enable Briggs' extension to Chaitin's algorithm for dealing with spill">
+          <input name="enable-briggs" type="checkbox" checked>
+          Briggs
+        </label>
+        <label title="Immediately compute on changes">
+          <input name="immediate" type="checkbox">
+          Immediate
+        </label>
+        <label title="Number of registers">
+          <input name="regcount" type="number" min="1" max="64" value="3">
+          Registers
+        </label>
+      </div>
+      <div class="controls">
+        <button class="svg" name="restart" title="Restart">
+          {% include icons/reset.svg %}
+        </button>
+        <button name="step-back" disabled><-</button>
+        <button name="step-fwd" title="Next Step">-></button>
+      </div>
+    </div>
+  </div>
+  <div class="center">
+    <div class="graph1">
+      <svg class="graph" width="320" height="300"></svg>
+    </div>
+    <div class="regs"></div>
+    <div class="status-bar">
+      <div class="msg">Ready</div>
+    </div>
+  </div>
+  <div class="vstack"></div>
+</div>
+
+
+
+<script>
+
+
+let defaultSLC = `
+a = 1
+b = 2
+c = 3
+d = b + a
+e = b + c
+f = e + b
+g = d + c
+//g = d + f
+`.trim()
+
+let slcFile = new ted.File('slc', defaultSLC, 'slcEditor')
+let livenessFile = new ted.File("live", "", "livenessEditor")
+let regsFile = new ted.File("regs", "", "regsEditor")
+
+
+slcFile.onChange = (type, data) => {
+  // console.log('file changed', {type, data})
+  setSLCode(slcFile.text())
+}
+
+slcFile.mount($('.main .files'))
+
+livenessFile.mount($('.main .files'))
+livenessFile.setReadOnly(true)
+
+regsFile.mount($('.main .files'))
+regsFile.setReadOnly(true)
+
+let igraph = new InterferenceGraph($('svg.graph'))
+let vstackel = $('.vstack')
+
+
+// special register value denoting a spill
+let SPILL_REG = -2
+
+
+// register count
+class RegistersView {
+  constructor(el, count) {
+    this.el = el
+    this.count = count || 3
+    this.colors = [
+      '#f8f',
+      '#fe0',
+      '#2ef',
+      '#2f8',
+      '#ffad72',
+      '#b1beff',
+    ]
+    this.elements = []  // r => HTMLElement
+    this.resetState()
+  }
+
+  resetState() {
+    this.state = new Array(this.count)
+    for (let r = 0; r < this.count; r++) {
+      this.state[r] = false
+      this.free(r)
+    }
+  }
+
+  setCount(count) {
+    this.count = count
+    this.resetState()
+    this.render()
+  }
+
+  color(r) {
+    return this.colors[r % this.colors.length]
+  }
+
+  setAllocated(r, allocated) {
+    if (this.state[r] != !allocated) {
+      this.state[r] = !allocated
+      let el = this.elements[r]
+      if (el) {
+        if (allocated) {
+          el.classList.add('allocated')
+          el.style.backgroundColor = this.color(r)
+        } else {
+          el.classList.remove('allocated')
+          el.style.backgroundColor = null
+        }
+      }
+    }
+  }
+
+  // allocAny() : number
+  // returns -1 if no register is available
+  allocAny() {
+    for (let r = 0; r < this.state.length; r++) {
+      if (this.state[r]) {
+        this.setAllocated(r)
+        return r
+      }
+    }
+    return -1
+  }
+
+  alloc(r) {
+    if (!this.state[r]) {
+      throw new Error('register ' + r + ' already allocated')
+    }
+    this.setAllocated(r, true)
+  }
+
+  free(r) {
+    if (this.state[r]) {
+      throw new Error('register ' + r + ' already free')
+    }
+    this.setAllocated(r, false)
+  }
+
+  render() {
+    this.elements = new Array(this.count)
+    this.el.innerText = ""
+    for (let r = 0; r < this.count; r++) {
+      let e = document.createElement('div')
+      e.className = 'reg'
+      e.innerText = 'r' + r
+      e.style.borderColor = this.color(r)
+      this.el.appendChild(e)
+      this.elements[r] = e
+    }
+    // TODO
+  }
+}
+
+
+class StatusBar {
+  constructor(el) {
+    this.el = el
+  }
+
+  add(kind, args) {
+    let e = document.createElement('div')
+    let s = ''
+    for (let i = 0; i < args.length; i++) {
+      if (i != 0) {
+        s += ' '
+      }
+      s += args[i]
+    }
+    e.innerText = s
+    this.addElement(kind, e)
+  }
+
+  addElement(kind, e) {
+    e.className = 'msg ' + kind
+    if (this.el.children.length) {
+      let old = this.el.children[0]
+      old.classList.add('gone')
+      setTimeout(() => this.el.removeChild(old), 1000)
+      this.el.insertBefore(e, old)
+    } else {
+      this.el.appendChild(e)
+    }
+  }
+
+  log(/* ...msg */) {
+    this.add('', arguments)
+  }
+
+  err(/* ...msg */) {
+    this.add('err', arguments)
+  }
+
+  html(html, kind) {
+    let e = document.createElement('div')
+    e.innerHTML = html
+    if (e.childNodes.length == 1) {
+      e = e.childNodes[0]
+    }
+    this.addElement(kind || '', e)
+  }
+}
+
+
+let regs = new RegistersView($('.regs'), 4)
+let uiv = new UIBindings(document.location.search)
+let status = new StatusBar($('.status-bar'))
+status.log('Ready')
+
+
+
+function defImplicits(vals) {
+  let defs = new Set()
+  // let idefs = []
+  for (let i = 0; i < vals.length; i++) {
+    let v = vals[i]
+    defs.add(v.id)
+    for (let v2 of v.operands) {
+      if (!defs.has(v2)) {
+        // console.log('idef', v2)
+        // idefs.push(v2)
+        vals.splice(i, 0, { id: v2, op: 'idef', operands:[] })
+        defs.add(v2)
+        i++
+      }
+    }
+  }
+  //console.log(vals.map(v => v.id).join('  '))
+  // return idefs
+}
+
+
+function computeLiveness(vals) {
+  let live = new Set()
+  let ifer = new Map()  // interference graph
+  // Note: interference graph is build with this general approach:
+  //   connect x and y if x is live at a point where y is defined.
+  //
+  for (let i = vals.length; i--; ) {
+    let v = vals[i]
+
+    live.delete(v.id)  // whatever is assigned to dead
+
+    // things referenced are alive
+    for (let operand of v.operands) {
+      // console.log(`[${v.id} ${v.op}] ${operand} is live`)
+      live.add(operand)
+    }
+
+    v.live = Array.from(live).sort()
+    //console.log(`[${v.id} ${v.op}] live:`, v.live)
+
+    // horrible way of building an interference graph of live values.
+    // Essentially, for the three live values { a, b, c } build the
+    // undirected graph:
+    //   a -- b
+    //   a -- c
+    //   b -- a
+    //   b -- c
+    //   c -- a
+    //   c -- b
+    //
+    for (let id1 of v.live) {
+      for (let id2 of v.live) {
+        if (id1 === id2) {
+          if (!ifer.has(id1)) {
+            ifer.set(id1, new Set())
+          }
+          continue
+        }
+        let s = ifer.get(id1)
+        if (!s) {
+          ifer.set(id1, new Set([id2]))
+        } else {
+          s.add(id2)
+        }
+      }
+    }
+
+    // if (ifer.has(v.id)) {
+    //   throw new Error(`duplicate definition of ${v.id}`)
+    // }
+    // ifer.set(v.id, v.live)
+  }
+  return ifer
+}
+
+
+function updateLivenessDisplay(values) {
+  let lines = []
+  for (let v of values) {
+    if (v.op == 'idef') {
+      // skip implicitly-defined values
+      continue
+    }
+    if (v.live.length == 0) {
+      lines.push('{}')
+    } else {
+      lines.push('{ ' + v.live.join(' ') + ' }')
+    }
+    // console.log(v)
+  }
+  livenessFile.setText(lines.join('\n'))
+}
+
+
+let currentValues = []
+let currentValuesById = {}
+
+
+function setSLCode(src) {
+  stopChaitinBriggs()
+  try {
+    status.log('Parsing')
+
+    // parse SLC code
+    let values = slc.parse(src)
+
+    // synthesize undefined values
+    defImplicits(values)
+
+    // compute live variables, store on values[N].live
+    let ifgraph = computeLiveness(values)
+    console.log('values:', values)
+    console.log('ifgraph:', ifgraph)
+
+    // update livenessFile
+    updateLivenessDisplay(values)
+
+    currentValues = values
+    currentValuesById = {}
+    for (let v of values) {
+      currentValuesById[v.id] = v
+    }
+
+    // values = vals
+    igraph.svg.n.style.opacity = '1'
+    igraph.renderGraph(ifgraph)
+    // igraph.nodes['b'].circleNode.attr('fill', '#faf')
+
+    restartChaitinBriggs(igraph, ifgraph)
+
+    updateRegsEditor()
+
+  } catch (err) {
+    status.err(err.message)
+    console.error(err.stack || ''+err)
+    igraph.svg.n.style.opacity = '0.2'
+    return
+  }
+}
+
+
+function updateRegsEditor() {
+  // reads currentValues
+  let lines = []
+
+  function fmtval(v) {
+    let r = v.register === undefined ? -1 : v.register
+    return v.id + (
+      r == SPILL_REG ? '<sm>' :
+      r < 0 ? '[?]' :
+      '[r' + r + ']'
+    )
+  }
+  
+  for (let v of currentValues) {
+    let r = v.register || -1
+    let line = fmtval(v) + ' = '
+    if (v.op == '=') {
+      line += v.consts.join(' ')
+    } else if (v.op == 'idef') {
+      line += '(unknown)'
+    } else {
+      let id1 = v.operands[0]
+      let opv = currentValuesById[id1]
+      line += (opv ? fmtval(opv) : id1) + ' ' + v.op
+
+      line += ' ' + v.operands.slice(1).map(id2 => {
+        let opv = currentValuesById[id2]
+        return opv ? fmtval(opv) : id2
+      }).join(' ')
+    }
+    lines.push(line)
+  }
+
+  // regsText += id + ' [r' + register + ']\n'
+  regsFile.setText(lines.join('\n'))
+}
+
+
+class Stepper {
+  constructor() {
+    this.stepFwdButton = $('button[name="step-fwd"]')
+    this.stepBackButton = $('button[name="step-back"]')
+    this.restartButton = $('button[name="restart"]')
+    this.stepFwdButton.onclick = ev => stepper.next()
+    this.stepBackButton.onclick = ev => stepper.prev()
+    this.stepFwdFuns = []
+    this.stepBackFuns = []
+    this.autoStepTimer = null
+    this.stepNo = 0
+    this.done = false
+    this.reset()
+  }
+
+  onDone() {
+    this.done = true
+    this.stepFwdButton.disabled = true
+    clearInterval(this.autoStepTimer)
+  }
+
+  reset() {
+    this.stepNo = 0
+    this.done = false
+    this.stepFwdButton.disabled = this.stepFwdFuns.length == 0
+    this.stepBackButton.disabled = this.stepBackFuns.length == 0
+    this.restartButton.disabled = true
+    clearInterval(this.autoStepTimer)
+  }
+
+  next() {
+    if (!this.done && this.stepFwdFuns.length) {
+      for (let fn of this.stepFwdFuns) {
+        let r = fn(this.stepNo)
+        if (r === true) {
+          this.onDone()
+        }
+      }
+      this.stepNo++
+      this.restartButton.disabled = false
+      return true
+    }
+    return false
+  }
+
+  prev() {
+    if (this.stepNo > 0 && this.stepBackFuns.length) {
+      this.stepNo--
+      for (let fn of this.stepBackFuns) {
+        fn(this.stepNo)
+      }
+      return true
+    } else {
+      return false
+    }
+  }
+
+  addStepFwdFun(fn) {
+    this.stepFwdFuns.push(fn)
+    this.reset()
+  }
+
+  addStepBackFun(fn) {
+    this.stepBackFuns.push(fn)
+    this.reset()
+  }
+
+  removeStepFun(fn) {
+    let i = this.stepFwdFuns.indexOf(fn)
+    if (i != -1) {
+      this.stepFwdFuns.splice(i, 1)
+    }
+    i = this.stepBackFuns.indexOf(fn)
+    if (i != -1) {
+      this.stepBackFuns.splice(i, 1)
+    }
+    this.reset()
+  }
+
+  startAutoStepFwd(interval) {
+    clearInterval(this.autoStepTimer)
+    this.autoStepTimer = setInterval(() => {
+      if (!this.next()) {
+        clearInterval(this.autoStepTimer)
+      }
+    }, interval || 500)
+  }
+}
+
+
+let stepper = new Stepper()
+
+
+let moveAnimationDuration = 600 // ms
+let chaitinBriggsStepFwdFn = null
+
+
+function stopChaitinBriggs() {
+  stepper.removeStepFun(chaitinBriggsStepFwdFn)
+}
+
+
+function restartChaitinBriggs(igraph, ifgraph) {
+  stopChaitinBriggs()
+
+  // Note: igraph.nodes => { "id" : SvgNode ... }
+
+  let k = regs.count
+
+  // let vals = buildAllEdgesMap(ifgraph)
+  let ids = Array.from(ifgraph.keys())
+
+  let vstack = []
+  let idToStackEl = new Map()
+  let emptySet = new Set()
+
+  // clear stack
+  while (vstackel.childNodes.length) {
+    vstackel.removeChild(vstackel.childNodes[0])
+  }
+
+  // copy graph
+  let ifgraphCopy = new Map(ifgraph)
+  for (let p of ifgraphCopy) {
+    ifgraphCopy.set(p[0], new Set(p[1]))
+  }
+
+
+  function animateValue(id, srcpos, dstpos, callback) {
+    let el = idToStackEl.get(id)
+
+    if (immediateVar.getValue()) {
+      return callback(el)
+    }
+
+    let animatedEl = el.cloneNode(true)
+    animatedEl.style.transform =
+      'translate3d(' + srcpos.x + 'px, ' + srcpos.y + 'px, 0)'
+    animatedEl.style.zIndex = 1000 + vstackel.childNodes.length
+    animatedEl.classList.add('ani')
+    animatedEl.classList.remove('invisible')
+    document.body.appendChild(animatedEl)
+
+    let ontransitionend = ev => {
+      animatedEl.removeEventListener('transitionend', ontransitionend)
+      animatedEl.parentElement.removeChild(animatedEl)
+      if (callback) {
+        callback(el)
+      }
+    }
+    animatedEl.addEventListener('transitionend', ontransitionend)
+
+    requestAnimationFrame(() => {
+      el.classList.add('invisible')
+      animatedEl.classList.add('s1')
+      setTimeout(() => {
+        animatedEl.classList.remove('s1')
+        animatedEl.classList.add('s2')
+      }, moveAnimationDuration / 2)
+      animatedEl.style.transform =
+        'translate3d(' + dstpos.x + 'px, ' + dstpos.y + 'px, 0)'
+    })
+  }
+
+
+  function moveOut(id) {
+    console.log('move out', id)
+
+    let edges = ifgraph.get(id)
+    // put on stack together with copy of edges
+    vstack.push([id, edges])
+
+    let el = document.createElement('div')
+    el.className = 'val invisible'
+    el.innerText = id
+    el.style.zIndex = vstackel.childNodes.length
+
+    idToStackEl.set(id, el)
+
+    if (vstackel.childNodes.length == 0) {
+      vstackel.appendChild(el)
+    } else {
+      vstackel.insertBefore(el, vstackel.childNodes[0])
+    }
+
+    // animate value moving from graph into stack
+    let srcrect = igraph.nodes[id].g.n.getBoundingClientRect()
+    let dstrect = el.getBoundingClientRect()
+    animateValue(id, srcrect, dstrect, () => {
+      el.classList.remove('invisible')
+    })
+
+    // clear edges
+    ifgraph.set(id, emptySet)
+    for (let p of ifgraph) {
+      p[1].delete(id)
+    }
+
+    for (let v of vstack) {
+      let id1 = v[0]
+      igraph.nodes[id1].g.n.style.opacity = 0.2
+      for (let id2 of v[1]) {
+        let key = igraph.edgeKey(id1, id2)
+        let edge = igraph.edges[key]
+        edge.line.n.style.opacity = 0
+        // console.log('>>', key, '-', id1, id2)
+      }
+    }
+
+    // console.log('vstack:', vstack)
+  }
+
+
+  function updateSvgGraphNodeReg(id) {
+    let register = currentValuesById[id].register
+    let color = regs.color(register)
+    let gn = igraph.nodes[id]
+    if (color) {
+      gn.circleNode.attr('fill', color)
+    } else {
+      gn.g.n.classList.add('spill')
+    }
+  }
+
+
+  function moveIn(id, edges) {
+    console.log('move in', id, { edges })
+    // ifgraphCopy
+
+    let register = currentValuesById[id].register
+    let color = regs.color(register)
+
+    ifgraph.set(id, edges)
+
+    // element on stack
+    let el = idToStackEl.get(id)
+
+    // svg node
+    let gn = igraph.nodes[id]
+
+    // color it (as it will be flying across the screen)
+    el.style.backgroundColor = color || '#ddd'
+    
+    // disable transition animation on graph node
+    gn.g.n.style.transition = 'none'
+
+    // animate value moving from stack into graph
+    let srcrect = el.getBoundingClientRect()
+    let dstrect = gn.g.n.getBoundingClientRect()
+
+    animateValue(id, srcrect, dstrect, () => {
+      gn.g.n.style.opacity = null
+      if (color) {
+        gn.circleNode.attr('fill', color)
+      } else {
+        gn.g.n.classList.add('spill')
+      }
+
+      // restore edges to live nodes
+      for (let id2 of edges) {
+        let key = igraph.edgeKey(id, id2)
+        let edge = igraph.edges[key]
+        edge.line.n.style.opacity = null
+      }
+    })
+
+    el.parentElement.removeChild(el)
+  }
+
+
+  function tryPickKColorableVal() {
+    for (let i = 0; i < ids.length; i++) {
+      let id = ids[i]
+      let rels = ifgraph.get(id)
+      if (rels.size < k) {
+        moveOut(id)
+        found = true
+        ids.splice(i, 1)
+        return id
+      }
+    }
+    return null
+  }
+
+
+  function pickAnyVal() {
+    if (ids.length > 0) {
+      let id = ids.shift()
+      moveOut(id)
+      return id
+    }
+  }
+
+
+  let sortedIfgraph = null
+  let spillCandidates = new Set()
+
+  function sortIfgraph() {
+    // sort remaining nodes in ascending order of degrees (edges)
+    sortedIfgraph = new Map(
+      ids.map(id =>
+        [id, ifgraph.get(id)]
+      ).sort(
+        (a, b) => a[1].size - b[1].size
+      )
+    )
+    ids = Array.from(sortedIfgraph.keys())
+  }
+
+
+  function step1_moveToStack() {
+    console.log('step1_moveToStack')
+    let id = tryPickKColorableVal()
+
+    if (!id) {
+      // no k-colorable nodes
+      if (enableBriggsVar.getValue()) {
+        // continue with Briggs extension, if enabled
+        sortIfgraph()
+
+        // step1 --> step1b
+        stepper.removeStepFun(chaitinBriggsStepFwdFn)
+        stepper.addStepFwdFun(chaitinBriggsStepFwdFn = step1b_moveToStack_briggs)
+
+        id = pickAnyVal()
+        spillCandidates.add(id)
+        status.log('Found value "' + id + '" with degree >= k')
+      } else {
+        status.err('Graph is not k-colorable')
+        return true  // end
+      }
+    } else {
+      status.log('Found value "' + id + '" with degree < k')
+    }
+
+    if (ids.length == 0) {
+      // step1 --> step2
+      stepper.removeStepFun(chaitinBriggsStepFwdFn)
+      stepper.addStepFwdFun(chaitinBriggsStepFwdFn = step2_moveBack)
+    }
+  }
+
+
+  function step1b_moveToStack_briggs() {
+    console.log('step1b_moveToStack_briggs')
+
+    let id = tryPickKColorableVal()
+    if (!id) {
+      id = pickAnyVal()
+      spillCandidates.add(id)
+      status.log('Found value "' + id + '" with degree >= k')
+    } else {
+      status.log('Found value "' + id + '" with degree < k')
+    }
+
+    if (ids.length == 0) {
+      // step1 --> step2
+      stepper.removeStepFun(chaitinBriggsStepFwdFn)
+      stepper.addStepFwdFun(chaitinBriggsStepFwdFn = step2_moveBack)
+    }
+  }
+
+
+  function pickValueToSpill(vals) {
+    // pick least used val
+    let minUseVal = vals[0]
+    let minUseCount = minUseVal.uses
+    for (let i = 1; i < vals.length; i++) {
+      let v = vals[i]
+      if (v.uses < minUseCount) {
+        minUseCount = v.uses
+        minUseVal = v
+      }
+    }
+    return minUseVal
+  }
+
+
+  function anyValUsesRegister(register, ids) {
+    for (let id of ids) {
+      if (currentValuesById[id].register == register) {
+        return true
+      }
+    }
+    return false
+  }
+
+
+  let register = -1
+  let hasReshuffledIfgraph = false
+
+
+  function resolveInterference(id, edges, register) {
+    // At least one live value interferes.
+
+    // This next part is optional:
+    // If there's still interference, spill the least used value.
+    // When we spill a value different than the one we just picked
+    // (i.e. not `id`), we also caused the interference graph to change
+    // in relation to whatever other value was picked to be spilled.
+    // This means that we need to reconsider interference when that
+    // happens.
+    //
+    let val1 = currentValuesById[id]
+    let vals = [val1]
+    for (let id2 of edges) {
+      let val2 = currentValuesById[id2]
+      if (val2.register == register) {
+        vals.push(val2)
+      }
+    }
+
+    // optimistically assign the allocated register to val1
+    val1.register = register
+
+    // pick one of the interfering values to spill
+    let spilledVal = pickValueToSpill(vals)
+    spilledVal.register = SPILL_REG
+
+    if (spilledVal !== val1) {
+      // interference graph has been modified
+      hasReshuffledIfgraph = true
+      status.log(
+        'Assigned r' + register + ' to value "' + id +
+        '" and spilling value "' + spilledVal.id + '"'
+      )
+      updateSvgGraphNodeReg(spilledVal.id)
+    } else {
+      status.log('Spilling value "' + spilledVal.id + '"')
+    }
+  }
+
+
+  function searchForUsableRegister(register, edges) {
+    let x = 0
+    loop0:
+    while (x < regs.count) {
+      for (let id2 of edges) {
+        let val2 = currentValuesById[id2]
+        if (val2.register == register) {
+          register = (register + 1) % regs.count
+          x++
+          continue loop0
+        }
+      }
+      return register
+    }
+    return SPILL_REG
+  }
+
+
+  function step2_moveBack() {
+    let v = vstack.pop()  // [id, edges]
+    if (!v) {
+      return true
+    }
+    let id = v[0], edges = v[1]
+
+    // select the next register (round-robin)
+    register = (register + 1) % regs.count
+
+    if (spillCandidates.has(id)) {
+      // This value had degree >= k and thus is a candidate for spilling.
+      //
+      // First, we need to check and see if degree < k (i.e. there's no
+      // interference anymore). Else, we can search for an optimal allocation
+      // scheme, or just spill.
+      //
+      console.log('"' + id + '" is spill candidate. edges:', edges)
+
+      if (anyValUsesRegister(register, edges)) {
+        
+        // Resolve interference in a potentially clever way
+        resolveInterference(id, edges, register)
+
+        // Alternatively, simply spill this value
+        // currentValuesById[id].register = SPILL_REG
+
+        moveIn(id, edges)
+        updateRegsEditor()
+
+        return vstack.length == 0
+      }
+
+    } else if (hasReshuffledIfgraph) {
+      console.log('condition: hasReshuffledIfgraph  -- TODO: check for interference and pick a register')
+
+      let reg = searchForUsableRegister(register, edges)
+      if (reg < 0) {
+        // Resolve interference in a potentially clever way
+        resolveInterference(id, edges, register)
+
+        moveIn(id, edges)
+        updateRegsEditor()
+
+        return vstack.length == 0
+      }
+
+      register = reg
+    }
+
+    regs.setAllocated(register, true)
+
+    currentValuesById[id].register = register
+    moveIn(id, edges)
+    updateRegsEditor()
+
+    if (vstack.length == 0) {
+      status.log(
+        'Assigned r' + register + ' to value "' + id + '". We are done.')
+      return true  // end
+    } else {
+      status.log('Assigned r' + register + ' to value "' + id + '"')
+    }
+  }
+
+
+  status.log('Ready')
+
+  // add step function to stepper
+  stepper.addStepFwdFun(chaitinBriggsStepFwdFn = step1_moveToStack)
+  
+  // stepper.startAutoStepFwd(500)
+
+  if (immediateVar.getValue()) {
+    // compute immediately
+    while (stepper.next()) {}
+    return
+  }
+  
+  // for (let steps = ifgraph.size; steps--;) { stepper.next() }
+  // for (let steps = 3; steps--;) { stepper.next() }
+
+  // setTimeout(() => { stepper.next() }, moveAnimationDuration + 500)
+
+  // stepper.next()
+  // stepper.next()
+}
+
+
+function buildAllEdgesMap(values) {
+  let allvals = new Map()
+  for (let p of values) {
+    let id1 = p[0]
+    let s1 = allvals.get(id1)
+    if (!s1) {
+      s1 = new Set()
+      allvals.set(id1, s1)
+    }
+    for (let id2 of p[1]) {
+      // console.log(`${id1} -- ${id2}`)
+      let s2 = allvals.get(id2)
+      if (!s2) {
+        s2 = new Set([])
+        allvals.set(id2, s2)
+      }
+      s2.add(id1)
+      s1.add(id2)
+    }
+  }
+  console.log('allvals:', allvals)
+  return allvals
+}
+
+
+// "a : b c\nb : d e" => {a:["b","c"],b:["d","e"]}
+function parseConnections(s) {
+  let edges = {}
+  for (let line of s.trim().split(/\s*\n+\s*/)) {
+    let parts = line.split(/\s*:\s*/, 2)
+    let source = parts[0]
+    edges[source] = parts[1].split(/\s+/)
+  }
+  return edges
+}
+
+// { "v1" : [ "v2", "v3", ... ], ... }
+function mkedges(connections) {
+  let conns = parseConnections(connections)
+  let edges = new Map() // Map<string,{nodes:[string,string],weight:int}>
+  for (let source in conns) {
+    for (let target of conns[source]) {
+      let nodes = [source, target].sort()
+      let wk = nodes.join(' ')
+      let edge = edges.get(wk)
+      if (!edge) {
+        edges.set(wk, { nodes, weight: 1 })
+      } else {
+        edge.weight++
+      }
+    }
+  }
+  let links = {}
+  for (let d of edges.values()) {
+    let src = d.nodes[0], target = d.nodes[1]
+    if (src in links) {
+      links[src].push(target)
+    } else {
+      links[src] = [target]
+    }
+  }
+  return links
+}
+
+
+
+
+let vals = [
+  { id: "a" },
+  { id: "b" },
+  { id: "c" },
+  { id: "d" },
+  { id: "e" },
+  { id: "f" },
+  { id: "g" },
+
+  // { id: "h" },
+  // { id: "i" },
+  // { id: "j" },
+  // { id: "k" },
+  // { id: "l" },
+  // { id: "m" },
+  // { id: "n" },
+  // { id: "o" },
+  // { id: "p" },
+  // { id: "q" },
+  // { id: "r" },
+  // { id: "s" },
+  // { id: "t" },
+  // { id: "u" },
+  // { id: "v" },
+  // { id: "w" },
+  // { id: "x" },
+  // { id: "y" },
+  // { id: "z" },
+  // { id: "v1" },
+  // { id: "v2" },
+  // { id: "v3" },
+  // { id: "v4" },
+  // { id: "v5" },
+]
+
+// { sourceId : [targetId, ...], ... }
+let edges = mkedges(`
+  a : b d g f
+  b : a c d e
+  c : d e b
+  d : a b c f g
+  e : f g b c
+  f : g a d e
+  g : a d e f
+`)
+
+// chaitin.renderGraph($('svg.graph'), vals, edges)
+// chaitin.nodes['b'].circleNode.attr('fill', '#faf')
+
+
+
+let needsRestart = false
+
+function setNeedsRestart() {
+  if (!needsRestart) {
+    needsRestart = true
+    requestAnimationFrame(restart)
+  }
+}
+
+function restart() {
+  needsRestart = false
+  regs.resetState()
+  regsFile.setText('')
+  setSLCode(slcFile.text())
+}
+
+
+let enableBriggsVar
+
+
+function main() {
+
+  immediateVar = uiv.bind('immediate', (_, v) => {
+    setNeedsRestart()
+  })
+
+  enableBriggsVar = uiv.bind('enable-briggs', (_, v) => {
+    setNeedsRestart()
+  })
+
+  let regcountVar = uiv.bind('regcount', (_, v) => {
+    regs.setCount(v)
+    setNeedsRestart()
+  })
+
+
+  ;(() => {
+    let isInitial = true
+    uiv.bind('slc', $('.ted.file.slcEditor textarea'), function (el, nextVal) {
+      if (isInitial) {
+        isInitial = false
+        if (nextVal == '') {
+          nextVal = defaultSLC
+        }
+      } else if (
+        nextVal == '' ||
+        (nextVal.length < 100 && nextVal.trim() == '')
+      ) {
+        status.html('Empty. <a href="./">Reset to defaults</a>')
+      }
+      slcFile.setText(nextVal)
+      return nextVal
+    })
+  })()
+
+  let restartButton = $('button[name="restart"]')
+  restartButton.onclick = restart
+
+  regs.setCount(regcountVar.lastValue)
+  setNeedsRestart()
+}
+
+main()
+
+</script>

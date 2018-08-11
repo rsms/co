@@ -65,7 +65,6 @@ To reflect idiomatic use, code examples elide semicolons using these rules.
 
 ```txt
 identifier = letter (letter | unicode_digit | "-")*
-
 ```
 
 ```
@@ -74,8 +73,7 @@ _3
 HelloWorld
 αβ
 grinning-face
-x--            // identifier `x--`
-x --           // identifier `x` with unary operator `--`
+x--           // identifier `x` with unary operator `--`
 ```
 
 

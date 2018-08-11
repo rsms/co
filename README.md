@@ -1,6 +1,6 @@
-# xlang
+# The Co programming lanugage
 
-A programming language targeting the web platform.
+A programming language and compiler.
 
 Building:
 - Setup: `yarn` (or `npm install` if you are using NPM)

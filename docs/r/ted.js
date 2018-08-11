@@ -3,81 +3,6 @@
 //
 this.ted = (function(){
 
-// stylesheet, placed at lowest priority so that any user stylesheet
-// can override these styles.
-let style = document.createElement('style')
-style.setAttribute('type', 'text/css')
-style.innerText = `
-.ted.file {
-  display: flex;
-  flex-direction: column;
-}
-  .ted.file .name {
-    flex: 0 0 auto;
-  }
-  .ted.file .content {
-    flex: 1 1 auto;
-    line-height: 18px;
-    font-size: 16px;
-    font-family: monospace;
-    background: #eee;
-  }
-  .ted.file .inner-content {
-    display: flex;
-  }
-  .ted.file textarea {
-    display: block;
-    border: none;
-    outline: none;
-    resize: none; /* since we control the size automatically */
-    color: rgba(0,0,0,0.6);
-    flex: 1 1 auto;
-    font: inherit;
-    line-height: inherit;
-    background: transparent;
-    overflow-y: hidden;
-    -moz-tab-size: 2;
-      -o-tab-size: 2;
-         tab-size: 2;
-  }
-  .ted.file textarea:focus {
-    color: black;
-  }
-  .ted textarea, .ted.linenos {
-    padding: 5px;
-    white-space: pre;
-  }
-  .ted .linenos {
-    flex: 0 1 auto;
-    color: rgba(0,0,0,0.3);
-    padding-left: 0;
-    padding-right: 0;
-  }
-  .ted .lineno {
-    padding-left: 8px;
-    padding-right: 10px;
-    transition: 100ms all ease;
-  }
-  .ted .lineno.error {
-    background: pink;
-    color: maroon;
-  }
-  .ted .lineno.warn {
-    background: #f9f39d;
-    color: black;
-  }
-  .ted .lineno.info {
-    background: lightblue;
-    color: black;
-  }
-`
-let head = (document.head || document.body || document.documentElement)
-if (head.children.length) {
-  head.insertBefore(style, head.children[0])
-} else {
-  head.appendChild(style)
-}
-
 // HTML templates
 let templates = {
 lineno: `<div class="lineno">0</div>`,
@@ -682,7 +607,18 @@ class TextView {
 
 
   toggleLineComment() {
-    console.log('TODO TextView.toggleLineComment')
+    let t = this
+    let lnstart = t.lineStart() // line start index
+    let ind1i = indentindex(t.text(), lnstart)
+    if (t.text().substr(ind1i, 2) == '//') {
+      if (t.text().substr(ind1i, 3) == '// ') {
+        t.deleteRange([ind1i, ind1i + 3])
+      } else {
+        t.deleteRange([ind1i, ind1i + 2])
+      }
+    } else {
+      t.insertTextAt([ind1i, ind1i], '// ')
+    }
   }
 
 
@@ -793,9 +729,10 @@ class File {
   // name     :string       // name of file
   // el       :HTMLElement  // root element of file
   // view    :TextView     // the user-view of the file
-  // onChange :()=>         // passive callback when contents changed
+  // onChange :(changeType? :string, data? :string)=>
+  //   passive callback when contents changed
 
-  constructor(name, sourceText) {
+  constructor(name, sourceText, className) {
     this.name = name
     this.el = template('file')
     $$('.name', this.el).forEach(e => e.innerText = name)
@@ -805,6 +742,11 @@ class File {
     this.lineDiagnostics = []
     this.view = new TextView(this.textarea)
     this._lastTrimmedText = null
+    this._readOnly = false
+
+    if (className) {
+      this.el.classList.add(className)
+    }
     
     this.setText(sourceText || '')
     
@@ -815,6 +757,15 @@ class File {
         schednext(() => this.textarea.focus())
       }
     }
+  }
+
+  setReadOnly(y) {
+    this._readOnly = y
+    this.textarea.setAttribute("readonly", y ? "true" : null)
+  }
+
+  readOnly() {
+    return this._readOnly
   }
 
   // setText replaces the entire contents of the file buffer.
@@ -879,16 +830,16 @@ class File {
   }
 
   _onInput(ev) {
-    // console.log('input', ev, repr(ev, 1))
+    // console.log(ev.inputType, ev, JSON.stringify(ev.data))
     // this.view.onInput(ev)
     try {
-      this._onChange()
+      this._onChange(ev.inputType, ev.data)
     } catch (err) {
       console.error(err.stack || err)
     }
   }
 
-  _onChange() {
+  _onChange(changeType, data) {
     let text = this.textarea.value
 
     // count lines
@@ -908,7 +859,7 @@ class File {
       let trimmedText = text.trim()
       if (this._lastTrimmedText != trimmedText) {
         this._lastTrimmedText = trimmedText
-        this.onChange()
+        this.onChange(changeType, data)
       }
     }
   }

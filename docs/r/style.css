@@ -129,13 +129,28 @@ h1 > a[href^="#"]:hover {
   left:0; top:0; right:0; z-index:2;*/
 }
 
+/* a lovely green color: #1FE87B */
+
+svg.logotype path {
+  fill: black;
+}
+svg.logotype path:first-child {
+  fill: none;
+}
+a:hover svg.logotype path {
+  fill: inherit;
+}
+a:hover svg.logotype path:first-child {
+  fill: inherit;
+}
+
 .header > div {
   display: flex;
   justify-content: space-between;
 }
-.header * {
+/*.header * {
   cursor: default;
-}
+}*/
   .header h1 {
     letter-spacing: 0;
     flex: 0 0 auto;
@@ -146,7 +161,8 @@ h1 > a[href^="#"]:hover {
     font-weight: 500;
     color: #111;
     line-height: 32px; /* should match icon height */
-    margin-left:-5px;
+    margin-left: -5px;
+    text-indent: 0;
   }
     .header h1 a {
       display: flex;
@@ -163,8 +179,8 @@ h1 > a[href^="#"]:hover {
         transform-origin: 0 50%;
         transform: scale3d(0.5,0.5,1);
       }*/
-    .header h1 a:hover, .header h1 a:hover svg path:first-child {
-      fill: #06F;
+    .header h1 a:hover,
+    .header h1 a:hover svg path:first-child {
       color: inherit;
       text-decoration:none;
     }
@@ -204,52 +220,75 @@ h1 > a[href^="#"]:hover {
     font-weight: 500;
   }
 
-/* header on small screens */
-@media only screen and (max-device-width: 480px) {
-  .header {
-    /* note: need to be sync'd with style in /play/index.html */
-    height: 110px;
-  }
-  .header > div {
-    flex-direction: column;
-  }
-  .header h1 {
-    height: 30px;
-    margin-top: 20px;
-    margin-bottom: 0;
-  }
-  .header ul {
-    height: 60px;
-    z-index: 2;
-  }
-  .header li {
-    display:flex;
-  }
-  .header li a {
-    display: flex;
-    align-items: center;
-    background:white;
-    flex:1 1 auto;
-  }
-  .header li:first-child a {
-    padding-left: 0;
-  }
+/* minimal headers, set by liquid tag "header: minimal" */
+.logo-label {
+  display: flex;
+  position: absolute;
+  justify-content: center;
+  align-items: center;
+  top:36px;
+  left: 36px;
+  width: 50px;
+  height: 50px;
+  background: #fe0;
+  z-index: 999;
+}
+.logo-label.minimal {
+  top: 36px;
+}
+.logo-label svg {
+  flex: 0 0 auto;
+}
 
-  /* beginning to a fancy drop-down thing:; */
-  /*.header ul {
-    background: rgba(255,60,90,0.3);
-    display: flex;
-    flex-direction: column;
-    position: absolute;
-    right:0; top:0;
-    z-index: 2;
-  }
-  .header li {
-    box-sizing: border-box;
-    height: 80px;
-    padding: 1em;
-    flex: 1 0 auto;
-  }*/
+.logo-label.minimal {
+  top: 0;
+  left: initial;
+  right: 0;
+  border-bottom-left-radius: 2px;
+}
+
+
+/* menu */
+.menu {
+  position: absolute;
+  min-width: 50px;
+  left: 35px;
+  top: 100px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  margin: 0;
+  text-align: left;
+  display: flex;
+  /*background: #ddd;*/
+}
+.menu li {
+  /*background: rgba(55,255,90,0.3);*/
+  list-style: none;
+  margin:0; padding:0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  text-align: center;
+}
+/*.menu li:first-child { margin-left: 0; }*/
+.menu li a[href] {
+  /*background: rgba(255,60,90,0.3);*/
+  cursor: pointer;
+  color: #666;
+  padding: 5px 0;
+  text-decoration: none;
+  transition: 90ms color cubic-bezier(0.25, 0.47, 0.44, 0.93);
+}
+/*.menu li:last-child a[href] {
+  padding-right:0;
+}*/
+.menu li a[href]:hover {
+  color: black;
+  text-decoration: underline;
+}
+.menu li a[href].active {
+  color: black;
+  font-weight: 500;
 }
 
 
@@ -291,7 +330,8 @@ section.content {
 }
   section > * {
     max-width: 800px;
-    padding:0 20px;
+    padding: 0 20px;
+    margin: 0 60px;
     flex: 1 1 100%;
     min-width: 200px; /* required for correct flex constraints */
     position: relative;
@@ -525,6 +565,95 @@ section blockquote.sidenote.force-side {
   }
 }
 
+/* ----------------------------------------------------------- */
+/* screen sizes */
+
+@media only screen and (max-width: 1040px) {
+  .logo-label { left:0; }
+  .menu { left: 0; }
+
+  /*.logo-label { top:0; left: 0; }
+  .menu { top: 60px; left:0; }*/
+
+  .menu li { text-align: left; }
+  .menu li a { margin-left: 10px; }
+}
+
+@media only screen and (max-device-width: 1040px) {
+  .logo-label { top:0; left: 0; }
+  .menu { top: 60px; left:0; }
+}
+
+/* header on small screens */
+@media only screen and (max-device-width: 480px) {
+  body {
+    padding-top: 30px;
+  }
+  section > * {
+    margin: 0 0;
+  }
+  .menu {
+    left: 60px;
+    right: 60px;
+    top: 0;
+    height: 50px;
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  body.app {
+    padding-top: 0;
+  }
+  body.app .menu {
+    display: none;
+  }
+
+  .header {
+    /* note: need to be sync'd with style in /play/index.html */
+    height: 110px;
+  }
+  .header > div {
+    flex-direction: column;
+  }
+  .header h1 {
+    height: 30px;
+    margin-top: 20px;
+    margin-bottom: 0;
+  }
+  .header ul {
+    height: 60px;
+    z-index: 2;
+  }
+  .header li {
+    display:flex;
+  }
+  .header li a {
+    display: flex;
+    align-items: center;
+    background:white;
+    flex:1 1 auto;
+  }
+  .header li:first-child a {
+    padding-left: 0;
+  }
+
+  /* beginning to a fancy drop-down thing:; */
+  /*.header ul {
+    background: rgba(255,60,90,0.3);
+    display: flex;
+    flex-direction: column;
+    position: absolute;
+    right:0; top:0;
+    z-index: 2;
+  }
+  .header li {
+    box-sizing: border-box;
+    height: 80px;
+    padding: 1em;
+    flex: 1 0 auto;
+  }*/
+}
+
 
 /*@media only screen and (max-width: 1320px) {
   section blockquote.sidenote,
@@ -543,7 +672,7 @@ section blockquote.sidenote.force-side {
   }
 }*/
 
-/* pygments theme */
+
 .highlight .c,  /* Comment */
 .highlight .cm, /* Comment.Multiline */
 .highlight .c1, /* Comment.Single */
@@ -553,11 +682,11 @@ section blockquote.sidenote.force-side {
 /*.highlight .err { font-weight: bold; color:#f05; }*/ /* Error */
 .highlight .ge { font-style: italic } /* Generic.Emph */
 
-.highlight .k,  /* Keyword */
 .highlight .gh, /* Generic.Heading */
 .highlight .gp, /* Generic.Prompt */
 .highlight .gs, /* Generic.Strong */
 .highlight .gu, /* Generic.Subheading */
+.highlight .k,  /* Keyword */
 .highlight .kc, /* Keyword.Constant */
 .highlight .kd, /* Keyword.Declaration */
 .highlight .kn, /* Keyword.Namespace */
@@ -591,3 +720,53 @@ section blockquote.sidenote.force-side {
 .highlight .se, /* Literal.String.Escape */
 .highlight .si  /* Literal.String.Interpol */
   { color:#333377; font-weight: bold; }
+
+
+
+.hljs {
+  -webkit-text-size-adjust: none;
+}
+.hljs-comment,
+.hljs-meta {
+  color:#999;
+}
+
+.hljs-string,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-strong,
+.hljs-emphasis,
+.hljs-quote {
+  color:#333377;
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-section,
+.hljs-name,
+.hljs-tag,
+
+.hljs-title,
+.hljs-attr,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-selector-attr,
+.hljs-selector-pseudo,
+.hljs-type,
+
+.hljs-built_in {
+  color: #375EAB;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-attribute,
+.hljs span.n + span.o + span.n {
+  color:#333377;
+}
+
+.hljs-addition { color:#55a532; background-color:#eaffea; }
+.hljs-deletion { color:#bd2c00; background-color:#ffecec; }
+.hljs-link {}

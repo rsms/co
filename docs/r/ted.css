@@ -1,0 +1,102 @@
+/* basic style */
+.ted.file {
+  display: flex;
+  flex-direction: column;
+}
+  .ted.file .name {
+    flex: 0 0 auto;
+  }
+  .ted.file .content {
+    flex: 1 1 auto;
+    line-height: 18px;
+    font-size: 16px;
+    font-family: monospace;
+    background: #f5f5f5;
+  }
+  .ted.file .inner-content {
+    display: flex;
+  }
+  .ted.file textarea {
+    display: block;
+    border: none;
+    outline: none;
+    resize: none; /* since we control the size automatically */
+    color: rgba(0,0,0,0.7);
+    flex: 1 1 auto;
+    font: inherit;
+    line-height: inherit;
+    background: transparent;
+    overflow-y: hidden;
+    -moz-tab-size: 2;
+      -o-tab-size: 2;
+         tab-size: 2;
+  }
+  .ted.file textarea:not([readonly="true"]):focus {
+    color: black;
+  }
+  .ted textarea, .ted.linenos {
+    padding: 5px;
+    white-space: pre;
+  }
+  .ted .linenos {
+    flex: 0 1 auto;
+    color: rgba(0,0,0,0.3);
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .ted .lineno {
+    padding-left: 8px;
+    padding-right: 10px;
+    transition: 100ms all ease;
+  }
+  .ted .lineno.error {
+    background: pink;
+    color: maroon;
+  }
+  .ted .lineno.warn {
+    background: #f9f39d;
+    color: black;
+  }
+  .ted .lineno.info {
+    background: lightblue;
+    color: black;
+  }
+
+
+/* extended, optional style */
+.ted.file {
+  /*margin-top: 1px;*/
+  min-width: 100px;
+}
+.ted.file .name {
+  margin:0;
+  padding:8px 35px;
+  background:#f5f5f5;
+  font-size:1.1em;
+  font-weight:500;
+}
+.ted.file .content {
+  overflow-y: auto;
+  font-family:
+    InconsolataGo,
+    Inconsolata,
+    "SFMono-Regular",
+    Consolas,
+    "Liberation Mono",
+    Menlo,
+    Courier,
+    monospace;
+  font-size: 16px;
+  line-height: 18px;
+  /*border-radius: 3px;*/
+  /*min-height: 100px;*/
+  /*max-height: 50vh;*/
+}
+  .ted .linenos {
+    width: 30px;
+  }
+  .ted .lineno {
+    padding-left: 8px;
+    padding-right: 10px;
+    transition: 100ms all ease;
+  }
