@@ -240,7 +240,7 @@ a:hover svg.logotype path:first-child {
   flex: 0 0 auto;
 }
 
-.logo-label.minimal {
+body.minimal-header .logo-label {
   top: 0;
   left: initial;
   right: 0;
@@ -570,6 +570,7 @@ section blockquote.sidenote.force-side {
 
 @media only screen and (max-width: 1040px) {
   .logo-label { left:0; }
+
   .menu { left: 0; }
 
   /*.logo-label { top:0; left: 0; }
@@ -591,6 +592,10 @@ section blockquote.sidenote.force-side {
   }
   section > * {
     margin: 0 0;
+  }
+  body.minimal-header .logo-label {
+    right: initial;
+    border-bottom-left-radius: 0;
   }
   .menu {
     left: 60px;
