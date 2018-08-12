@@ -407,21 +407,24 @@ function updateRegsEditor() {
   
   for (let v of currentValues) {
     let r = v.register || -1
-    let line = fmtval(v) + ' = '
+    let line = fmtval(v) + ' ⇐ '
     if (v.op == '=') {
       line += v.consts.join(' ')
-    } else if (v.op == 'idef') {
+    } else if (v.op == 'idef' && v.operands.length == 0) {
       line += '(unknown)'
-    } else {
+    }
+
+    if (v.operands.length > 0) {
       let id1 = v.operands[0]
       let opv = currentValuesById[id1]
-      line += (opv ? fmtval(opv) : id1) + ' ' + v.op
+      line += (opv ? fmtval(opv) : id1)
 
       line += ' ' + v.operands.slice(1).map(id2 => {
         let opv = currentValuesById[id2]
         return opv ? fmtval(opv) : id2
       }).join(' ')
     }
+
     lines.push(line)
   }
 

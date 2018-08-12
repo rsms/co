@@ -151,6 +151,10 @@
     justify-content: center;
     margin-right: 20px;
   }
+  .config button[name="step-back"] {
+    /* hide step-back button since it's not implemented anyways */
+    display: none;
+  }
 
 svg.graph text {
   cursor: default;
