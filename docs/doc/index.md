@@ -21,6 +21,6 @@ smaller pieces.
 [Patterns](patterns.html) —
   Observations of common patterns in general programming and inspiration for Co
 
-[Chaitin-Briggs register allocation demo](../regalloc/) —
+[Chaitin-Briggs register allocation demo](chaitin/) —
   visualization of the Chaitin-Briggs graph-coloring register allocation
   algorithm.
