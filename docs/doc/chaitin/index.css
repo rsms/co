@@ -18,10 +18,20 @@
 
 .ted.file {
   flex: 1 1 auto;
+  /*margin-right: 2px;*/
+  border-right: 2px solid #f5f5f5;
+  border-bottom: 2px solid #f5f5f5;
+}
+.ted.file:first-child {
+  border-left: 2px solid #f5f5f5;
+}
+.ted.file .content {
+  background: transparent;
 }
 .ted.file .name {
-  padding-left:6px;
+  padding-left:30px;
 }
+
 /*.ted.file .content { background: transparent; }*/
 .ted.file.slcEditor {
   min-width:140px;
@@ -29,6 +39,10 @@
 .ted.file.livenessEditor .linenos,
 .ted.file.regsEditor .linenos {
   display: none;
+}
+.ted.file.livenessEditor .name,
+.ted.file.regsEditor .name {
+  padding-left:6px;
 }
 .ted.file.livenessEditor {
   flex: 0 1 auto;

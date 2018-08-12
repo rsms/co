@@ -75,9 +75,9 @@ g = d + c
 //g = d + f
 `.trim()
 
-let slcFile = new ted.File('slc', defaultSLC, 'slcEditor')
-let livenessFile = new ted.File("live", "", "livenessEditor")
-let regsFile = new ted.File("regs", "", "regsEditor")
+let slcFile = new ted.File('input', defaultSLC, 'slcEditor')
+let livenessFile = new ted.File("liveness", "", "livenessEditor")
+let regsFile = new ted.File("registers", "", "regsEditor")
 
 
 slcFile.onChange = (type, data) => {
