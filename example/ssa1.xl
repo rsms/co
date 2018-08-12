@@ -69,7 +69,7 @@ fun foo(x, _, y int) int {
   // c = a + d
 
   if x > y {
-    x *= 2 || 1
+    x *= 2 //|| 1
   } else {
     y *= 2
   }

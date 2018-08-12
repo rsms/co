@@ -1,13 +1,15 @@
 import { debuglog as dlog } from '../util'
 import { UInt64 } from '../int64'
+import { Pos } from '../pos'
 import { Mem, t_int, t_uint, t_i32, t_u32, t_u64, intTypes } from '../types'
-import { Fun, Block, Value } from './ssa'
+import { ID, Fun, Block, Value, BranchPrediction } from './ssa'
 import { Op, ops } from './op'
 import { RegAlloc } from './regalloc'
-import { Register, Reg, RegSet, fmtRegSet, emptyRegSet } from './reg'
+import { Register, Reg, RegSet, RegInfo, fmtRegSet, emptyRegSet } from './reg'
 import { Config } from './config'
 import { layoutRegallocOrder } from './layout'
 import { fmtir } from './repr'
+import { DesiredState } from './reg_desiredstate'
 
 // NaiveRegAlloc performs naïve register allocation, meaning that for
 // every operation, its operands are loaded into registers and--
@@ -44,6 +46,29 @@ import { fmtir } from './repr'
 //   v5 = i32Mul <i32> v3 v4
 //   ret v5
 //
+
+
+// distance is a measure of how far into the future values are used.
+// distance is measured in units of instructions.
+const
+  likelyDistance   = 1
+, normalDistance   = 10
+, unlikelyDistance = 100
+
+
+
+
+interface LiveInfo {
+  id   :ID   // ID of value
+  dist :int  // # of instructions before next use
+  pos  :Pos  // source position of next use
+}
+
+
+interface ValMapEntry {
+  val :int
+  pos :Pos
+}
 
 
 const maxregs = 64  // maximum number of registers we can manage
@@ -126,6 +151,13 @@ export class NaiveRegAlloc implements RegAlloc {
   used    :RegSet  // registers currently in use
   tmpused :RegSet  // registers used in the current instruction
 
+  // live and desired holds information about block's live values at the end
+  // of the block, and those value's desired registers (if any.)
+  // These are created by computeLive()
+  live    :LiveInfo[][] = []
+  desired :DesiredState[] = []
+
+
   constructor(config :Config) {
     const a = this
 
@@ -164,9 +196,8 @@ export class NaiveRegAlloc implements RegAlloc {
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SPReg).not())
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SBReg).not())
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.GReg).not())
-
-    dlog(`allocatable:`, fmtRegSet(a.allocatable))
-    // process.exit(0)
+    
+    // dlog(`allocatable:`, fmtRegSet(a.allocatable))
   }
 
   init(f :Fun) {
@@ -189,18 +220,19 @@ export class NaiveRegAlloc implements RegAlloc {
     // blocks appear.
     // Decouple the register allocation order from the generated block order.
     // This also creates an opportunity for experiments to find a better order.
-    a.visitOrder = layoutRegallocOrder(f)
-    if (a.config.optimize) {
-      // update function block order with new layout
-      f.blocks = a.visitOrder
-    }
+    // a.visitOrder = layoutRegallocOrder(f)
+    // if (a.config.optimize) {
+    //   // update function block order with new layout
+    //   f.blocks = a.visitOrder
+    // }
+    a.visitOrder = f.blocks
 
     // Compute block order. This array allows us to distinguish forward edges
     // from backward edges and compute how far they go.
-    let blockOrder = new Array<int>(f.numBlocks())
-    for (let i = 0; i < a.visitOrder.length; i++) {
-      blockOrder[a.visitOrder[i].id] = i >>> 0
-    }
+    // let blockOrder = new Array<int>(f.numBlocks())
+    // for (let i = 0; i < a.visitOrder.length; i++) {
+    //   blockOrder[a.visitOrder[i].id] = i >>> 0
+    // }
 
     // s.regs = make([]regState, s.numRegs)
     a.values = new Array<ValState>(f.numValues())
@@ -223,30 +255,42 @@ export class NaiveRegAlloc implements RegAlloc {
     // dlog('a.values:', a.values)
 
 
-    // argalign defines address alignment for args.
-    // Must not be larger than address size.
-    let argalign = 4
-    assert(argalign <= a.addrsize, "argalign larger than address size")
+    // we start by computing live ranges, mapping each value definition
+    // to a set of values alive at the point of the definition.
+    a.computeLive()
+    dlog("\nlive values at end of each block\n" + a.fmtLive())
 
-    // argoffs tracks bytes relative to a frame's SP
-    // where we are operating. It starts with the return address.
-    //
-    // Note: args are at the very beginning of the entry block, thus
-    // the while condition op==Arg.
-    //
-    let argoffs = a.addrsize
-    let v = SP.nextv; // SP is at top of entry block
-    while (v && v.op === ops.Arg) {
-      v.aux = argoffs
-      // v.args = [SP] ; SP.uses++ ; SP.users.push(v)
-      assert(v.type.size > 0, `abstract type ${v.type}`)
-      argoffs += v.type.size
-      v = v.nextv
-    }
+    // let ifg = new InterferenceGraph()
+    // ifg.build(f)
+    // dlog('interference graph:\n' + ifg.fmt())
+
+
+
+    // // argalign defines address alignment for args.
+    // // Must not be larger than address size.
+    // let argalign = 4
+    // assert(argalign <= a.addrsize, "argalign larger than address size")
+
+    // // argoffs tracks bytes relative to a frame's SP
+    // // where we are operating. It starts with the return address.
+    // //
+    // // Note: args are at the very beginning of the entry block, thus
+    // // the while condition op==Arg.
+    // //
+    // let argoffs = a.addrsize
+    // let v = SP.nextv; // SP is at top of entry block
+    // while (v && v.op === ops.Arg) {
+    //   v.aux = argoffs
+    //   // v.args = [SP] ; SP.uses++ ; SP.users.push(v)
+    //   assert(v.type.size > 0, `abstract type ${v.type}`)
+    //   argoffs += v.type.size
+    //   v = v.nextv
+    // }
     
-    // visit function's entry block
-    a.block(f.blocks[0], SP)
+    // // visit function's entry block
+    // a.block(f.blocks[0], SP)
   }
+
 
   block(b :Block, _SP :Value) {
     const a = this
@@ -314,6 +358,282 @@ export class NaiveRegAlloc implements RegAlloc {
   //   let loadv = b.f.newValue(Op.RegLoad, v.type, b, fpoffs)
   //   return b.insertValueBefore(v, loadv)
   // }
+
+
+  // regspec returns the RegInfo for operation op
+  //
+  regspec(op :Op) :RegInfo {
+    const a = this
+    // if (op == ops.OpConvert) {
+    //   // OpConvert is a generic op, so it doesn't have a
+    //   // register set in the static table. It can use any
+    //   // allocatable integer register.
+    //   m := s.allocatable & s.f.Config.gpRegMask
+    //   return regInfo{inputs: []inputInfo{{regs: m}},
+    //     outputs: []outputInfo{{regs: m}}}
+    // }
+    return op.reg
+  }
+
+
+  // computeLive computes a map from block ID to a list of value IDs live at
+  // the end of that block. Together with the value ID is a count of how many
+  // instructions to the next use of that value.
+  // The resulting map is stored in this.live.
+  //
+  // computeLive also computes the desired register information at the end of
+  // each block. This desired register information is stored in this.desired.
+  //
+  // TODO: this could be quadratic if lots of variables are live across lots of
+  // basic blocks. Figure out a way to make this function (or, more precisely,
+  // the user of this function) require only linear size & time.
+  //
+  computeLive() {
+    const a = this
+    const f = a.f
+
+    a.live = new Array<LiveInfo[]>(f.numBlocks())
+    a.desired = new Array<DesiredState>(f.numBlocks())
+
+    let phis :Value[] = []
+
+    let live = new Map<ID,ValMapEntry>()
+    let t = new Map<ID,ValMapEntry>()
+
+    // Keep track of which value we want in each register.
+    let desired = new DesiredState()
+
+    // Instead of iterating over f.blocks, iterate over their postordering.
+    // Liveness information flows backward, so starting at the end increases
+    // the probability that we will stabilize quickly.
+    //
+    // TODO: Do a better job yet. Here's one possibility:
+    // Calculate the dominator tree and locate all strongly connected components.
+    // If a value is live in one block of an SCC, it is live in all.
+    // Walk the dominator tree from end to beginning, just once, treating SCC
+    // components as single blocks, duplicated calculated liveness information
+    // out to all of them.
+    //
+    let po = f.postorder()
+    // dlog('postorder blocks:', po.join(' '))
+
+
+    while (true) {
+      let changed = false
+
+      for (let b of po) {
+        // Start with known live values at the end of the block.
+        // Add len(b.Values) to adjust from end-of-block distance
+        // to beginning-of-block distance.
+        live.clear()
+        let liv = a.live[b.id];  // LiveInfo[] | undefined
+        if (liv) for (let e of liv) {
+          live.set(e.id, { val: e.dist + b.valcount, pos: e.pos })
+        }
+
+        // Mark control value as live
+        if (b.control && a.values[b.control.id].needReg) {
+          live.set(b.control.id, { val: b.valcount, pos: b.pos })
+        }
+
+        // dlog(`live: ` + Array.from(live).map(p =>
+        //   `v${p[0]} - v${p[1].val}`
+        // ).join('\n'))
+
+        // Propagate backwards to the start of the block
+        // Assumes Values have been scheduled.
+        phis = []
+        let i = b.valcount - 1
+        for (let v = b.vtail; v; v = v.prevv, i--) {
+        // for (let i = b.valcount - 1; i >= 0; i--) {
+          // let v = b.Values[i]
+
+          live.delete(v.id)
+          if (v.op === ops.Phi) {
+            // save phi ops for later
+            phis.push(v)
+            continue
+          }
+          if (v.op.call) {
+            for (let v of live.values()) {
+              v.val += unlikelyDistance
+            }
+          }
+          if (v.args) for (let arg of v.args) {
+            if (a.values[arg.id].needReg) {
+              live.set(arg.id, { val: i, pos: v.pos })
+            }
+          }
+        }
+
+        // Propagate desired registers backwards
+        let other = a.desired[b.id]
+        if (other) {
+          desired.copy(other)
+        } else {
+          desired.clear()
+        }
+
+        for (let v = b.vtail; v; v = v.prevv, i--) {
+          let prefs = desired.remove(v.id)
+          if (v.op === ops.Phi) {
+            // TODO: if v is a phi, save desired register for phi inputs.
+            // For now, we just drop it and don't propagate
+            // desired registers back though phi nodes.
+            continue
+          }
+          let regspec = a.regspec(v.op)
+          // Cancel desired registers if they get clobbered.
+          desired.clobber(regspec.clobbers)
+          // Update desired registers if there are any fixed register inputs.
+          for (let j of regspec.inputs) {
+            if (countRegs(j.regs) != 1) {
+              continue
+            }
+            desired.clobber(j.regs)
+            assert(v.args, `null args in ${v}`)
+            desired.add((v.args as Value[])[j.idx].id, pickReg(j.regs))
+          }
+          // Set desired register of input 0 if this is a 2-operand instruction.
+          if (v.op.resultInArg0) {
+            assert(v.args, `null args in ${v}`)
+            if (v.op.commutative) {
+              desired.addList((v.args as Value[])[1].id, prefs)
+            }
+            desired.addList((v.args as Value[])[0].id, prefs)
+          }
+        }
+
+        // dlog(`desired: ${desired}`)
+
+
+        // For each predecessor of b, expand its list of live-at-end values.
+        // invariant: live contains the values live at the start of b
+        // (excluding phi inputs)
+        if (b.preds) for (let i = 0; i < b.preds.length; i++) {
+          let p = b.preds[i]
+
+          // Compute additional distance for the edge.
+          // Note: delta must be at least 1 to distinguish the control
+          // value use from the first user in a successor block.
+          let delta = normalDistance
+          if (p.succs && p.succs.length == 2) {
+            if (
+              p.succs[0] == b && p.likely == BranchPrediction.Likely ||
+              p.succs[1] == b && p.likely == BranchPrediction.Unlikely
+            ) {
+              delta = likelyDistance
+            } else if (
+              p.succs[0] == b && p.likely == BranchPrediction.Unlikely ||
+              p.succs[1] == b && p.likely == BranchPrediction.Likely
+            ) {
+              delta = unlikelyDistance
+            }
+          }
+
+          // Update any desired registers at the end of p.
+          let pdesired = a.desired[p.id]
+          if (!pdesired) {
+            a.desired[p.id] = new DesiredState(desired)
+          } else {
+            pdesired.merge(desired)
+          }
+
+          // Start t off with the previously known live values at the end of p.
+          t.clear()
+          let plive = a.live[p.id]
+          if (plive) for (let e of plive) {
+            t.set(e.id, { val: e.dist, pos: e.pos })
+          }
+          
+          let update = false
+
+          // Add new live values from scanning this block.
+          for (let [key, e] of live) {
+            let d = e.val + delta
+            let e2 = t.get(key)
+            if (!e2 || d < e2.val) {
+              update = true
+              t.set(key, { val: d, pos: e.pos })
+            }
+          }
+          // Also add the correct arg from the saved phi values.
+          // All phis are at distance delta (we consider them
+          // simultaneously happening at the start of the block).
+          for (let v of phis) {
+            assert(v.args, 'phi without args')
+            let id = (v.args as Value[])[i].id
+            if (a.values[id].needReg) {
+              let e2 = t.get(id)
+              if (!e2 || delta < e2.val) {
+                update = true
+                t.set(id, { val: delta, pos: v.pos })
+              }
+            }
+          }
+
+          if (!update) {
+            continue
+          }
+
+          // The live set has changed, update it.
+          let l :LiveInfo[] = new Array<LiveInfo>(t.size), j = 0
+          for (let [key, e] of t) {
+            l[j++] = { id: key, dist: e.val, pos: e.pos }
+          }
+          a.live[p.id] = l
+          changed = true
+        }
+      }
+
+      if (!changed) {
+        break
+      }
+
+      // break
+    }
+  } // computeLive
+
+
+  fmtLive() :string {
+    const a = this
+    let s = ''
+    for (let b of a.f.blocks) {
+      s += `  ${b}:`
+      let blive = a.live[b.id]
+      if (blive) for (let x of blive) {
+        s += ` v${x.id}`
+        let desired = a.desired[b.id]
+        if (desired) for (let e of desired.entries) {
+          if (e.id != x.id) {
+            continue
+          }
+          s += "["
+          let first = true
+          for (let r of e.regs) {
+            if (r == noReg) {
+              continue
+            }
+            if (!first) {
+              s += ","
+            }
+            let reg = a.registers[r]
+            s += `${reg.name}#${reg.num}`
+            first = false
+          }
+          s += "]"
+        }
+      }
+      if (a.desired[b.id]) {
+        let avoid = a.desired[b.id].avoid
+        if (!avoid.isZero()) {
+          s += " avoid=" + fmtRegSet(avoid)
+        }
+      }
+      s += "\n"
+    }
+    return s.trimRight()
+  }
 
 }
 

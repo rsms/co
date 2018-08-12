@@ -13,19 +13,62 @@ export type Reg = int // uint8
 export type RegSet = UInt64  // each bit corresponds to a register
 
 export const emptyRegSet = UInt64.ZERO
+export const noReg :Reg = 255
+
+
+export interface InputInfo {
+  idx  :int    // index in Args array
+  regs :RegSet // allowed input registers
+}
+
+export interface OutputInfo {
+  idx  :int    // index in output tuple
+  regs :RegSet // allowed output registers
+}
+
+export class RegInfo {
+  inputs   :InputInfo[] = []  // allowed input registers
+  outputs  :OutputInfo[] = [] // allowed output registers
+  clobbers :RegSet = emptyRegSet
+
+  // inputs and outputs are ordered in register allocation order
+}
 
 
 export function fmtRegSet(m :RegSet) :string {
-  let s = "[" + m.toString(2) + "]"
+  let s = '{'
   for (let r :Reg = 0 >>> 0; !m.isZero(); r++) {
     if (m.shr(r & 1).isZero()) { // m >> r&1 == 0
       continue
     }
-    m = m.and(UInt64.ONE.shl(r)) // m &^= RegSet(1) << r
-    if (s != "") {
-      s += " "
-    }
-    s += `r${r}`
+    // m &^= RegSet(1) << r
+    // m = m &^ (RegSet(1) << r)
+    // m = m & ~(RegSet(1) << r)
+    m = m.and(UInt64.ONE.shl(r).not())
+    s += ` r${r}`
   }
-  return s
+  return s == '{' ? '{}' : s + ' }'
+}
+
+
+// regBuilder returns a function that can build RegSet from a string
+// of whitespace-separated register names.
+//
+export function regBuilder(names :string[]) :(s:string)=>RegSet {
+  const num = new Map<string,int>(
+    names.map((k, i) => [k, i]) as [string,int][]
+  )
+  return function(s :string): RegSet {
+    let m = emptyRegSet
+    for (let r of s.trim().split(/\s+/)) {
+      let n = num.get(r)
+      if (n !== undefined) {
+        // m |= regMask(1) << uint(n)
+        m = m.or(UInt64.ONE.shl(n))
+        continue
+      }
+      panic("register " + r + " not found")
+    }
+    return m
+  }
 }

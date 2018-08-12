@@ -21,6 +21,9 @@ import {
 
   t_str,
 } from '../types'
+import { RegInfo, InputInfo } from './reg'
+import covm from '../arch/covm'
+// import { buildReg as covm_buildReg } from '../arch/covm'
 
 
 // Strategy borrowed from
@@ -77,8 +80,8 @@ export class Op {
     // sometimes translate to machine code, is not zero-width.
   symEffect = SymEffect.None as SymEffect
     // effect this op has on symbol in aux
-  // reg =           null, // regInfo
-  // asm =            "", // string
+  // asm = "" // ObjAs
+  reg = new RegInfo()
 
   constructor(name :string, argLen :int, props? :Partial<Op>) {
     if (props) for (let k in props) {
@@ -179,68 +182,68 @@ export const ops = {
   // same type
   //
   // arg0 + arg1 ; sign-agnostic addition
-  AddI8:  op("AddI8",  2, {commutative: true}),
-  AddI16: op("AddI16", 2, {commutative: true}),
-  AddI32: op("AddI32", 2, {commutative: true}),
-  AddI64: op("AddI64", 2, {commutative: true}),
-  AddF32: op("AddF32", 2, {commutative: true}),
-  AddF64: op("AddF64", 2, {commutative: true}),
+  AddI8:  op("AddI8",  2, {commutative: true, resultInArg0: true}),
+  AddI16: op("AddI16", 2, {commutative: true, resultInArg0: true}),
+  AddI32: op("AddI32", 2, {commutative: true, resultInArg0: true}),
+  AddI64: op("AddI64", 2, {commutative: true, resultInArg0: true}),
+  AddF32: op("AddF32", 2, {commutative: true, resultInArg0: true}),
+  AddF64: op("AddF64", 2, {commutative: true, resultInArg0: true}),
   //
   // arg0 - arg1 ; sign-agnostic subtraction
-  SubI8:  op("SubI8",  2),
-  SubI16: op("SubI16", 2),
-  SubI32: op("SubI32", 2),
-  SubI64: op("SubI64", 2),
-  SubF32: op("SubF32", 2),
-  SubF64: op("SubF64", 2),
+  SubI8:  op("SubI8",  2, {resultInArg0: true}),
+  SubI16: op("SubI16", 2, {resultInArg0: true}),
+  SubI32: op("SubI32", 2, {resultInArg0: true}),
+  SubI64: op("SubI64", 2, {resultInArg0: true}),
+  SubF32: op("SubF32", 2, {resultInArg0: true}),
+  SubF64: op("SubF64", 2, {resultInArg0: true}),
   //
   // arg0 * arg1 ; sign-agnostic multiplication
-  MulI8:  op("MulI8",  2, {commutative: true}),
-  MulI16: op("MulI16", 2, {commutative: true}),
-  MulI32: op("MulI32", 2, {commutative: true}),
-  MulI64: op("MulI64", 2, {commutative: true}),
-  MulF32: op("MulF32", 2, {commutative: true}),
-  MulF64: op("MulF64", 2, {commutative: true}),
+  MulI8:  op("MulI8",  2, {commutative: true, resultInArg0: true}),
+  MulI16: op("MulI16", 2, {commutative: true, resultInArg0: true}),
+  MulI32: op("MulI32", 2, {commutative: true, resultInArg0: true}),
+  MulI64: op("MulI64", 2, {commutative: true, resultInArg0: true}),
+  MulF32: op("MulF32", 2, {commutative: true, resultInArg0: true}),
+  MulF64: op("MulF64", 2, {commutative: true, resultInArg0: true}),
   //
   // arg0 / arg1 ; division
-  DivS8:  op("DivS8",  2), // signed (result is truncated toward zero)
-  DivU8:  op("DivU8",  2), // unsigned (result is floored)
-  DivS16: op("DivS16", 2),
-  DivU16: op("DivU16", 2),
-  DivS32: op("DivS32", 2),
-  DivU32: op("DivU32", 2),
-  DivS64: op("DivS64", 2),
-  DivU64: op("DivU64", 2),
-  DivF32: op("DivF32", 2),
-  DivF64: op("DivF64", 2),
+  DivS8:  op("DivS8",  2, {resultInArg0: true}), // signed (result is truncated toward zero)
+  DivU8:  op("DivU8",  2, {resultInArg0: true}), // unsigned (result is floored)
+  DivS16: op("DivS16", 2, {resultInArg0: true}),
+  DivU16: op("DivU16", 2, {resultInArg0: true}),
+  DivS32: op("DivS32", 2, {resultInArg0: true}),
+  DivU32: op("DivU32", 2, {resultInArg0: true}),
+  DivS64: op("DivS64", 2, {resultInArg0: true}),
+  DivU64: op("DivU64", 2, {resultInArg0: true}),
+  DivF32: op("DivF32", 2, {resultInArg0: true}),
+  DivF64: op("DivF64", 2, {resultInArg0: true}),
   //
   // arg0 % arg1 ; remainder
-  RemS8:  op("RemS8",  2), // signed (result has the sign of the dividend)
-  RemU8:  op("RemU8",  2), // unsigned
-  RemS16: op("RemS16", 2),
-  RemU16: op("RemU16", 2),
-  RemS32: op("RemS32", 2),
-  RemU32: op("RemU32", 2),
-  RemI64: op("RemI64", 2),
-  RemU64: op("RemU64", 2),
+  RemS8:  op("RemS8",  2, {resultInArg0: true}), // signed (result has the sign of the dividend)
+  RemU8:  op("RemU8",  2, {resultInArg0: true}), // unsigned
+  RemS16: op("RemS16", 2, {resultInArg0: true}),
+  RemU16: op("RemU16", 2, {resultInArg0: true}),
+  RemS32: op("RemS32", 2, {resultInArg0: true}),
+  RemU32: op("RemU32", 2, {resultInArg0: true}),
+  RemI64: op("RemI64", 2, {resultInArg0: true}),
+  RemU64: op("RemU64", 2, {resultInArg0: true}),
   //
   // arg0 & arg1 ; sign-agnostic bitwise and
-  AndI8:  op("AndI8",  2, {commutative: true}),
-  AndI16: op("AndI16", 2, {commutative: true}),
-  AndI32: op("AndI32", 2, {commutative: true}),
-  AndI64: op("AndI64", 2, {commutative: true}),
+  AndI8:  op("AndI8",  2, {commutative: true, resultInArg0: true}),
+  AndI16: op("AndI16", 2, {commutative: true, resultInArg0: true}),
+  AndI32: op("AndI32", 2, {commutative: true, resultInArg0: true}),
+  AndI64: op("AndI64", 2, {commutative: true, resultInArg0: true}),
   //
   // arg0 | arg1 ; sign-agnostic bitwise inclusive or
-  OrI8:  op("OrI8",  2, {commutative: true}),
-  OrI16: op("OrI16", 2, {commutative: true}),
-  OrI32: op("OrI32", 2, {commutative: true}),
-  OrI64: op("OrI64", 2, {commutative: true}),
+  OrI8:  op("OrI8",  2, {commutative: true, resultInArg0: true}),
+  OrI16: op("OrI16", 2, {commutative: true, resultInArg0: true}),
+  OrI32: op("OrI32", 2, {commutative: true, resultInArg0: true}),
+  OrI64: op("OrI64", 2, {commutative: true, resultInArg0: true}),
   //
   // arg0 ^ arg1 ; sign-agnostic bitwise exclusive or
-  XorI8:  op("XorI8",  2, {commutative: true}),
-  XorI16: op("XorI16", 2, {commutative: true}),
-  XorI32: op("XorI32", 2, {commutative: true}),
-  XorI64: op("XorI64", 2, {commutative: true}),
+  XorI8:  op("XorI8",  2, {commutative: true, resultInArg0: true}),
+  XorI16: op("XorI16", 2, {commutative: true, resultInArg0: true}),
+  XorI32: op("XorI32", 2, {commutative: true, resultInArg0: true}),
+  XorI64: op("XorI64", 2, {commutative: true, resultInArg0: true}),
   //
   // For shifts, AxB means the shifted value has A bits and the shift amount
   // has B bits.
@@ -573,167 +576,23 @@ export const ops = {
 } // end `const op`
 
 
-// operators from old version:
-// operators
-export enum LegacyOp {
-  // special
-  None = 0, // nothing (invalid)
-  // FwdRef,   // forward reference (SSA)
-  Copy,
-  Phi,
-  Arg,         // function parameter argument (inside callee)
-  CallArg,     // push a parameter for a function call
-  Call,        // call a function
-  TailCall,    // call a function as tail
+for (let name in ops as {[name:string]:Op}) {
+  let op = (ops as {[name:string]:Op})[name]
+  if (!op.zeroWidth && !op.call) {
+    // assign allowed input and output registers
+    let regs = covm.gpRegMask  // XXX FIXME this is specific to the covm arch
+    // TODO: add reg info to ops above. For instance, ConvI64toF32 accepts
+    // inputs in gp regs, and outputs in fp regs.
+    if (op.argLen > 0) {
+      op.reg.inputs = new Array<InputInfo>(op.argLen)
+      for (let i = 0; i < op.argLen; i++) {
+        op.reg.inputs[i] = { idx: i, regs }
+      }
+    }
+    op.reg.outputs = [ { idx: 0, regs } ]
 
-  // constants
-  const_begin,
-  i32Const, // load an integer as i32
-  i64Const, // load an integer as i64
-  f32Const, // load a number as f32
-  f64Const, // load a number as f64
-  const_end,
-
-  // register access
-  RegLoad,   // load memory location into register
-  RegStore,  // store register value into memory
-
-  // stack
-  SP, // stack pointer
-    // The SP pseudo-register is a virtual stack pointer used to refer
-    // to frame-local variables and the arguments being prepared for
-    // function calls. It points to the top of the local stack frame,
-    // so references should use negative offsets in the range
-    // [−framesize, 0): x-8(SP), y-4(SP), and so on.
-  SB, // static base pointer
-    // SB is a pseudo-register that holds the "static-base" pointer,
-    // i.e. the address of the beginning of the program address space.
-
-  // memory load
-  i32Load,     // load 4 bytes as i32
-  i32load8_s,  // load 1 byte and sign-extend i8 to i32
-  i32load8_u,  // load 1 byte and zero-extend i8 to i32
-  i32load16_s, // load 2 bytes and sign-extend i16 to i32
-  i32load16_u, // load 2 bytes and zero-extend i16 to i32
-  i64Load,     // load 8 bytes as i64
-  i64load8_s,  // load 1 byte and sign-extend i8 to i64
-  i64load8_u,  // load 1 byte and zero-extend i8 to i64
-  i64load16_s, // load 2 bytes and sign-extend i16 to i64
-  i64load16_u, // load 2 bytes and zero-extend i16 to i64
-  i64load32_s, // load 4 bytes and sign-extend i32 to i64
-  i64load32_u, // load 4 bytes and zero-extend i32 to i64
-  f32Load,     // load 4 bytes as f32
-  f64Load,     // load 8 bytes as f64
-
-  // memory store
-  i32Store,    // store 4 bytes (no conversion)
-  i32Store8,   // wrap i32 to i8 and store 1 byte
-  i32Store16,  // wrap i32 to i16 and store 2 bytes
-  i64Store,    // store 8 bytes (no conversion)
-  i64Store8,   // wrap i64 to i8 and store 1 byte
-  i64Store16,  // wrap i64 to i16 and store 2 bytes
-  i64Store32,  // wrap i64 to i32 and store 4 bytes
-  f32Store,    // store 4 bytes (no conversion)
-  f64Store,    // store 8 bytes (no conversion)
-
-  // integer operators (i=size type, i32=i32 type, etc)
-  i32Add,    // +  sign-agnostic addition
-  i32Sub,    // -  sign-agnostic subtraction
-  i32Mul,    // *  sign-agnostic multiplication (lower 32-bits)
-  i32Div_s,  // /  signed division (result is truncated toward zero)
-  i32Div_u,  // /  unsigned division (result is floored)
-  i32Rem_s,  // %  signed remainder (result has the sign of the dividend)
-  i32Rem_u,  // %  unsigned remainder
-  i32Neg,   // -N negation
-  i32And,    // &  sign-agnostic bitwise and
-  i32Or,     // |  sign-agnostic bitwise inclusive or
-  i32Xor,    // ^  sign-agnostic bitwise exclusive or
-  i32Shl,    // << sign-agnostic shift left
-  i32Shr_u,  // >>> zero-replicating (logical) shift right
-  i32Shr_s,  // >> sign-replicating (arithmetic) shift right
-  i32Rotl,   //    sign-agnostic rotate left
-  i32Rotr,   //    sign-agnostic rotate right
-  i32Eq,     // == sign-agnostic compare equal
-  i32Ne,     // != sign-agnostic compare unequal
-  i32Lt_s,   // <  signed less than
-  i32Lt_u,   // <  unsigned less than
-  i32Le_s,   // <= signed less than or equal
-  i32Le_u,   // <= unsigned less than or equal
-  i32Gt_s,   // >  signed greater than
-  i32Gt_u,   // >  unsigned greater than
-  i32Ge_s,   // >= signed greater than or equal
-  i32Ge_u,   // >= unsigned greater than or equal
-  i32Clz,    //    sign-agnostic count leading zero bits
-             //    (All zero bits are considered leading if the value is zero)
-  i32Ctz,    //    sign-agnostic count trailing zero bits
-             //    (All zero bits are considered trailing if the value is zero)
-  i32Popcnt, //    sign-agnostic count number of one bits
-  i32Eqz,    // == compare equal to zero
-
-  // same operations listed above are defined for 64-bit integers
-  i64Add, i64Sub, i64Mul, i64Div_s, i64Div_u, i64Rem_s, i64Rem_u, i64Neg,
-  i64And, i64Or, i64Xor, i64Shl, i64Shr_u, i64Shr_s, i64Rotl, i64Rotr,
-  i64Eq, i64Ne, i64Lt_s, i64Lt_u, i64Le_s, i64Le_u, i64Gt_s, i64Gt_u,
-  i64Ge_s, i64Ge_u, i64Clz, i64Ctz, i64Popcnt, i64Eqz,
-
-  // floating-point operators
-  f32Add,   // +  addition
-  f32Sub,   // -  subtraction
-  f32Mul,   // *  multiplication
-  f32Div,   // /  division
-  f32Abs,   //    absolute value
-  f32Neg,   // -N negation
-  f32Cps,   //    copysign
-  f32Ceil,  //    ceiling operator
-  f32Floor, //    floor operator
-  f32Trunc, //    round to nearest integer towards zero
-  f32Near,  //    round to nearest integer, ties to even
-  f32Eq,    // == compare ordered and equal
-  f32Ne,    // != compare unordered or unequal
-  f32Lt,    // <  compare ordered and less than
-  f32Le,    // <= compare ordered and less than or equal
-  f32Gt,    // >  compare ordered and greater than
-  f32Ge,    // >= compare ordered and greater than or equal
-  f32Sqrt,  //    square root
-  f32Min,   //    minimum (binary operator); if either operand is NaN, ret NaN
-  f32Max,   //    maximum (binary operator); if either operand is NaN, ret NaN
-
-  // same operations listed above are defined for 64-bit floats
-  f64Add, f64Sub, f64Mul, f64Div, f64Abs, f64Neg, f64Cps, f64Ceil, f64Floor,
-  f64Trunc, f64Near, f64Eq, f64Ne, f64Lt, f64Le, f64Gt, f64Ge, f64Sqrt, f64Min,
-  f64Max,
-
-  // conversion
-  i32Wrap_i64,      // wrap a 64-bit int to a 32-bit int
-  i32Trunc_s_f32,   // truncate a 32-bit float to a signed 32-bit int
-  i32Trunc_s_f64,   // truncate a 64-bit float to a signed 32-bit int
-  i32Trunc_u_f32,   // truncate a 32-bit float to an unsigned 32-bit int
-  i32Trunc_u_f64,   // truncate a 64-bit float to an unsigned 32-bit int
-  i32Rein_f32,      // reinterpret the bits of a 32-bit float as a 32-bit int
-  
-  i64Extend_s_i32,  // extend a signed 32-bit int to a 64-bit int
-  i64Extend_u_i32,  // extend an unsigned 32-bit int to a 64-bit int
-  i64Trunc_s_f32,   // truncate a 32-bit float to a signed 64-bit int
-  i64Trunc_s_f64,   // truncate a 64-bit float to a signed 64-bit int
-  i64Trunc_u_f32,   // truncate a 32-bit float to an unsigned 64-bit int
-  i64Trunc_u_f64,   // truncate a 64-bit float to an unsigned 64-bit int
-  i64Rein_f64,      // reinterpret the bits of a 64-bit float as a 64-bit int
-  
-  f32Demote_f64,    // demote a 64-bit float to a 32-bit float
-  f32Convert_s_i32, // convert a signed 32-bit int to a 32-bit float
-  f32Convert_s_i64, // convert a signed 64-bit int to a 32-bit float
-  f32Convert_u_i32, // convert an unsigned 32-bit int to a 32-bit float
-  f32Convert_u_i64, // convert an unsigned 64-bit int to a 32-bit float
-  f32Rein_i32,      // reinterpret the bits of a 32-bit int as a 32-bit float
-  
-  f64Promote_f32,   // promote a 32-bit float to a 64-bit float
-  f64Convert_s_i32, // convert a signed 32-bit int to a 64-bit float
-  f64Convert_s_i64, // convert a signed 64-bit int to a 64-bit float
-  f64Convert_u_i32, // convert an unsigned 32-bit int to a 64-bit float
-  f64Convert_u_i64, // convert an unsigned 64-bit int to a 64-bit float
-  f64Rein_i64,      // reinterpret the bits of a 64-bit int as a 64-bit float
-
-  // misc
-  Trap,             // aka "unreachable". Trap/crash
+    // if (name == "AddI32") {
+    //   op.reg.inputs = [ { idx: 0, regs: covm_buildReg("R4") } ]
+    // }
+  }
 }
-

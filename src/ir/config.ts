@@ -59,6 +59,6 @@ export class Config {
 
 
   toString() :string {
-    return `${this.arch}/${this.addrSize * 8}/${this.optimize ? 'opt' : 'g'}`
+    return `${this.arch}/${this.addrSize * 8}/${this.optimize ? 'opt':'debug'}`
   }
 }

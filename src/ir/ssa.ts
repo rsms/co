@@ -1,5 +1,6 @@
 import { ByteStr, asciiByteStr } from '../bytestr'
 import { Num } from '../num'
+import { Pos, NoPos } from '../pos'
 import { debuglog as dlog } from '../util'
 import { Op, ops } from './op'
 import {
@@ -20,10 +21,15 @@ import {
   t_f32,
   t_f64,
 } from '../types'
+import { postorder } from './postorder'
+// import { LoopNest, loopnestFun } from './loopnest'
 
 
 const byteStr_main = asciiByteStr("main")
 const byteStr_anonfun = asciiByteStr("anonfun")
+
+
+export type ID = int
 
 
 // Aux is an auxiliary value of Value
@@ -34,7 +40,8 @@ export type Aux = ByteStr | Uint8Array | Num
 // Value is a three-address-code operation
 //
 export class Value {
-  id      :int   // unique identifier
+  id      :ID    // unique identifier
+  pos     :Pos = NoPos  // source position
   op      :Op    // operation that computes this value
   type    :BasicType
   b       :Block // containing block
@@ -47,7 +54,7 @@ export class Value {
   uses  :int = 0  // use count. Each appearance in args or b.control counts once
   users :Value[] = []
 
-  constructor(id :int, b :Block, op :Op, type :BasicType, aux :Aux|null) {
+  constructor(id :ID, b :Block, op :Op, type :BasicType, aux :Aux|null) {
     this.id = id
     this.op = op
     this.type = type
@@ -146,7 +153,8 @@ export enum BranchPrediction {
 // Block represents a basic block
 //
 export class Block {
-  id       :int
+  id       :ID
+  pos      :Pos = NoPos  // source position
   kind     :BlockKind = BlockKind.Invalid // The kind of block
   succs    :Block[]|null = null  // Successor/subsequent blocks (CFG)
   preds    :Block[]|null = null  // Predecessors (CFG)
@@ -160,6 +168,7 @@ export class Block {
   // three-address code values
   vhead    :Value|null = null  // first value (linked list)
   vtail    :Value|null = null  // last value (linked list)
+  valcount :int = 0  // number of values in list
 
   sealed   :bool = false
     // true if no further predecessors will be added
@@ -172,7 +181,7 @@ export class Block {
   // Fatal if not BranchUnknown and succs.length > 2.
   likely :BranchPrediction = BranchPrediction.Unknown
 
-  constructor(kind :BlockKind, id :int, f :Fun) {
+  constructor(kind :BlockKind, id :ID, f :Fun) {
     this.kind = kind
     this.id = id
     this.f = f
@@ -188,6 +197,7 @@ export class Block {
       this.vhead = v
     }
     this.vtail = v
+    this.valcount++
   }
 
   // pushValueFront adds v to the top of the block
@@ -200,6 +210,25 @@ export class Block {
       this.vtail = v
     }
     this.vhead = v
+    this.valcount++
+  }
+
+  // insertValueBefore inserts newval before refval.
+  // Returns newvval
+  //
+  insertValueBefore(refval :Value, newval :Value) :Value {
+    assert(refval.b === this)
+    assert(newval.b === this)
+    newval.prevv = refval.prevv
+    newval.nextv = refval
+    refval.prevv = newval
+    if (newval.prevv) {
+      newval.prevv.nextv = newval
+    } else {
+      this.vhead = newval
+    }
+    this.valcount++
+    return newval
   }
 
   // removeValue removes v from this block.
@@ -223,6 +252,8 @@ export class Block {
 
     v.prevv = null
     v.nextv = null
+
+    this.valcount--
 
     return prevv
   }
@@ -256,23 +287,6 @@ export class Block {
     // Note: "uses" does not count for the value's ref to its block, so
     // we don't decrement this.uses here.
     ;(existingv as any).b = null
-  }
-
-  // insertValueBefore inserts newval before refval.
-  // Returns newvval
-  //
-  insertValueBefore(refval :Value, newval :Value) :Value {
-    assert(refval.b === this)
-    assert(newval.b === this)
-    newval.prevv = refval.prevv
-    newval.nextv = refval
-    refval.prevv = newval
-    if (newval.prevv) {
-      newval.prevv.nextv = newval
-    } else {
-      this.vhead = newval
-    }
-    return newval
   }
 
   newPhi(t :BasicType) :Value {
@@ -327,10 +341,15 @@ export class Fun {
   name   :ByteStr
   nargs  :int      // number of arguments
 
-  bid    :int = 0  // block ID allocator
-  vid    :int = 0  // value ID allocator
+  bid    :ID = 0  // block ID allocator
+  vid    :ID = 0  // value ID allocator
 
   consts :Map<Op,Map<Num,Value>> | null = null  // constants cache
+
+  // Cached CFG data
+  _cachedPostorder :Block[] | null = null
+  // _cachedLoopnest  :LoopNest | null = null
+
 
   constructor(type :FunType, name :ByteStr|null, nargs :int) {
     this.entry = new Block(BlockKind.Plain, this.bid++, this)
@@ -409,6 +428,27 @@ export class Fun {
   //
   numValues() :int {
     return this.vid
+  }
+
+  postorder() :Block[] {
+    if (!this._cachedPostorder) {
+      this._cachedPostorder = postorder(this)
+    }
+    return this._cachedPostorder
+  }
+
+  // loopnest() :LoopNest {
+  //   if (!this._cachedLoopnest) {
+  //     this._cachedLoopnest = loopnestFun(this)
+  //   }
+  //   return this._cachedLoopnest
+  // }
+
+  // invalidateCFG tells the function that its CFG has changed
+  //
+  invalidateCFG() {
+    this._cachedPostorder = null
+    // this._cachedLoopnest = null
   }
 
   toString() {
