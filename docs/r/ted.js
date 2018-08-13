@@ -761,7 +761,11 @@ class File {
 
   setReadOnly(y) {
     this._readOnly = y
-    this.textarea.setAttribute("readonly", y ? "true" : null)
+    if (y) {
+      this.textarea.setAttribute("readonly", "true")
+    } else {
+      this.textarea.removeAttribute("readonly")
+    }
   }
 
   readOnly() {

@@ -1,4 +1,5 @@
 import { debuglog as dlog } from '../util'
+import { fmtAsciiMatrix } from '../debug'
 import { UInt64 } from '../int64'
 import { Pos } from '../pos'
 import { Mem, t_int, t_uint, t_i32, t_u32, t_u64, intTypes } from '../types'
@@ -253,16 +254,22 @@ export class NaiveRegAlloc implements RegAlloc {
       }
     }
     // dlog('a.values:', a.values)
-
+    
 
     // we start by computing live ranges, mapping each value definition
     // to a set of values alive at the point of the definition.
     a.computeLive()
     dlog("\nlive values at end of each block\n" + a.fmtLive())
 
-    // let ifg = new InterferenceGraph()
-    // ifg.build(f)
-    // dlog('interference graph:\n' + ifg.fmt())
+    let ig = a.buildInterferenceGraph()
+    let ifstr = a.fmtInterference(ig)
+    let vizurl = (
+      'https://rsms.me/co/doc/chaitin/?input=ifg&enable-briggs=1&ifg=' +
+      encodeURIComponent(
+        ifstr.trim().split(/[\r\n]+/).map(s => s.trim()).join('\n')
+      ).replace(/\%20/g, '+')
+    )
+    dlog(`\ninterference:\n` + ifstr + '\nView at ' + vizurl)
 
 
 
@@ -289,6 +296,65 @@ export class NaiveRegAlloc implements RegAlloc {
     
     // // visit function's entry block
     // a.block(f.blocks[0], SP)
+  }
+
+
+  buildInterferenceGraph() :bool[][] {
+    const a = this
+    const f = a.f
+
+    // ig holds the interference graph
+    let ig :bool[][] = new Array<bool[]>(f.numValues())  // bool[nvals][~]
+
+    // visit blocks in reverse order
+    for (let i = f.blocks.length, b :Block|undefined ; b = f.blocks[--i]; ) {
+      let liveinfo :LiveInfo[] = a.live[b.id]
+      let live :bool[]
+      if (liveinfo) {
+        live = new Array<bool>(f.numValues())
+        for (let e of liveinfo) {
+          live[e.id] = true
+        }
+      } else {
+        live = []
+      }
+
+      // visit instructions in reverse order
+      for (let v = b.vtail; v; v = v.prevv) {
+
+        // remove defintion from currlive
+        live[v.id] = false
+
+        // update interference graph to add an edge from the definition v
+        // to each other value alive at this point
+        ig[v.id] = live.slice(0) // copy
+
+        if (v.args) for (let operand of v.args) {
+          live[operand.id] = true
+        }
+      }
+    }
+
+    return ig
+  }
+
+  fmtInterference(ig :bool[][]) :string {
+    let lines :string[] = []
+    for (let vid = 0; vid < ig.length; vid++) {
+      let live = ig[vid]
+      if (live) {
+        let s :string[] = []
+        for (let id2 = 0; id2 < live.length; id2++) {
+          if (live[id2]) {
+            s.push(`v${id2}`)
+          }
+        }
+        if (s.length) {
+          lines.push(`  v${vid} ${s.join(' ')}`)
+        }
+      }
+    }
+    return lines.join('\n')
   }
 
 

@@ -57,7 +57,9 @@ class UIBindings {
       queryString.replace(/^\?+/g,'')
         .split('&')
         .filter(s => s.trim())
-        .map(s => s.split('=').map(decodeURIComponent))
+        .map(s => s.split('=').map(s =>
+          decodeURIComponent(s.replace(/\+/g, '%20'))
+        ))
     )
     this.vars = new Map()
   }

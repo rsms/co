@@ -405,6 +405,7 @@ export class Fun {
     let nvmap = f.consts.get(op)
     if (!nvmap) {
       nvmap = new Map<Num,Value>()
+      f.consts.set(op, nvmap)
     }
 
     let v = nvmap.get(c)

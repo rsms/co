@@ -31,12 +31,16 @@ endcapture %}
         </label>
         <label title="Immediately compute on changes">
           <input name="immediate" type="checkbox">
-          Immediate
+          Imm
         </label>
         <label title="Number of registers">
           <input name="regcount" type="number" min="1" max="64" value="3">
           Registers
         </label>
+        <select name="input" title="Input type">
+          <option value="slc" selected>Straight-line code</option>
+          <option value="ifg">Interference values</option>
+        </select>
       </div>
       <div class="controls">
         <button class="svg" name="restart" title="Restart">
@@ -76,19 +80,27 @@ g = d + c
 `.trim()
 
 let slcFile = new ted.File('input', defaultSLC, 'slcEditor')
-let livenessFile = new ted.File("liveness", "", "livenessEditor")
+let liveFile = new ted.File("liveness", "", "liveEditor")
+let ifgFile = new ted.File("interference", "", "ifgEditor")
 let regsFile = new ted.File("registers", "", "regsEditor")
 
+let isModifyingLiveFileAutomatically = false
+let isModifyingSLCFileManually = false
+let isModifyingIFGFileAutomatically = false
 
 slcFile.onChange = (type, data) => {
   // console.log('file changed', {type, data})
-  setSLCode(slcFile.text())
+  if (!isModifyingSLCFileManually) {
+    setSLCode(slcFile.text())
+  }
 }
 
 slcFile.mount($('.main .files'))
 
-livenessFile.mount($('.main .files'))
-livenessFile.setReadOnly(true)
+ifgFile.mount($('.main .files'))
+
+liveFile.mount($('.main .files'))
+liveFile.setReadOnly(true)
 
 regsFile.mount($('.main .files'))
 regsFile.setReadOnly(true)
@@ -335,13 +347,15 @@ function updateLivenessDisplay(values) {
       continue
     }
     if (v.live.length == 0) {
-      lines.push('{}')
+      lines.push('')
     } else {
-      lines.push('{ ' + v.live.join(' ') + ' }')
+      lines.push(v.live.join(' '))
     }
     // console.log(v)
   }
-  livenessFile.setText(lines.join('\n'))
+  isModifyingLiveFileAutomatically = true
+  liveFile.setText(lines.join('\n'))
+  isModifyingLiveFileAutomatically = false
 }
 
 
@@ -349,8 +363,35 @@ let currentValues = []
 let currentValuesById = {}
 
 
-function setSLCode(src) {
+function renderGraph(ifgraph, values) {
   stopChaitinBriggs()
+  try {
+
+    currentValues = values
+    currentValuesById = {}
+    for (let v of values) {
+      currentValuesById[v.id] = v
+    }
+
+    igraph.svg.n.style.opacity = '1'
+    igraph.renderGraph(ifgraph)
+    // igraph.nodes['b'].circleNode.attr('fill', '#faf')
+
+    restartChaitinBriggs(igraph, ifgraph)
+
+    updateRegsEditor()
+  } catch (err) {
+    handleError(err)
+  }
+}
+
+function handleError(err) {
+  status.err(err.message)
+  console.error(err.stack || ''+err)
+  igraph.svg.n.style.opacity = '0.2'
+}
+
+function setSLCode(src) {
   try {
     status.log('Parsing')
 
@@ -365,30 +406,137 @@ function setSLCode(src) {
     console.log('values:', values)
     console.log('ifgraph:', ifgraph)
 
-    // update livenessFile
     updateLivenessDisplay(values)
+    replaceIFGFile(ifgraph)
 
-    currentValues = values
-    currentValuesById = {}
-    for (let v of values) {
-      currentValuesById[v.id] = v
-    }
-
-    // values = vals
-    igraph.svg.n.style.opacity = '1'
-    igraph.renderGraph(ifgraph)
-    // igraph.nodes['b'].circleNode.attr('fill', '#faf')
-
-    restartChaitinBriggs(igraph, ifgraph)
-
-    updateRegsEditor()
+    renderGraph(ifgraph, values)
 
   } catch (err) {
-    status.err(err.message)
-    console.error(err.stack || ''+err)
-    igraph.svg.n.style.opacity = '0.2'
-    return
+    handleError(err)
   }
+}
+
+
+function replaceIFGFile(ifgraph) {
+  let keys = Array.from(ifgraph.keys()).sort()
+  let lines = new Set()
+  for (let id1 of keys) {
+    for (let id2 of ifgraph.get(id1)) {
+      let line = id1 < id2 ? `${id1} -- ${id2}` : `${id2} -- ${id1}`
+      lines.add(line)
+    }
+  }
+  isModifyingIFGFileAutomatically = true
+  ifgFile.setText(Array.from(lines).join('\n'))
+  isModifyingIFGFileAutomatically = false
+}
+
+
+function parseIFGFile() {
+  // format is expected to be lines of any of the following syntax:
+  //
+  //    v1 -- v2   ; v1 and v2 interfere
+  //    v1 - v2    ; v1 and v2 interfere
+  //    v1 v2      ; v1 and v2 interfere
+  //    v1 v2 v3   ; v1 and v2 + v1 and v3 + v2 and v3 interfere (set)
+  //
+  // comments begin with "//" and continue until end of line
+  //
+  let ifgraph = new Map()
+  let values = [], valmap = new Map()
+
+  function reguse(v) {
+    let e = valmap.get(v)
+    if (e) {
+      e.uses++
+    } else {
+      e = { id: v, op: "idef", operands: [], consts: [], uses: 1 }
+      valmap.set(v, e)
+      values.push(e)
+    }
+  }
+
+  function connect(values) {
+    for (let v1 of values) {
+      reguse(v1)
+      let s = ifgraph.get(v1)
+      if (!s) {
+        s = new Set()
+        ifgraph.set(v1, s)
+      }
+      for (let v2 of values) {
+        if (v2 !== v1) {
+          s.add(v2)
+        }
+      }
+    }
+  }
+
+  let src = ifgFile.text()
+  let lines = src.trim().split(/[\r\n\;\.]+/)
+
+  for (let line of lines) {
+    line = line.trim()
+    let ci = line.indexOf('//')
+    if (ci != -1) {
+      line = line.substr(0, ci)
+    }
+    if (line.length == 0) {
+      continue
+    }
+
+    let vals = line.trim().split(/[\s,]+/).filter(v => v[0] != '-')
+    if (vals.length == 1) {
+      status.err(
+        `Invalid single value "${vals[0]}" in input. `+
+        `Expecting "a -- b" or "a b c"`
+      )
+      return
+    } else {
+      connect(vals)
+    }
+  }
+
+  // console.log('parseIFGFile', { ifgraph, values })
+
+  renderGraph(ifgraph, values)
+}
+
+
+function parseLiveCode(src) {
+  let lines = src.trim().split(/[\r\n]+/)
+  let values = [], valmap = new Map()
+  let ifgraph = new Map()
+
+  for (let line of lines) {
+    let vals = line.trim().split(/\s+/)
+
+    for (let v of vals) {
+      let ifer = ifgraph.get(v)
+      if (!ifer) {
+        ifer = new Set()
+        ifgraph.set(v, ifer)
+      }
+      for (let v2 of vals) {
+        if (v2 !== v) {
+          ifer.add(v2)
+        }
+      }
+
+      let e = valmap.get(v)
+      if (e) {
+        e.uses++
+      } else {
+        e = { id: v, op: "idef", operands: [], consts: [], uses: 1 }
+        valmap.set(v, e)
+        values.push(e)
+      }
+    }
+  }
+
+  console.log('values:', values)
+
+  renderGraph(ifgraph, values)
 }
 
 
@@ -407,14 +555,21 @@ function updateRegsEditor() {
   
   for (let v of currentValues) {
     let r = v.register || -1
-    let line = fmtval(v) + ' ⇐ '
+    let line = fmtval(v)
+    let simple = true
     if (v.op == '=') {
-      line += v.consts.join(' ')
-    } else if (v.op == 'idef' && v.operands.length == 0) {
-      line += '(unknown)'
+      line += ' ⇐ ' + v.consts.join(' ')
+      simple = false
     }
+    // else if (v.op == 'idef' && v.operands.length == 0) {
+    //   line += '(unknown)'
+    // }
 
     if (v.operands.length > 0) {
+      if (simple) {
+        simple = false
+        line += ' ⇐ '
+      }
       let id1 = v.operands[0]
       let opv = currentValuesById[id1]
       line += (opv ? fmtval(opv) : id1)
@@ -822,7 +977,7 @@ function restartChaitinBriggs(igraph, ifgraph) {
 
 
   let register = -1
-  let hasReshuffledIfgraph = false
+  let hasReshuffledIfgraph = true // false
 
 
   function resolveInterference(id, edges, register) {
@@ -918,8 +1073,6 @@ function restartChaitinBriggs(igraph, ifgraph) {
       }
 
     } else if (hasReshuffledIfgraph) {
-      console.log('condition: hasReshuffledIfgraph  -- TODO: check for interference and pick a register')
-
       let reg = searchForUsableRegister(register, edges)
       if (reg < 0) {
         // Resolve interference in a potentially clever way
@@ -1104,14 +1257,50 @@ function restart() {
   needsRestart = false
   regs.resetState()
   regsFile.setText('')
-  setSLCode(slcFile.text())
+  if (inputVar.getValue() == 'slc') {
+    setSLCode(slcFile.text())
+  } else {
+    // isModifyingSLCFileManually = true
+    // slcFile.setText('')
+    // slcFileVar.setValue('a')
+    // isModifyingSLCFileManually = false
+
+    parseIFGFile()
+  }
 }
 
 
 let enableBriggsVar
+let inputVar
+let slcFileVar
 
 
 function main() {
+
+  inputVar = uiv.bind('input', (_, v) => {
+    if (v == 'slc') {
+      document.body.classList.remove('input-mode-ifg')
+      document.body.classList.add('input-mode-slc')
+    } else {
+      document.body.classList.add('input-mode-ifg')
+      document.body.classList.remove('input-mode-slc')
+    }
+    setNeedsRestart()
+  })
+
+//   setTimeout(() => {
+//     inputVar.setValue('ifg')
+//     setTimeout(() => {
+//       ifgFile.setText(`
+// a -- b
+// a - c
+// b c d
+// b e
+// b a x
+//     `.trim())
+//     },
+//     100)
+//   }, 100)
 
   immediateVar = uiv.bind('immediate', (_, v) => {
     setNeedsRestart()
@@ -1128,23 +1317,72 @@ function main() {
 
 
   ;(() => {
+
     let isInitial = true
-    uiv.bind('slc', $('.ted.file.slcEditor textarea'), function (el, nextVal) {
-      if (isInitial) {
-        isInitial = false
-        if (nextVal == '') {
-          nextVal = defaultSLC
+    slcFileVar = uiv.bind(
+      'slc',
+      $('.ted.file.slcEditor textarea'),
+      function (el, nextVal) {
+        if (isInitial) {
+          isInitial = false
+          if (nextVal == '') {
+            nextVal = defaultSLC
+          }
+        } else if (
+          nextVal == '' ||
+          (nextVal.length < 100 && nextVal.trim() == '')
+        ) {
+          status.html('Empty. <a href="./">Reset to defaults</a>')
         }
-      } else if (
-        nextVal == '' ||
-        (nextVal.length < 100 && nextVal.trim() == '')
-      ) {
-        status.html('Empty. <a href="./">Reset to defaults</a>')
+        slcFile.setText(nextVal)
+        return nextVal
       }
-      slcFile.setText(nextVal)
-      return nextVal
-    })
+    )
+
+    let isInitial2 = true
+    let ifgVar = uiv.bind(
+      'ifg',
+      $('.ted.file.ifgEditor textarea'),
+      (el, nextVal) => {
+        if (isInitial2) {
+          isInitial2 = false
+        } else if (
+          nextVal == '' ||
+          (nextVal.length < 100 && nextVal.trim() == '')
+        ) {
+          status.html('Empty. <a href="./">Reset to defaults</a>')
+        }
+        isModifyingIFGFileAutomatically = true
+        ifgFile.setText(nextVal)
+        isModifyingIFGFileAutomatically = false
+        return nextVal
+      }
+    )
+
   })()
+
+
+  ifgFile.onChange = (type, data) => {
+    if (isModifyingIFGFileAutomatically) {
+      return
+    }
+    parseIFGFile()
+  }
+
+
+  // liveFile.setReadOnly(false)
+  // liveFile.onChange = (type, data) => {
+  //   if (isModifyingLiveFileAutomatically) {
+  //     return
+  //   }
+  //   console.log('liveFile changed', {type, data})
+  //   isModifyingSLCFileManually = true
+  //   slcFile.setText('')
+  //   isModifyingSLCFileManually = false
+  //   parseLiveCode(liveFile.text())
+  // }
+  // setTimeout(() => liveFile.setText('x\n' + liveFile.text('').trim()), 100)
+
 
   let restartButton = $('button[name="restart"]')
   restartButton.onclick = restart
