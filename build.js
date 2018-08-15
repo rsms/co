@@ -67,6 +67,11 @@ if (process.argv.includes('-h') || process.argv.includes('-help')) {
   console.warn("warning: -clean has no effect in combination with -O")
 }
 
+const githashShort = getGitHashSync().substr(0, 10)
+
+const VERSION =
+  pkg.version + '-' + (debug ? ('debug+' + githashShort) : githashShort)
+
 // constant definitions that may be inlined
 const defines_inline = {
   DEBUG: debug,
@@ -74,7 +79,7 @@ const defines_inline = {
 
 // constant defintions (will be available as `const name = value` at runtime)
 const defines_all = Object.assign({
-  VERSION: `${pkg.version}-${debug ? 'debug' : getGitHashSync() || 'release'}`,
+  VERSION,
 }, defines_inline)
 
 // typescript config
@@ -119,6 +124,10 @@ const rin = {
   },
 }
 
+const banner = `/* ${pkg.name} ${VERSION} */\n`
+const wrapperStart = '(function(global){\n'
+const wrapperEnd = '})(typeof exports != "undefined" ? exports : this);\n'
+
 // output config
 const rout = {
   file: outfile,
@@ -126,7 +135,8 @@ const rout = {
   name: 'xlang',
   sourcemap: true,
   freeze: debug, // Object.freeze(x) on import * as x from ...
-  banner: `/* ${pkg.name} ${defines_all.VERSION} */\n`,
+  banner: banner + wrapperStart,
+  footer: wrapperEnd,
   intro: '',
 }
 
@@ -158,7 +168,7 @@ function buildIncrementally() {
         break
       case 'BUNDLE_START': // building an individual bundle
         const outfiles = ev.output.map(fn => relpath(rootdir, fn)).join(', ')
-        console.log(`build ${outfiles} ...`)
+        console.log(`build ${outfiles} (${VERSION}) ...`)
         break
       case 'BUNDLE_END':   // finished building a bundle
         reportBuilt(
@@ -206,7 +216,7 @@ function buildIncrementally() {
 
 function buildOnce() {
   let startTime = Date.now()
-  console.log(`build ${relpath(rootdir, rout.file)} ...`)
+  console.log(`build ${relpath(rootdir, rout.file)} (${VERSION}) ...`)
   rollup.rollup(rin).then(bundle => {
     // console.log(`imports: (${bundle.imports.join(', ')})`)
     // console.log(`exports: (${bundle.exports.join(', ')})`)
@@ -551,8 +561,7 @@ function genOptimized(code, map) { // :Promise<void>
       } : false,
 
       output: {
-        preamble: rout.banner.trim(),
-          // Note: uglify adds a trailing newline after preamble
+        preamble: banner.trim(), // uglify adds a trailing newline
         beautify: !minify,
         indent_level: 2,
         // comments: true,
@@ -577,7 +586,7 @@ function genOptimized(code, map) { // :Promise<void>
     console.log(
       `write ${fmtsize(result.map.length)} to ${relpath(rootdir, mapfile)}`)
     resolve(Promise.all([
-      writefile(outfile, result.code, 'utf8'),
+      writefile(outfile, result.code + wrapperEnd, 'utf8'),
       writefile(mapfile, result.map, 'utf8'),
     ]))
   })
@@ -641,12 +650,18 @@ function compileJS(name, source) { // :{ error? :Error, code :string }
 }
 
 
+var cachedGitHash
+
 function getGitHashSync() {
-  try {
-    return subprocess.execSync('git rev-parse HEAD', {
-      cwd: rootdir,
-      timeout: 2000,
-    }).toString('utf8').trim()
-  } catch (_) {}
-  return ''
+  if (cachedGitHash === undefined) {
+    try {
+      cachedGitHash = subprocess.execSync('git rev-parse HEAD', {
+        cwd: rootdir,
+        timeout: 2000,
+      }).toString('utf8').trim()
+    } catch (_) {
+      cachedGitHash = ''
+    }
+  }
+  return cachedGitHash
 }
