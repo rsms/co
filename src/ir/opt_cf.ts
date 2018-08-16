@@ -1,7 +1,6 @@
 //
 // constant-folding optimizations
 //
-import { debuglog as dlog } from '../util'
 import { BasicType, IntType } from '../types'
 import { Num, numconv } from '../num'
 import { Op, ops } from './op'
@@ -26,8 +25,7 @@ export function optcf_op2(b :Block, op :Op, x :Value, y :Value) :Value|null {
 
   if (x.type !== y.type) {
     // different types
-    let _lossless = false
-    ;[yval, _lossless] = numconv(yval, x.type)
+    yval = numconv(yval, x.type)[0]
     // TODO: warn here if not lossless?
   }
 

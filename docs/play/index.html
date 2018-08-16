@@ -25,8 +25,8 @@ window.readFileSync = function(fn, options) {
 </script>
 <link rel="stylesheet" href="{{url_root}}r/ted.css?v={{ build_version }}" type="text/css">
 <script src="{{url_root}}r/ted.js?v={{ build_version }}"></script>
+<script src="{{url_root}}r/uibindings.js?v={{ build_version }}"></script>
 <script src="xlang.debug.js?v={{ build_version }}"></script>
-<!-- <script src="https://unpkg.com/viz.js@1.8.0/viz-lite.js"></script> -->
 
 <style type="text/css">
 
@@ -71,12 +71,36 @@ body {
   background: #fbf7bc;
 }
 
-.console {
-  border-top:2px solid #111;
+
+.inspector {
   flex:1 1 20%;
+  border-top: 2px solid #111;
+  display: flex;
+}
+.settings {
+  flex:0 1 auto;
+  width: 100px;
+  padding: 10px;
+  border-left: 2px solid #111;
+  display: flex;
+  flex-direction: column;
+  font-size:11px;
+  letter-spacing: 0.005em;
+}
+  .settings label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 2px;
+    user-select: none;
+  }
+  .settings [type="checkbox"] {
+    margin-right:5px;
+  }
+.console {
   /*font-size:11px;*/
   /*font-size: 16px;
   line-height: 20px;*/
+  flex:1 1 auto;
   font-family:
     InconsolataGo,
     Inconsolata,
@@ -249,11 +273,23 @@ body {
       <div class="result" id="result-ir"></div>
     </div>
   </div>
-  <div class="console">
-    <div id="template-console-entry" class="entry">
-      <div class="icon"></div>
-      <div class="message"></div>
-      <div class="origin"></div>
+  <div class="inspector">
+    <div class="console">
+      <div id="template-console-entry" class="entry">
+        <div class="icon"></div>
+        <div class="message"></div>
+        <div class="origin"></div>
+      </div>
+    </div>
+    <div class="settings">
+      <label title="Enable optimizations">
+        <input name="optimize" type="checkbox" checked>
+        Optimize
+      </label>
+      <label title="Do not generate target-specific IR">
+        <input name="generic-ir" type="checkbox" checked>
+        Generic IR
+      </label>
     </div>
   </div>
 </div>
@@ -274,6 +310,12 @@ let monotime = (
     performance.now.bind(performance) :
   () => (new Date()).getTime() * 1000
 )
+
+let ui = new UIBindings(document.location.search)
+
+let optimizeVar = ui.bind('optimize', () => setNeedsCompile())
+let genericIRVar = ui.bind('generic-ir', () => setNeedsCompile())
+
 
 let _templateCache = {}
 function template(id) {
@@ -431,8 +473,14 @@ window.addEventListener('error', ev => {
 // }, 10)
 
 
-// compilePkg(srcs :{[name:string]:string}, skipIR? :bool) :Promise<Result>
+// compilePkg(srcs :{[name:string]:string},options? :Options) :Promise<Result>
 //
+// interface MainOptions {
+//   sources?    :string[]
+//   noOptimize? :bool
+//   noIR?       :bool
+//   genericIR?  :bool  // stop IR pipeline early. (don't do regalloc etc.)
+// }
 // interface Result {
 //   success     :bool
 //   diagnostics :diaginfo[]
@@ -444,9 +492,11 @@ window.addEventListener('error', ev => {
 //   message: string
 // }
 //
-function compilePkg(sourceFiles, skipIR) {
+function compilePkg(sourceFiles, options) {
   gSourceFiles = sourceFiles
-  return colang.main(Object.keys(sourceFiles), skipIR)
+  return colang.main(Object.assign({}, {
+    sources: Object.keys(sourceFiles),
+  }, options || {}))
 }
 
 var pkg = {
@@ -475,7 +525,12 @@ var pkg = {
     this.needsCompile = false
     let startTime = monotime()
     try {
-      compilePkg(sources, /*skipIR=*/false).then(r => {
+      let compileOptions = {
+        noOptimize: !optimizeVar.getValue(),
+        genericIR: genericIRVar.getValue(),
+        noIR: false,
+      }
+      compilePkg(sources, compileOptions).then(r => {
         let endTime = monotime()
         let duration = (endTime - startTime).toFixed(1) + 'ms'
         if (r.success) {
@@ -561,6 +616,12 @@ var pkg = {
   },
 }
 
+function setNeedsCompile() {
+  if (pkg) {
+    pkg.setNeedsCompile()
+  }
+}
+
 // create a FileView with some default code
 let f = new ted.File('hello.co', `
 fun foo(x, y int) int {
@@ -574,7 +635,7 @@ fun bar(x int) bool {
 \tx || 0
 }
 `.trim())
-f.onChange = () => pkg.setNeedsCompile()
+f.onChange = setNeedsCompile
 pkg.files[f.name] = f
 f.mount($('.main .files'))
 

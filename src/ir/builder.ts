@@ -3,7 +3,7 @@ import { Pos, SrcFile } from '../pos'
 import { token, tokstr } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
 import { Num } from '../num'
-import { debuglog as dlog } from '../util'
+// import { debuglog as dlog } from '../util'
 import * as ast from '../ast'
 import * as types from '../types'
 import {
@@ -19,13 +19,13 @@ import {
 } from '../types'
 import { optdce } from './opt_dce'
 import { optcf_op1, optcf_op2 } from './opt_cf'
-
-
 import { ops, Op } from './op'
 import { Aux, Value, Block, BlockKind, Fun, Pkg, BranchPrediction } from './ssa'
-import { RegAlloc } from './regalloc'
+import { RegAllocator } from './regalloc'
 import { opselect1, opselect2 } from './opselect'
 import { Config } from './config'
+
+const dlog = function(..._ :any[]){} // silence dlog
 
 
 const bitypes = ast.builtInTypes
@@ -49,7 +49,7 @@ export class IRBuilder {
   pkg      :Pkg
   sfile    :SrcFile|null = null
   diagh    :DiagHandler|null = null
-  regalloc :RegAlloc|null = null
+  regalloc :RegAllocator|null = null
   b        :Block       // current block
   f        :Fun         // current function
   flags    :IRBuilderFlags = IRBuilderFlags.Default
@@ -70,7 +70,7 @@ export class IRBuilder {
 
   init(config :Config,
        diagh :DiagHandler|null = null,
-       regalloc :RegAlloc|null = null,
+       regalloc :RegAllocator|null = null,
        flags :IRBuilderFlags = IRBuilderFlags.Default
   ) {
     const r = this

@@ -1,6 +1,7 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
 import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
 import { Op } from './op'
+import { noReg } from './reg'
 
 export type LineWriter = (s :string) => any
 
@@ -28,7 +29,13 @@ function fmtval(f :IRFmt, v :Value) :string {
     s += ' ' + arg
   }
   if (v.aux !== null) {
-    s += ' [' + v.aux + ']'
+    s += ` [${v.aux}]`
+  }
+  // if (v.reg != noReg) {
+  //   s += ` {${style.orange(v.reg.toString())}}`
+  // }
+  if (v.reg) {
+    s += ` {${style.orange(v.reg.name)}}`
   }
   if (v.comment) {
     s += f.style.grey('  // ' + v.comment)

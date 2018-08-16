@@ -11,10 +11,9 @@ import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 
 import { Pkg as IRPkg } from './ir/ssa'
-import { NaiveRegAlloc } from './ir/regalloc_naive'
+import { RegAllocator } from './ir/regalloc'
 import { IRBuilder, IRBuilderFlags } from './ir/builder'
 import { printir, fmtir } from './ir/repr'
-import { Config as IRConfig } from './ir/config'
 // import { IRVirtualMachine } from './ir/vm'
 
 import { archs } from './arch/all'
@@ -166,14 +165,23 @@ interface MainResult {
   error?      :Error
 }
 
-async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
+interface MainOptions {
+  sources?    :string[]
+  noOptimize? :bool
+  noIR?       :bool
+  genericIR?  :bool  // stop IR pipeline early. (don't do regalloc etc.)
+}
+
+async function main(options? :MainOptions) :Promise<MainResult> {
   const strSet = new ByteStrSet()
   const typeSet = new TypeSet()
   const universe = new Universe(strSet, typeSet)
   const typeres = new TypeResolver()
   const parser = new Parser()
 
-  const _sources = sources || ['example/ssa1.xl']
+  options = options || {}
+
+  const _sources = options.sources || ['example/ssa1.xl']
 
   // clear diagnostics from past run (this is a global var)
   diagnostics = []
@@ -184,7 +192,7 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   }
 
   // skip code generation?
-  if (noIR) {
+  if (options.noIR) {
     return { success: true, diagnostics, ast: r.pkg }
   }
 
@@ -192,12 +200,12 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
   console.log('available target archs:', Object.keys(archs).join(', '))
   const arch = archs['covm']
   const config = arch.config({
-    optimize: true,
+    optimize: !options.noOptimize,
   })
   console.log(`selected target config: ${config}`)
 
 
-  const regalloc = null // new NaiveRegAlloc()
+  const regalloc = null // new RegAllocator()
   const irb = new IRBuilder()  // reusable
 
   irb.init(config, diagh, regalloc, IRBuilderFlags.Comments)
@@ -227,16 +235,18 @@ async function main(sources? :string[], noIR? :bool) :Promise<MainResult> {
         }
       }
 
-      // run regalloc as separate pass for debugging (normally run inline IRB)
-      if (isNodeJsLikeEnv) {
-        banner(`ssa-ir ${file.sfile.name} regalloc`)
-      }
-      const regalloc = new NaiveRegAlloc(config)
-      for (let [_, fn] of irb.pkg.funs) {
-        regalloc.regallocFun(fn)
-        if (isNodeJsLikeEnv && fn) {
-          console.log(`\n-----------------------\n`)
-          printir(fn)
+      if (!options.genericIR) {
+        // run regalloc as separate pass for debugging (normally run inline IRB)
+        if (isNodeJsLikeEnv) {
+          banner(`ssa-ir ${file.sfile.name} regalloc`)
+        }
+        const regalloc = new RegAllocator(config)
+        for (let [_, fn] of irb.pkg.funs) {
+          regalloc.regallocFun(fn)
+          if (isNodeJsLikeEnv && fn) {
+            console.log(`\n-----------------------\n`)
+            printir(fn)
+          }
         }
       }
 

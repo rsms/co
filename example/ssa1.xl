@@ -64,7 +64,7 @@
 fun foo(x, _, y int) int {
   // x + y
 
-  // a = x + y
+  a = x + y
   // d = a
   // c = a + d
 
@@ -73,7 +73,7 @@ fun foo(x, _, y int) int {
   } else {
     y *= 2
   }
-  x + y
+  x + y + a
 
   // if x > y {
   //   x *= 2 //|| 1

@@ -1,7 +1,7 @@
 import { ByteStr, asciiByteStr } from '../bytestr'
 import { Num } from '../num'
 import { Pos, NoPos } from '../pos'
-import { debuglog as dlog } from '../util'
+// import { debuglog as dlog } from '../util'
 import { Op, ops } from './op'
 import {
   BasicType,
@@ -22,7 +22,10 @@ import {
   t_f64,
 } from '../types'
 import { postorder } from './postorder'
+import { Register } from './reg'
 // import { LoopNest, loopnestFun } from './loopnest'
+
+const dlog = function(..._ :any[]){} // silence dlog
 
 
 const byteStr_main = asciiByteStr("main")
@@ -50,9 +53,11 @@ export class Value {
   comment :string = '' // human readable short comment for IR formatting
   prevv   :Value|null = null // previous value (list link)
   nextv   :Value|null = null // next value (list link)
+  reg     :Register|null = null  // allocated register
 
   uses  :int = 0  // use count. Each appearance in args or b.control counts once
   users :Value[] = []
+
 
   constructor(id :ID, b :Block, op :Op, type :BasicType, aux :Aux|null) {
     this.id = id
@@ -235,8 +240,6 @@ export class Block {
   // returns the previous sibling, if any.
   //
   removeValue(v :Value) :Value|null {
-    dlog(`${this} ${v}`)
-    
     let prevv = v.prevv
     let nextv = v.nextv
     if (prevv) {
@@ -373,7 +376,7 @@ export class Fun {
     assert(!t || !op.type || op.type.mem == 0 || t === op.type,
       `op ${op} with different concrete type (op.type=${op.type}, t=${t})`)
 
-    return new Value(++this.vid, b, op, t || op.type || t_nil, aux)
+    return new Value(this.vid++, b, op, t || op.type || t_nil, aux)
   }
 
   // constVal returns a constant Value representing c for type t

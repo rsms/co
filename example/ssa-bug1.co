@@ -1,0 +1,78 @@
+//
+// [bug] DCE incorrectly eliminates used values.
+// See v11 & v10 below.
+//
+//
+// [bug] "while" loops are not built properly by IRBuilder.
+// For instance, b2 is a dead block:
+//
+//   b2: <— b1
+//   cont —> b3
+//
+//
+// Notes:
+//
+// It may seem b4 is unnecessary:
+//
+//   b3: <- b2, b4  // while
+//     v7 = LessS32 <bool> v8 v6
+//   if v7 -> b4, b5
+//
+//   b4: <- b3  // then
+//   cont -> b3
+//
+// but b4 is required for SSA form here, as block b3 can't have itself
+// as a predecessor and/or successor:
+//
+//   b3: <- b2, b3  // cyclic!
+//     v7 = LessS32 <bool> v8 v6
+//   if v7 -> b3, b5
+//
+//
+
+fun foo(j int) int {
+  i = 0;
+  while i < 5 {
+    while j < 10 {}
+    i = i + 1
+  }
+}
+
+//
+//   DCE disabled                       DCE enabled
+//
+//   foo (int)->int                     foo (int)->int
+//     b0:                                b0:
+//       v0 = Arg <i32> [0]  // j           v0 = Arg <i32> [0]  // j
+//       v1 = ConstI32 <i32> [0]            v1 = ConstI32 <i32> [0]
+//       v3 = ConstI32 <i32> [5]            v3 = ConstI32 <i32> [5]
+//       v6 = ConstI32 <i32> [10]           v6 = ConstI32 <i32> [10]
+//       v10 = ConstI32 <i32> [1]
+//  *    ~~~
+//     cont -> b1                         cont —> b1
+//
+//     b1: <- b0, b5  // while            b1: <— b0, b5  // while
+//       v2 = Phi <i32> v1 v11              v2 = Phi <i32> v1 v11
+//  *                      ~~~                                ~~~
+//       v4 = LessS32 <bool> v2 v3          v4 = LessS32 <bool> v2 v3
+//       v8 = Phi <i32> v0 v5               v8 = Phi <i32> v0 v5
+//     if v4 -> b5, b6                    if v4 —> b5, b6
+//
+//     b2: <- b1                          b2: <— b1
+//     cont -> b3                         cont —> b3
+//
+//     b3: <- b2, b4  // while            b3: <— b2, b4  // while
+//       v7 = LessS32 <bool> v8 v6          v7 = LessS32 <bool> v8 v6
+//     if v7 -> b4, b5                    if v7 —> b4, b5
+//
+//     b4: <- b3  // then                 b4: <— b3  // then
+//     cont -> b3                         cont —> b3
+//
+//     b5: <- b3  // then                 b5: <— b3  // then
+//       v11 = AddI32 <i32> v2 v10
+//  *    ~~~                   ~~~
+//     cont -> b1                         cont —> b1
+//
+//     b6: <- b1  // endwhile             b6: <— b1  // endwhile
+//     ret                                ret
+//

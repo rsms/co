@@ -122,9 +122,9 @@ if (
     let e = new Error(), srcloc = '?'
     if (e.stack) {
       let sf = e.stack.split(/\n/, 3)[2]
-      let m = /\s+\(.+\/(src\/.+)\)$/.exec(sf)
+      let m = /\s+(?:\(.+\/(src\/.+)\)|at\s+.+\/(src\/.+))$/.exec(sf)
       if (m) {
-        srcloc = m[1]
+        srcloc = m[1] || m[2]
         var p = srcloc.lastIndexOf('/')
         var srcfile = p != -1 ? srcloc.substr(p + 1) : srcloc
         p = srcfile.indexOf(':')
