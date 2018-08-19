@@ -1,4 +1,4 @@
-import { Register, Reg, RegSet, emptyRegSet } from './reg'
+import { Register, RegSet, emptyRegSet } from './reg'
 import { Value, Block } from './ssa'
 
 export type BlockRewriter = (b :Block)=>bool

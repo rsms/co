@@ -1,29 +1,22 @@
 import { ByteStr, asciiByteStr } from '../bytestr'
 import { Pos, SrcFile } from '../pos'
-import { token, tokstr } from '../token'
+import { token } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
-import { Num, numIsZero, isNum } from '../num'
 import * as ast from '../ast'
 import * as types from '../types'
 import {
-  Mem,
   Type,
   BasicType,
-  NumType,
-  IntType,
   FunType,
-
   t_nil,
   t_bool,
 } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
-import { ops, Op } from './op'
-import { Aux, Value, Block, BlockKind, Fun, Pkg, BranchPrediction } from './ssa'
-import { RegAllocator } from './regalloc'
+import { ops } from './op'
+import { Value, Block, BlockKind, Fun, Pkg } from './ssa'
 import { opselect1, opselect2 } from './opselect'
 import { Config } from './config'
 import { printir } from './repr'
-import { removeEdge } from './deadcode'
 import { LocalSlot } from './localslot'
 
 // import { debuglog as dlog } from '../util'
@@ -55,7 +48,6 @@ export class IRBuilder {
   pkg      :Pkg
   sfile    :SrcFile|null = null
   diagh    :DiagHandler|null = null
-  regalloc :RegAllocator|null = null
   b        :Block       // current block
   f        :Fun         // current function
   flags    :IRBuilderFlags = IRBuilderFlags.Default
@@ -76,7 +68,6 @@ export class IRBuilder {
 
   init(config :Config,
        diagh :DiagHandler|null = null,
-       regalloc :RegAllocator|null = null,
        flags :IRBuilderFlags = IRBuilderFlags.Default
   ) {
     const r = this
@@ -84,7 +75,6 @@ export class IRBuilder {
     r.pkg = new Pkg()
     r.sfile = null
     r.diagh = diagh
-    r.regalloc = regalloc
     r.vars = new Map<ByteStr,Value>()
     r.defvars = []
     r.incompletePhis = null
@@ -235,7 +225,7 @@ export class IRBuilder {
       } else {
         line += '-'
       }
-      console.log(line)
+      dlog(line)
     }
 
     // TODO: run passes on s.f here

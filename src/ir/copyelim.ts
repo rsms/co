@@ -1,4 +1,3 @@
-import { debuglog as dlog } from '../util'
 import { Value, Fun } from './ssa'
 import { ops } from './op'
 

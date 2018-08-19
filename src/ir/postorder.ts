@@ -1,6 +1,4 @@
-import { debuglog as dlog } from '../util'
-import { Fun, Block, Value } from './ssa'
-import { ops } from './op'
+import { Fun, Block } from './ssa'
 
 interface blockAndIndex {
   b     :Block

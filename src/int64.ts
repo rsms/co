@@ -565,6 +565,7 @@ function toString(n :Int64, radix? :int) :string {
 
 // ===========================================================================
 
+
 export class SInt64 extends Int64Base implements Int64 {
   static readonly MIN    :SInt64  // -9223372036854775808
   static readonly MAX    :SInt64  // 9223372036854775807
@@ -1140,3 +1141,33 @@ let _UInt64_cache = new Map<int,UInt64>([
   [0, U64_ZERO],
   [1, U64_ONE],
 ])
+
+
+// f64ToS32pair converts a signed f64 to a pair [low:i32, high:i32]
+//
+export function f64ToS32pair(v :number) :[int,int] {
+  if (v <= -_TWO_PWR_63_DBL) {
+    return [S64_MIN._low, S64_MIN._high]
+  }
+  if (v + 1 >= _TWO_PWR_63_DBL) {
+    return [S64_MAX._low, S64_MAX._high]
+  }
+
+  if (v < 0) {
+    v = -v
+    let low = (v % _TWO_PWR_32_DBL) | 0
+    let high = (v / _TWO_PWR_32_DBL) | 0
+
+    // neg: if n.eq(S64_MIN) { return S64_MIN }
+    if (high == S64_MIN._high && low == S64_MIN._low) {
+      return [ S64_MIN._low, S64_MIN._high ]
+    }
+    // n.not().add(S64_ONE)
+    let n = (new SInt64(~low, ~high)).add(S64_ONE)
+    return [n._low, n._high]
+  }
+  return [
+    (v % _TWO_PWR_32_DBL) | 0,
+    (v / _TWO_PWR_32_DBL) | 0
+  ]
+}

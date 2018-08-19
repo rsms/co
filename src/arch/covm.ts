@@ -1,9 +1,8 @@
 import { debuglog as dlog } from '../util'
 import { RegInfo, Op, ops } from '../ir/op'
-import { RegSet, emptyRegSet, regBuilder } from '../ir/reg'
+import { regBuilder } from '../ir/reg'
 import { Value, Block } from '../ir/ssa'
 import { ValueRewriter } from '../ir/config'
-import { UInt64 } from '../int64'
 import { ArchInfo } from './arch'
 import * as T from '../types'
 

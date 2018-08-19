@@ -1,9 +1,8 @@
 //
 // constant-folding optimizations
 //
-import { BasicType, IntType } from '../types'
 import { Num, numconv, isNum } from '../num'
-import { Op, ops } from './op'
+import { Op } from './op'
 import { Value, Block } from './ssa'
 import { consteval1, consteval2 } from './consteval'
 

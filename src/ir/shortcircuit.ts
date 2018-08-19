@@ -1,6 +1,6 @@
-import { debuglog as dlog } from '../util'
-import { Value, Block, Fun, BlockKind } from './ssa'
-import { Op, ops } from './op'
+// import { debuglog as dlog } from '../util'
+import { Fun, BlockKind } from './ssa'
+import { ops } from './op'
 import { t_bool } from '../types'
 
 // Shortcircuit finds situations where branch directions
@@ -17,8 +17,8 @@ export function shortcircuit(f :Fun) {
   //    x = phi(a, ...)
   //
   // We can replace the "a" in the phi with the constant true.
-  let ct :Value|null = null   // cont true
-  let cf :Value|null = null;  // cont false
+  // let ct :Value|null = null   // cont true
+  // let cf :Value|null = null;  // cont false
   for (let b of f.blocks) {
     // visit all Phis in the block
     for (let v of b.values) {
@@ -39,7 +39,7 @@ export function shortcircuit(f :Fun) {
         if (p.control !== a) {
           continue
         }
-        dlog(`${p}.control == ${a}`)
+        // dlog(`${p}.control == ${a}`)
         //
         // TODO FIXME e.i is reverse edge index of succ -> b
         //

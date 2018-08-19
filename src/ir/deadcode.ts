@@ -1,9 +1,10 @@
-import { debuglog as dlog } from '../util'
 import { Value, Block, BlockKind, Fun, BranchPrediction } from './ssa'
 import { phielimValue } from './phielim'
 import { copyelim } from './copyelim'
 import { ops } from './op'
-import { LocalSlot } from './localslot'
+
+// import { debuglog as dlog } from '../util'
+const dlog = function(..._ :any[]){} // silence dlog
 
 
 // deadcode removes dead code from f
@@ -63,7 +64,7 @@ export function deadcode(f :Fun) {
   // Remove dead & duplicate entries from namedValues map.
   let s = new Set<Value>()
   for (let [key, e] of f.namedValues) {
-    let loc = e.local
+    // let loc = e.local
     let j = 0
     s.clear()
     for (let v of e.values) {

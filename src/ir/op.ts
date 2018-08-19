@@ -4,22 +4,22 @@ import {
 
   t_bool,
   t_u8,
-  t_i8,
+  // t_i8,
   t_u16,
   t_i16,
   t_u32,
   t_i32,
   t_u64,
   t_i64,
-  t_uint,
-  t_int,
+  // t_uint,
+  // t_int,
   t_usize,
-  t_isize,
+  // t_isize,
   
   t_f32,
   t_f64,
 
-  t_str,
+  // t_str,
 } from '../types'
 import { RegSet, emptyRegSet } from './reg'
 

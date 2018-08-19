@@ -1,5 +1,5 @@
 import { SInt64, UInt64, Int64 } from './int64'
-import { sint64rand, uint64rand, seed as int64rand_seed } from './int64_rand'
+import { sint64rand, uint64rand } from './int64_rand'
 import { asciibuf } from './util'
 import {
   assertEq,

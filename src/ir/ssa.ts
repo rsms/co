@@ -26,8 +26,6 @@ import { Register } from './reg'
 import { LocalSlot } from './localslot'
 // import { LoopNest, loopnestFun } from './loopnest'
 
-const dlog = function(..._ :any[]){} // silence dlog
-
 
 const byteStr_main = asciiByteStr("main")
 const byteStr_anonfun = asciiByteStr("anonfun")
@@ -474,8 +472,6 @@ export class Fun {
         assert(false, `invalid constant type ${t}`)
         break
     }
-
-    let vv :Value[]|undefined
 
     if (!f.consts) {
       f.consts = new Map<Op,Map<Num,Value>>()

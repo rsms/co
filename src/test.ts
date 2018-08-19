@@ -1,4 +1,4 @@
-// import jscheck from './test_jscheck'
+import { monotime } from './time'
 
 export function assertEq(actual :any, expected :any, context? :string) {
   assert(
@@ -127,11 +127,6 @@ class QCU32Gen extends QCGenBase<int> {
   }
 }
 
-const monotime :()=>number = (
-  typeof performance != 'undefined' ? () => performance.now() :
-  () => Date.now()
-)
-
 export function quickcheck<T>(
   gen :QCGen<T> | [T,T],
   check :((i :T)=>bool)) :void
@@ -180,7 +175,6 @@ export function quickcheck<T>(
     }
   }
 
-  let i = 0
   let timeStarted = monotime()
 
   for (let i = 0; i < g.size; i++) {

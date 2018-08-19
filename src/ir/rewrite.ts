@@ -1,6 +1,5 @@
-import { debuglog as dlog } from '../util'
-import { Value, Block, Fun } from './ssa'
-import { Op, ops } from './op'
+import { Value, Fun } from './ssa'
+import { ops } from './op'
 import { BlockRewriter, ValueRewriter } from './config'
 import { phielimValue } from './phielim'
 import { copySource } from './copyelim'
@@ -15,17 +14,12 @@ export function rewrite(f :Fun, rb :BlockRewriter, rv :ValueRewriter) {
       if (b.control && b.control.op === ops.Copy) {
         while (b.control.op === ops.Copy) {
           assert(b.control != null)
-          let newctrl = (b.control.args && b.control.args[0]) || null
-          let oldctrl = b.control
-          b.setControl(newctrl)
-          // if (oldctrl.uses == 0) {
-          //   oldctrl.args.length = 0  // TODO: .resetArgs() instead?
-          //   b.removeValue(oldctrl)
-          // }
+          assert(b.control.args[0] != null)
+          b.setControl(b.control.args[0] as Value)
         }
       }
 
-      dlog(`call BlockRewriter on b${b.id}`)
+      // dlog(`call BlockRewriter on b${b.id}`)
       if (rb(b)) {
         change = true
       }

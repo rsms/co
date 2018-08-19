@@ -8,44 +8,13 @@ import { Num, numEvalU32 } from './num'
 import * as ast from './ast'
 import {
   ReturnStmt,
-
-  TypeDecl,
-  VarDecl,
-
   Expr,
   Ident,
-  Field,
-  // NumLit,
-  // ParenExpr,
-  RestTypeExpr,
-  FunExpr,
   LiteralExpr,
-  TupleExpr,
-  Block,
   SelectorExpr,
   TypeConvExpr,
-  Assignment,
-  CallExpr,
-  Operation,
-  IfExpr,
   IndexExpr,
   SliceExpr,
-  
-  // Type,
-  // UnresolvedType,
-  // BasicType,
-  // // IntType,
-  // StrType,
-  // RestType,
-  // TupleType,
-  // FunType,
-  // OptionalType,
-  // UnionType,
-
-  // t_nil,
-  // u_t_bool,
-  // u_t_str,
-  // u_t_optstr,
 } from './ast'
 
 import {
@@ -60,13 +29,9 @@ import {
   OptionalType,
   UnionType,
 
-  // FloatType,
-  // SIntType,
-  // UIntType,
-
   t_nil, t_bool,
-  t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
-  t_uint, t_int, t_usize, t_isize,
+  // t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
+  // t_uint, t_int, t_usize, t_isize,
   t_str0, t_str, t_stropt
 } from './types'
 
@@ -253,7 +218,6 @@ export class TypeResolver extends ErrorReporter {
 
   maybeResolveNodeWithTypeExpr = (n :ast.Field|ast.VarDecl|ast.TypeDecl) => {
     // nodes which has a TypeExpr "type" field
-    const r = this
     return n.type ? n.type.type : null
   }
 

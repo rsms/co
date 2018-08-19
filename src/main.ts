@@ -10,20 +10,14 @@ import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 
-import { Pkg as IRPkg, Fun as IRFun } from './ir/ssa'
-import { RegAllocator } from './ir/regalloc'
+import { Pkg as IRPkg } from './ir/ssa'
 import { IRBuilder, IRBuilderFlags } from './ir/builder'
 import { printir, fmtir } from './ir/repr'
 // import { IRVirtualMachine } from './ir/vm'
+import { runPassesDev } from './ir/passes'
 
 import { archs } from './arch/all'
 import './all_tests'
-
-import { phielim } from './ir/phielim'
-import { lower } from './ir/lower'
-import { deadcode } from './ir/deadcode'
-import { copyelim } from './ir/copyelim'
-import { shortcircuit } from './ir/shortcircuit'
 
 
 // fs
@@ -213,10 +207,9 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   console.log(`selected target config: ${config}`)
 
 
-  const regalloc = null // new RegAllocator()
   const irb = new IRBuilder()  // reusable
 
-  irb.init(config, diagh, regalloc, IRBuilderFlags.Comments)
+  irb.init(config, diagh, IRBuilderFlags.Comments)
 
   // print AST & build IR
   try {
@@ -244,46 +237,21 @@ async function main(options? :MainOptions) :Promise<MainResult> {
       }
 
 
-
-      // run IP passes separately for debugging (normally run inline)
-
-      const irpass = (name :string, fn :(f:IRFun)=>void) => {
-        if (isNodeJsLikeEnv) {
-          banner(`[ir] ${name} (${file.sfile.name})`)
-        } else {
-          console.log(`running pass ${name}`)
-        }
-        for (let [_, f] of irb.pkg.funs) {
-          fn(f)
+      // run IP passes separately for debugging (normally run online)
+      let stopAtPass = options.genericIR ? "lower" : ""
+      for (let [_, f] of irb.pkg.funs) {
+        runPassesDev(f, config, stopAtPass, pass => {
           if (isNodeJsLikeEnv) {
-            console.log(`\n------------------------------------------------\n`)
+            console.log(
+              `------------------------------------------------\n` +
+              `after ${pass.name}\n`
+            )
             printir(f)
+            console.log(
+              `------------------------------------------------`)
           }
-        }
+        })
       }
-
-      // IR passes
-      irpass('early phielim', phielim)
-      // irpass('early copyelim', copyelim)
-
-      if (!config.optimize) {
-        continue
-      }
-
-      irpass('early deadcode', deadcode)  // also runs copyelim
-      irpass('short circuit', shortcircuit)
-
-      // Beyond this point the IR turns into target-specific code.
-      if (options.genericIR) {
-        continue
-      }
-
-      irpass('lower', f => lower(config, f))
-      irpass('lowered deadcode', deadcode)
-      // process.exit(0)
-
-      const regalloc = new RegAllocator(config)
-      irpass('regalloc', f => regalloc.regallocFun(f))
 
     }
 

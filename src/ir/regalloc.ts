@@ -1,17 +1,31 @@
-import { debuglog as dlog } from '../util'
-import { fmtAsciiMatrix } from '../debug'
 import { UInt64 } from '../int64'
 import { Pos } from '../pos'
-import { Mem, t_int, t_uint, t_i32, t_u32, t_u64, intTypes } from '../types'
+import { Mem, t_u32, intTypes } from '../types'
 import { ID, Fun, Block, Value, BranchPrediction, Location } from './ssa'
 import { RegInfo, Op, ops } from './op'
 import { Register, Reg, RegSet, fmtRegSet, emptyRegSet } from './reg'
 import { Config } from './config'
-import { layoutRegallocOrder } from './layout'
-import { fmtir } from './repr'
 import { DesiredState } from './reg_desiredstate'
 import { IntGraph } from '../intgraph'
 
+// import { debuglog as dlog } from '../util'
+const dlog = function(..._ :any[]){} // silence dlog
+
+const allocatorCache = new Map<Config,RegAllocator>()
+let allocator :RegAllocator|null = null
+
+// regalloc allocates registers for function f
+//
+export function regalloc(f :Fun, config :Config) {
+  if (!allocator || allocator.config !== config) {
+    allocator = allocatorCache.get(config) || null
+    if (!allocator) {
+      allocator = new RegAllocator(config)
+      allocatorCache.set(config, allocator)
+    }
+  }
+  allocator.regallocFun(f)
+}
 
 
 // distance is a measure of how far into the future values are used.
@@ -68,11 +82,11 @@ function pickReg(m :RegSet) :Reg {
   }
 }
 
-interface Use {
-  dist :int      // distance from start of the block to a use of a value
-  next :Use|null // linked list of uses of a value in nondecreasing dist order
-  // pos  :Pos   // source position of the use
-}
+// interface Use {
+//   dist :int      // distance from start of the block to a use of a value
+//   next :Use|null // linked list of uses of a value in nondecreasing dist order
+//   // pos  :Pos   // source position of the use
+// }
 
 // ValState records the register allocation state for a (pre-regalloc) value.
 class ValState {
@@ -172,7 +186,6 @@ export class RegAllocator {
     if (config.hasGReg && a.GReg == noReg) { panic("no g register found") }
 
     // Figure out which registers we're allowed to use.
-    const config_gpRegMask = 0xffffff
     this.allocatable = config.gpRegMask.or(config.fpRegMask.or(config.specialRegMask))
 
     // .allocatable &^= 1 << s.SPReg
@@ -246,7 +259,7 @@ export class RegAllocator {
     dlog(`\nvalstate:`)
     for (let vs of a.values) {
       if (vs) {
-        console.log(`  v${vs.v.id} - ` + [
+        dlog(`  v${vs.v.id} - ` + [
           ['needReg', vs.needReg],
           ['mindist', vs.mindist],
           ['maxdist', vs.maxdist],
@@ -282,7 +295,7 @@ export class RegAllocator {
     // {gp,fp}k is the maximum number of registers we have available for
     // general-purpose and floating-point registers.
     let gpk = 3 //countRegs(this.config.gpRegMask)
-    let fpk = 3 //countRegs(this.config.fpRegMask)
+    // let fpk = 3 //countRegs(this.config.fpRegMask)
 
     // Stack of values
     let valstack :{id:ID, edges:Set<ID>}[] = []
@@ -304,7 +317,7 @@ export class RegAllocator {
     // initial sorting of IDs
     sortIds()
 
-    console.log('---------------------------------------------------------')
+    dlog('\n---------------------------------------------------------')
 
     pick_loop: while (true && x--) {
       // console.log('nodes:', ig.keys().map(id =>
@@ -379,7 +392,7 @@ export class RegAllocator {
 
       if (conflict) {
         dlog(`unable to find register for v${v.id}`)
-        let val = a.values[v.id]
+        // let val = a.values[v.id]
         // dlog(``, val.)
         reg = noReg
       }
@@ -481,7 +494,7 @@ export class RegAllocator {
   // regspec returns the RegInfo for operation op
   //
   regspec(op :Op) :RegInfo {
-    const a = this
+    // const a = this
     // if (op == ops.OpConvert) {
     //   // OpConvert is a generic op, so it doesn't have a
     //   // register set in the static table. It can use any

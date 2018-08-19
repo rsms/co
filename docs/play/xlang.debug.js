@@ -1,9 +1,9 @@
-/* xlang 1.0.0-debug+5e5ed792e9 */
+/* xlang 1.0.0-debug+193d3b7dfc */
 (function(global){
 
 'use strict';
 
-var VERSION = "1.0.0-debug+5e5ed792e9", DEBUG = true;
+var VERSION = "1.0.0-debug+193d3b7dfc", DEBUG = true;
 var global=
 void 0!==global?global:
 "undefined"!=typeof window?window:
@@ -1921,6 +1921,28 @@ let _UInt64_cache = new Map([
     [0, U64_ZERO],
     [1, U64_ONE],
 ]);
+function f64ToS32pair(v) {
+    if (v <= -_TWO_PWR_63_DBL) {
+        return [S64_MIN._low, S64_MIN._high];
+    }
+    if (v + 1 >= _TWO_PWR_63_DBL) {
+        return [S64_MAX._low, S64_MAX._high];
+    }
+    if (v < 0) {
+        v = -v;
+        let low = (v % _TWO_PWR_32_DBL) | 0;
+        let high = (v / _TWO_PWR_32_DBL) | 0;
+        if (high == S64_MIN._high && low == S64_MIN._low) {
+            return [S64_MIN._low, S64_MIN._high];
+        }
+        let n = (new SInt64(~low, ~high)).add(S64_ONE);
+        return [n._low, n._high];
+    }
+    return [
+        (v % _TWO_PWR_32_DBL) | 0,
+        (v / _TWO_PWR_32_DBL) | 0
+    ];
+}
 //# sourceMappingURL=int64.js.map
 
 const u64MaxByRadix = [
@@ -7476,7 +7498,7 @@ class TypeResolver extends ErrorReporter {
 //# sourceMappingURL=resolve.js.map
 
 const emptyRegSet = UInt64.ZERO;
-const noReg$1 = 255;
+const noReg = 255;
 function fmtRegSet(m) {
     let s = '{';
     for (let r = 0 >>> 0; !m.isZero(); r++) {
@@ -7822,6 +7844,251 @@ const ops = {
 };
 //# sourceMappingURL=op.js.map
 
+function consteval2(op, t, x, y) {
+    const xn = x;
+    const yn = y;
+    const xo = x;
+    const yo = y;
+    switch (op) {
+        case ops.AddI8:
+        case ops.AddI16:
+        case ops.AddI32:
+            return t.isSignedInt ? (xn + yn | 0) : (xn + yn >>> 0);
+        case ops.AddI64:
+            return xo.add(yo);
+        case ops.AddF32:
+        case ops.AddF64:
+            return xn + yn;
+        case ops.SubI8:
+        case ops.SubI16:
+        case ops.SubI32:
+            return t.isSignedInt ? (xn - yn | 0) : (xn - yn >>> 0);
+        case ops.SubI64:
+            return xo.sub(yo);
+        case ops.SubF32:
+        case ops.SubF64:
+            return xn - yn;
+        case ops.MulI8:
+        case ops.MulI16:
+        case ops.MulI32:
+            return t.isSignedInt ? Math.imul(xn, yn) : (Math.imul(xn, yn) >>> 0);
+        case ops.MulI64:
+            return xo.mul(yo);
+        case ops.MulF32:
+        case ops.MulF64:
+            return xn * yn;
+        case ops.DivS8:
+        case ops.DivS16:
+        case ops.DivS32:
+            return xn / yn | 0;
+        case ops.DivU8:
+        case ops.DivU16:
+        case ops.DivU32:
+            return xn / yn >>> 0;
+        case ops.DivS64:
+        case ops.DivU64:
+            return xo.div(yo);
+        case ops.DivF32:
+        case ops.DivF64:
+            return xn / yn;
+        case ops.RemS8:
+        case ops.RemS16:
+        case ops.RemS32:
+            return xn % yn | 0;
+        case ops.RemU8:
+        case ops.RemU16:
+        case ops.RemU32:
+            return xn % yn >>> 0;
+        case ops.RemI64:
+        case ops.RemU64:
+            return xo.mod(yo);
+        case ops.AndI8:
+        case ops.AndI16:
+        case ops.AndI32:
+            return xn & yn;
+        case ops.AndI64:
+            return xo.and(yo);
+        case ops.OrI8:
+        case ops.OrI16:
+        case ops.OrI32:
+            return xn | yn;
+        case ops.OrI64:
+            return xo.or(yo);
+        case ops.XorI8:
+        case ops.XorI16:
+        case ops.XorI32:
+            return xn ^ yn;
+        case ops.XorI64:
+            return xo.xor(yo);
+        case ops.ShLI8x8:
+        case ops.ShLI8x16:
+        case ops.ShLI8x32:
+        case ops.ShLI16x8:
+        case ops.ShLI16x16:
+        case ops.ShLI16x32:
+        case ops.ShLI32x8:
+        case ops.ShLI32x16:
+        case ops.ShLI32x32:
+            return xn << yn;
+        case ops.ShLI8x64:
+        case ops.ShLI16x64:
+        case ops.ShLI32x64:
+            return xn << yo.toUInt32();
+        case ops.ShLI64x8:
+        case ops.ShLI64x16:
+        case ops.ShLI64x32:
+        case ops.ShLI64x64:
+            return xo.shl(yo.toUInt32());
+        case ops.ShRS8x8:
+        case ops.ShRS8x16:
+        case ops.ShRS8x32:
+        case ops.ShRS16x8:
+        case ops.ShRS16x16:
+        case ops.ShRS16x32:
+        case ops.ShRS32x8:
+        case ops.ShRS32x16:
+        case ops.ShRS32x32:
+            return xn >> yn;
+        case ops.ShRS8x64:
+        case ops.ShRS16x64:
+        case ops.ShRS32x64:
+            return xn >> yo.toUInt32();
+        case ops.ShRS64x8:
+        case ops.ShRS64x16:
+        case ops.ShRS64x32:
+        case ops.ShRS64x64:
+            return xo.shr(yo.toUInt32());
+        case ops.ShRU8x8:
+        case ops.ShRU8x16:
+        case ops.ShRU8x32:
+        case ops.ShRU16x8:
+        case ops.ShRU16x16:
+        case ops.ShRU16x32:
+        case ops.ShRU32x8:
+        case ops.ShRU32x16:
+        case ops.ShRU32x32:
+            return xn >>> yn;
+        case ops.ShRU8x64:
+        case ops.ShRU16x64:
+        case ops.ShRU32x64:
+            return xn >>> yo.toUInt32();
+        case ops.ShRU64x8:
+        case ops.ShRU64x16:
+        case ops.ShRU64x32:
+        case ops.ShRU64x64:
+            return xo.shr(yo.toUInt32());
+        case ops.EqI8:
+        case ops.EqI16:
+        case ops.EqI32:
+        case ops.EqF32:
+        case ops.EqF64:
+            return xn === yn ? 1 : 0;
+        case ops.EqI64:
+            return xo.eq(yo) ? 1 : 0;
+        case ops.NeqI8:
+        case ops.NeqI16:
+        case ops.NeqI32:
+        case ops.NeqF32:
+        case ops.NeqF64:
+            return xn !== yn ? 1 : 0;
+        case ops.NeqI64:
+            return xo.neq(yo) ? 1 : 0;
+        case ops.LessS8:
+        case ops.LessU8:
+        case ops.LessS16:
+        case ops.LessU16:
+        case ops.LessS32:
+        case ops.LessU32:
+        case ops.LessF32:
+        case ops.LessF64:
+            return xn < yn ? 1 : 0;
+        case ops.LessS64:
+        case ops.LessU64:
+            return xo.lt(yo) ? 1 : 0;
+        case ops.LeqS8:
+        case ops.LeqU8:
+        case ops.LeqS16:
+        case ops.LeqU16:
+        case ops.LeqS32:
+        case ops.LeqU32:
+        case ops.LeqF32:
+        case ops.LeqF64:
+            return xn <= yn ? 1 : 0;
+        case ops.LeqS64:
+        case ops.LeqU64:
+            return xo.lte(yo) ? 1 : 0;
+        case ops.GreaterS8:
+        case ops.GreaterU8:
+        case ops.GreaterS16:
+        case ops.GreaterU16:
+        case ops.GreaterS32:
+        case ops.GreaterU32:
+        case ops.GreaterF32:
+        case ops.GreaterF64:
+            return xn > yn ? 1 : 0;
+        case ops.GreaterS64:
+        case ops.GreaterU64:
+            return xo.gt(yo) ? 1 : 0;
+        case ops.GeqS8:
+        case ops.GeqU8:
+        case ops.GeqS16:
+        case ops.GeqU16:
+        case ops.GeqS32:
+        case ops.GeqU32:
+        case ops.GeqF32:
+        case ops.GeqF64:
+            return xn >= yn ? 1 : 0;
+        case ops.GeqS64:
+        case ops.GeqU64:
+            return xo.gte(yo) ? 1 : 0;
+        case ops.MinF32:
+        case ops.MinF64:
+            return Math.min(xn, yn);
+        case ops.MaxF32:
+        case ops.MaxF64:
+            return Math.max(xn, yn);
+    }
+    assert(false, `unexpected ${op}`);
+    return null;
+}
+function consteval1(op, t, x) {
+    return null;
+}
+//# sourceMappingURL=consteval.js.map
+
+function optcf_op1(b, op, x) {
+    if (x.op.constant) {
+        assert(isNum(x.aux));
+        let val = consteval1(op, x.type, x.aux);
+        if (val !== null) {
+            return b.f.constVal(x.type, val);
+        }
+    }
+    return null;
+}
+function optcf_op2(b, op, x, y) {
+    if (!x.op.constant || !y.op.constant) {
+        return null;
+    }
+    assert(isNum(x.aux));
+    assert(isNum(y.aux));
+    let xval = x.aux;
+    let yval = y.aux;
+    if (x.type !== y.type) {
+        let lossless;
+        [yval, lossless] = numconv(yval, x.type);
+        if (!lossless) {
+            return null;
+        }
+    }
+    let val = consteval2(op, x.type, xval, yval);
+    if (val !== null) {
+        return b.f.constVal(x.type, val);
+    }
+    return null;
+}
+//# sourceMappingURL=opt_cf.js.map
+
 function postorder(f) {
     let explored = new Array(f.numBlocks());
     let order = [];
@@ -8138,879 +8405,6 @@ class Pkg {
     }
 }
 //# sourceMappingURL=ssa.js.map
-
-class DesiredState {
-    constructor(copyOther) {
-        this.entries = [];
-        this.avoid = emptyRegSet;
-        if (copyOther) {
-            this.copy(copyOther);
-        }
-    }
-    toString() {
-        let s = '{';
-        s += this.entries.map(e => `v${e.id}[` + e.regs.filter(r => r != noReg$1).map(r => `r${r}`).join(' ') + ']').join(', ');
-        s += `}`;
-        if (!this.avoid.isZero()) {
-            s += `avoid=${fmtRegSet(this.avoid)}`;
-        }
-        return s;
-    }
-    clear() {
-        this.entries.length = 0;
-        this.avoid = emptyRegSet;
-    }
-    get(vid) {
-        for (let e of this.entries) {
-            if (e.id == vid) {
-                return e.regs;
-            }
-        }
-        return [noReg$1, noReg$1, noReg$1, noReg$1];
-    }
-    add(vid, r) {
-        const d = this;
-        d.avoid = d.avoid.or(UInt64.ONE.shl(r));
-        for (let e of d.entries) {
-            if (e.id != vid) {
-                continue;
-            }
-            if (e.regs[0] == r) {
-                return;
-            }
-            for (let j = 1; j < e.regs.length; j++) {
-                if (e.regs[j] == r) {
-                    e.regs.copyWithin(1, 0, j);
-                    e.regs[0] = r;
-                    return;
-                }
-            }
-            e.regs.copyWithin(1, 0);
-            e.regs[0] = r;
-            return;
-        }
-        d.entries.push({ id: vid, regs: [r, noReg$1, noReg$1, noReg$1] });
-    }
-    addList(vid, regs) {
-        for (let i = regs.length - 1; i >= 0; i--) {
-            let r = regs[i];
-            if (r != noReg$1) {
-                this.add(vid, r);
-            }
-        }
-    }
-    clobber(m) {
-        let d = this;
-        for (let i = 0; i < d.entries.length;) {
-            let e = d.entries[i];
-            let j = 0;
-            for (let r of e.regs) {
-                if (r != noReg$1 && m.shr(r).and(UInt64.ONE).isZero()) {
-                    e.regs[j] = r;
-                    j++;
-                }
-            }
-            if (j == 0) {
-                d.entries[i] = d.entries[d.entries.length - 1];
-                d.entries.splice(d.entries.length - 1, 1);
-                continue;
-            }
-            for (; j < e.regs.length; j++) {
-                e.regs[j] = noReg$1;
-            }
-            i++;
-        }
-        d.avoid = d.avoid.and(m.not());
-    }
-    copy(x) {
-        this.entries.splice(0, this.entries.length, ...x.entries);
-        this.avoid = x.avoid;
-    }
-    remove(vid) {
-        for (let e of this.entries) {
-            if (e.id == vid) {
-                let regs = e.regs;
-                let z = this.entries.length - 1;
-                e = this.entries[z];
-                this.entries.splice(z, 1);
-                return regs;
-            }
-        }
-        return [noReg$1, noReg$1, noReg$1, noReg$1];
-    }
-    merge(x) {
-        this.avoid = this.avoid.or(x.avoid);
-        for (let e of x.entries) {
-            this.addList(e.id, e.regs);
-        }
-    }
-}
-//# sourceMappingURL=reg_desiredstate.js.map
-
-class IntGraph {
-    constructor() {
-        this.nodes = [];
-        this.length = 0;
-    }
-    copy() {
-        let g = new IntGraph();
-        g.length = this.length;
-        g.nodes = [];
-        for (let id = 0; id < this.nodes.length; id++) {
-            let s = this.nodes[id];
-            if (s !== undefined) {
-                g.nodes[id] = new Set(s);
-            }
-        }
-        return g;
-    }
-    has(id) {
-        return !!this.nodes[id];
-    }
-    add(id) {
-        if (!this.nodes[id]) {
-            this.nodes[id] = new Set();
-            this.length++;
-        }
-    }
-    remove(id) {
-        let s = this.nodes[id];
-        if (s) {
-            for (let id2 of s) {
-                this.nodes[id2].delete(id);
-            }
-            
-            this.nodes[id] = undefined;
-            this.length--;
-        }
-    }
-    connect(id1, id2) {
-        let s = this.nodes[id1];
-        if (!s) {
-            this.nodes[id1] = new Set([id2]);
-            this.length++;
-        }
-        else {
-            s.add(id2);
-        }
-        s = this.nodes[id2];
-        if (!s) {
-            this.nodes[id2] = new Set([id1]);
-            this.length++;
-        }
-        else {
-            s.add(id1);
-        }
-    }
-    connected(id1, id2) {
-        let s = this.nodes[id1];
-        return s && s.has(id2);
-    }
-    disconnect(id1, id2) {
-        let s = this.nodes[id1];
-        if (s) {
-            s.delete(id2);
-        }
-        s = this.nodes[id2];
-        if (s) {
-            s.delete(id1);
-        }
-    }
-    edges(id) {
-        return this.nodes[id];
-    }
-    degree(id) {
-        return this.nodes[id].size;
-    }
-    any() {
-        for (let id = 0; id < this.nodes.length; id++) {
-            if (this.nodes[id] !== undefined) {
-                return id;
-            }
-        }
-        return undefined;
-    }
-    keys() {
-        let keys = [];
-        for (let id = 0; id < this.nodes.length; id++) {
-            if (this.nodes[id] !== undefined) {
-                keys.push(id);
-            }
-        }
-        return keys;
-    }
-    fmt() {
-        let pairs = new Set();
-        for (let k in this.nodes) {
-            let id = k;
-            let edges = this.edges(id);
-            if (edges) {
-                if (edges.size > 0) {
-                    for (let id2 of edges) {
-                        if (id < id2) {
-                            pairs.add(`${id} -- ${id2}`);
-                        }
-                        else {
-                            pairs.add(`${id2} -- ${id}`);
-                        }
-                    }
-                }
-                else {
-                    pairs.add(`${id}`);
-                }
-            }
-        }
-        return Array.from(pairs).join('\n');
-    }
-}
-//# sourceMappingURL=intgraph.js.map
-
-const likelyDistance = 1;
-const normalDistance = 10;
-const unlikelyDistance = 100;
-const maxregs = 64;
-const noReg = 255 >>> 0;
-function countRegs(m) {
-    return m.popcnt();
-}
-function pickReg(m) {
-    if (m.isZero()) {
-        panic("can't pick a register from an empty set");
-    }
-    for (let i = 0;; i++) {
-        if (!m.and(UInt64.ONE).isZero()) {
-            return i;
-        }
-        m = m.shr(1);
-    }
-}
-class ValState {
-    constructor(v) {
-        this.regs = emptyRegSet;
-        this.needReg = false;
-        this.rematerializeable = false;
-        this.mindist = 0;
-        this.maxdist = 0;
-        this.v = v;
-    }
-}
-class RegAllocator {
-    constructor(config) {
-        this.addrtype = t_u32;
-        this.visitOrder = [];
-        this.values = [];
-        this.live = [];
-        this.desired = [];
-        const a = this;
-        this.config = config;
-        this.addrtype = intTypes(config.addrSize)[1];
-        this.addrsize = config.addrSize;
-        this.registers = config.registers;
-        this.numregs = config.registers.length;
-        if (a.numregs == 0 || a.numregs > maxregs) {
-            panic(`invalid number of registers: ${a.numregs}`);
-        }
-        this.SPReg = noReg;
-        this.SBReg = noReg;
-        this.GReg = noReg;
-        for (let r = 0; r < a.numregs; r++) {
-            switch (a.registers[r].name) {
-                case "SP":
-                    a.SPReg = r;
-                    break;
-                case "SB":
-                    a.SBReg = r;
-                    break;
-                case "g":
-                    if (config.hasGReg) {
-                        a.GReg = r;
-                    }
-                    ;
-                    break;
-            }
-        }
-        if (a.SPReg == noReg) {
-            panic("no SP register found");
-        }
-        if (a.SBReg == noReg) {
-            panic("no SB register found");
-        }
-        if (config.hasGReg && a.GReg == noReg) {
-            panic("no g register found");
-        }
-        this.allocatable = config.gpRegMask.or(config.fpRegMask.or(config.specialRegMask));
-        this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SPReg).not());
-        this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SBReg).not());
-        this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.GReg).not());
-    }
-    regallocFun(f) {
-        const a = this;
-        a.f = f;
-        assert(f.regAlloc == null, `registers already allocated for ${f}`);
-        f.regAlloc = new Array(f.numValues());
-        const SP = f.newValue(f.entry, ops.SP, a.addrtype, null);
-        SP.reg = a.registers[this.SPReg];
-        f.entry.pushValueFront(SP);
-        a.visitOrder = f.blocks;
-        a.values = new Array(f.numValues());
-        for (let b of a.visitOrder) {
-            for (let v of b.values) {
-                let t = v.type;
-                let val = new ValState(v);
-                a.values[v.id] = val;
-                if (t.mem > 0 && !t.isTuple() && v !== SP) {
-                    val.needReg = true;
-                    val.rematerializeable = v.rematerializeable();
-                }
-            }
-        }
-        a.computeLive();
-        debuglog("\nlive values at end of each block\n" + a.fmtLive());
-        debuglog(`\nvalstate:`);
-        for (let vs of a.values) {
-            if (vs) {
-                console.log(`  v${vs.v.id} - ` + [
-                    ['needReg', vs.needReg],
-                    ['mindist', vs.mindist],
-                    ['maxdist', vs.maxdist],
-                ].map(v => v.join(': ')).join(', '));
-            }
-        }
-        let ig = a.buildInterferenceGraph();
-        if (DEBUG) {
-            let ifstr = ig.fmt();
-            let vizurl = ('https://rsms.me/co/doc/chaitin/?' +
-                'input=ifg&enable-briggs=1&immediate=1&ifg=' +
-                encodeURIComponent(ifstr.trim().split(/[\r\n]+/).map(s => s.trim()).join('\n')).replace(/\%20/g, '+'));
-            debuglog(`\ninterference:\n` + ifstr + '\nView at ' + vizurl);
-        }
-        a.pickValues(ig);
-    }
-    pickValues(ig) {
-        const a = this;
-        let gpk = 3;
-        let valstack = [];
-        let spills = new Set();
-        let x = 20;
-        let sortedIds = ig.keys();
-        function sortIds() {
-            sortedIds.sort((a, b) => ig.degree(a) - ig.degree(b));
-        }
-        sortIds();
-        console.log('---------------------------------------------------------');
-        pick_loop: while (true && x--) {
-            for (let i = 0; i < sortedIds.length; i++) {
-                let id = sortedIds[i];
-                let edges = ig.edges(id);
-                assert(edges, `missing edge data for v${id}`);
-                if (edges.size < gpk) {
-                    debuglog(`pick v${id} with degree ${edges.size} < R`);
-                    sortedIds.splice(i, 1);
-                    ig.remove(id);
-                    valstack.push({ id, edges });
-                    continue pick_loop;
-                }
-            }
-            if (ig.length == 0) {
-                debuglog(`done`);
-                break;
-            }
-            let id = sortedIds.shift();
-            let edges = ig.edges(id);
-            debuglog(`pick v${id} with degree ${edges.size} >= R (maybe spill)`);
-            ig.remove(id);
-            valstack.push({ id, edges });
-            spills.add(id);
-        }
-        debuglog(`spills:`, spills.size == 0 ? '(none)' :
-            Array.from(spills).map(id => `v${id}`).join(" "));
-        debuglog('valstack:', valstack.map(v => `v${v.id}`).join(' '));
-        let reg = -1;
-        while (true) {
-            let v = valstack.pop();
-            if (!v) {
-                return true;
-            }
-            reg = (reg + 1) % gpk;
-            let i = gpk;
-            let conflict = true;
-            reg_conflict_loop: while (i--) {
-                for (let id2 of v.edges) {
-                    let reg2 = a.values[id2].v.reg;
-                    if (reg2 && reg2.num == reg) {
-                        reg = (reg + 1) % gpk;
-                        continue reg_conflict_loop;
-                    }
-                }
-                conflict = false;
-                break;
-            }
-            if (conflict) {
-                debuglog(`unable to find register for v${v.id}`);
-                let val = a.values[v.id];
-                reg = noReg;
-            }
-            debuglog(`pop v${v.id} {${reg}} edges:`, v.edges);
-            ig.add(v.id);
-            for (let id2 of v.edges) {
-                ig.connect(v.id, id2);
-            }
-            let val = a.values[v.id];
-            assert(val.needReg, `unexpected v${v.id}.needReg=false`);
-            val.v.reg = a.registers[reg];
-        }
-    }
-    buildInterferenceGraph() {
-        const a = this;
-        const f = a.f;
-        let g = new IntGraph();
-        for (let i = f.blocks.length, b; b = f.blocks[--i];) {
-            let live = new Set();
-            let liveout = a.live[b.id];
-            if (liveout) {
-                for (let e of liveout) {
-                    live.add(e.id);
-                }
-            }
-            for (let i = b.values.length - 1; i >= 0; --i) {
-                let v = b.values[i];
-                live.delete(v.id);
-                for (let id2 of live) {
-                    g.connect(v.id, id2);
-                }
-                for (let operand of v.args) {
-                    live.add(operand.id);
-                }
-            }
-        }
-        return g;
-    }
-    regspec(op) {
-        return op.reg;
-    }
-    computeLive() {
-        const a = this;
-        const f = a.f;
-        a.live = new Array(f.numBlocks());
-        a.desired = new Array(f.numBlocks());
-        let phis = [];
-        let live = new Map();
-        let t = new Map();
-        let desired = new DesiredState();
-        let po = f.postorder();
-        while (true) {
-            let changed = false;
-            for (let b of po) {
-                live.clear();
-                let liv = a.live[b.id];
-                if (liv)
-                    for (let e of liv) {
-                        live.set(e.id, { val: e.dist + b.values.length, pos: e.pos });
-                    }
-                if (b.control && a.values[b.control.id].needReg) {
-                    live.set(b.control.id, { val: b.values.length, pos: b.pos });
-                }
-                phis = [];
-                for (let i = b.values.length - 1; i >= 0; i--) {
-                    let v = b.values[i];
-                    let x = live.get(v.id);
-                    if (x) {
-                        a.values[v.id].maxdist = x.val;
-                        live.delete(v.id);
-                    }
-                    if (v.op === ops.Phi) {
-                        phis.push(v);
-                        continue;
-                    }
-                    if (v.op.call) {
-                        for (let v of live.values()) {
-                            v.val += unlikelyDistance;
-                        }
-                    }
-                    for (let arg of v.args) {
-                        if (a.values[arg.id].needReg) {
-                            live.set(arg.id, { val: i, pos: v.pos });
-                        }
-                    }
-                }
-                let other = a.desired[b.id];
-                if (other) {
-                    desired.copy(other);
-                }
-                else {
-                    desired.clear();
-                }
-                for (let i = b.values.length - 1; i >= 0; i--) {
-                    let v = b.values[i];
-                    let prefs = desired.remove(v.id);
-                    if (v.op === ops.Phi) {
-                        continue;
-                    }
-                    let regspec = a.regspec(v.op);
-                    desired.clobber(regspec.clobbers);
-                    for (let j of regspec.inputs) {
-                        if (countRegs(j.regs) != 1) {
-                            continue;
-                        }
-                        desired.clobber(j.regs);
-                        desired.add(v.args[j.idx].id, pickReg(j.regs));
-                    }
-                    if (v.op.resultInArg0) {
-                        if (v.op.commutative) {
-                            desired.addList(v.args[1].id, prefs);
-                        }
-                        desired.addList(v.args[0].id, prefs);
-                    }
-                }
-                for (let i = 0; i < b.preds.length; i++) {
-                    let p = b.preds[i];
-                    let delta = normalDistance;
-                    if (p.succs.length == 2) {
-                        if (p.succs[0] == b && p.likely == BranchPrediction.Likely ||
-                            p.succs[1] == b && p.likely == BranchPrediction.Unlikely) {
-                            delta = likelyDistance;
-                        }
-                        else if (p.succs[0] == b && p.likely == BranchPrediction.Unlikely ||
-                            p.succs[1] == b && p.likely == BranchPrediction.Likely) {
-                            delta = unlikelyDistance;
-                        }
-                    }
-                    let pdesired = a.desired[p.id];
-                    if (!pdesired) {
-                        a.desired[p.id] = new DesiredState(desired);
-                    }
-                    else {
-                        pdesired.merge(desired);
-                    }
-                    t.clear();
-                    let plive = a.live[p.id];
-                    if (plive)
-                        for (let e of plive) {
-                            t.set(e.id, { val: e.dist, pos: e.pos });
-                        }
-                    let update = false;
-                    for (let [key, e] of live) {
-                        let d = e.val + delta;
-                        let e2 = t.get(key);
-                        if (!e2 || d < e2.val) {
-                            update = true;
-                            t.set(key, { val: d, pos: e.pos });
-                        }
-                    }
-                    for (let v of phis) {
-                        let id = v.args[i].id;
-                        if (a.values[id].needReg) {
-                            let e2 = t.get(id);
-                            if (!e2 || delta < e2.val) {
-                                update = true;
-                                t.set(id, { val: delta, pos: v.pos });
-                            }
-                        }
-                    }
-                    if (!update) {
-                        continue;
-                    }
-                    let l = new Array(t.size), j = 0;
-                    for (let [key, e] of t) {
-                        l[j++] = { id: key, dist: e.val, pos: e.pos };
-                    }
-                    a.live[p.id] = l;
-                    changed = true;
-                }
-            }
-            if (!changed) {
-                break;
-            }
-        }
-    }
-    fmtLive() {
-        const a = this;
-        let s = '';
-        for (let b of a.f.blocks) {
-            s += `  ${b}:`;
-            let blive = a.live[b.id];
-            if (blive)
-                for (let x of blive) {
-                    s += `  v${x.id}`;
-                    let desired = a.desired[b.id];
-                    if (desired)
-                        for (let e of desired.entries) {
-                            if (e.id != x.id) {
-                                continue;
-                            }
-                            s += "[";
-                            let first = true;
-                            for (let r of e.regs) {
-                                if (r == noReg) {
-                                    continue;
-                                }
-                                if (!first) {
-                                    s += ",";
-                                }
-                                let reg = a.registers[r];
-                                s += `${reg.name}#${reg.num}`;
-                                first = false;
-                            }
-                            s += "]";
-                        }
-                }
-            if (a.desired[b.id]) {
-                let avoid = a.desired[b.id].avoid;
-                if (!avoid.isZero()) {
-                    s += " avoid=" + fmtRegSet(avoid);
-                }
-            }
-            s += "\n";
-        }
-        return s.trimRight();
-    }
-}
-//# sourceMappingURL=regalloc.js.map
-
-function consteval2(op, t, x, y) {
-    const xn = x;
-    const yn = y;
-    const xo = x;
-    const yo = y;
-    switch (op) {
-        case ops.AddI8:
-        case ops.AddI16:
-        case ops.AddI32:
-            return t.isSignedInt ? (xn + yn | 0) : (xn + yn >>> 0);
-        case ops.AddI64:
-            return xo.add(yo);
-        case ops.AddF32:
-        case ops.AddF64:
-            return xn + yn;
-        case ops.SubI8:
-        case ops.SubI16:
-        case ops.SubI32:
-            return t.isSignedInt ? (xn - yn | 0) : (xn - yn >>> 0);
-        case ops.SubI64:
-            return xo.sub(yo);
-        case ops.SubF32:
-        case ops.SubF64:
-            return xn - yn;
-        case ops.MulI8:
-        case ops.MulI16:
-        case ops.MulI32:
-            return t.isSignedInt ? Math.imul(xn, yn) : (Math.imul(xn, yn) >>> 0);
-        case ops.MulI64:
-            return xo.mul(yo);
-        case ops.MulF32:
-        case ops.MulF64:
-            return xn * yn;
-        case ops.DivS8:
-        case ops.DivS16:
-        case ops.DivS32:
-            return xn / yn | 0;
-        case ops.DivU8:
-        case ops.DivU16:
-        case ops.DivU32:
-            return xn / yn >>> 0;
-        case ops.DivS64:
-        case ops.DivU64:
-            return xo.div(yo);
-        case ops.DivF32:
-        case ops.DivF64:
-            return xn / yn;
-        case ops.RemS8:
-        case ops.RemS16:
-        case ops.RemS32:
-            return xn % yn | 0;
-        case ops.RemU8:
-        case ops.RemU16:
-        case ops.RemU32:
-            return xn % yn >>> 0;
-        case ops.RemI64:
-        case ops.RemU64:
-            return xo.mod(yo);
-        case ops.AndI8:
-        case ops.AndI16:
-        case ops.AndI32:
-            return xn & yn;
-        case ops.AndI64:
-            return xo.and(yo);
-        case ops.OrI8:
-        case ops.OrI16:
-        case ops.OrI32:
-            return xn | yn;
-        case ops.OrI64:
-            return xo.or(yo);
-        case ops.XorI8:
-        case ops.XorI16:
-        case ops.XorI32:
-            return xn ^ yn;
-        case ops.XorI64:
-            return xo.xor(yo);
-        case ops.ShLI8x8:
-        case ops.ShLI8x16:
-        case ops.ShLI8x32:
-        case ops.ShLI16x8:
-        case ops.ShLI16x16:
-        case ops.ShLI16x32:
-        case ops.ShLI32x8:
-        case ops.ShLI32x16:
-        case ops.ShLI32x32:
-            return xn << yn;
-        case ops.ShLI8x64:
-        case ops.ShLI16x64:
-        case ops.ShLI32x64:
-            return xn << yo.toUInt32();
-        case ops.ShLI64x8:
-        case ops.ShLI64x16:
-        case ops.ShLI64x32:
-        case ops.ShLI64x64:
-            return xo.shl(yo.toUInt32());
-        case ops.ShRS8x8:
-        case ops.ShRS8x16:
-        case ops.ShRS8x32:
-        case ops.ShRS16x8:
-        case ops.ShRS16x16:
-        case ops.ShRS16x32:
-        case ops.ShRS32x8:
-        case ops.ShRS32x16:
-        case ops.ShRS32x32:
-            return xn >> yn;
-        case ops.ShRS8x64:
-        case ops.ShRS16x64:
-        case ops.ShRS32x64:
-            return xn >> yo.toUInt32();
-        case ops.ShRS64x8:
-        case ops.ShRS64x16:
-        case ops.ShRS64x32:
-        case ops.ShRS64x64:
-            return xo.shr(yo.toUInt32());
-        case ops.ShRU8x8:
-        case ops.ShRU8x16:
-        case ops.ShRU8x32:
-        case ops.ShRU16x8:
-        case ops.ShRU16x16:
-        case ops.ShRU16x32:
-        case ops.ShRU32x8:
-        case ops.ShRU32x16:
-        case ops.ShRU32x32:
-            return xn >>> yn;
-        case ops.ShRU8x64:
-        case ops.ShRU16x64:
-        case ops.ShRU32x64:
-            return xn >>> yo.toUInt32();
-        case ops.ShRU64x8:
-        case ops.ShRU64x16:
-        case ops.ShRU64x32:
-        case ops.ShRU64x64:
-            return xo.shr(yo.toUInt32());
-        case ops.EqI8:
-        case ops.EqI16:
-        case ops.EqI32:
-        case ops.EqF32:
-        case ops.EqF64:
-            return xn === yn ? 1 : 0;
-        case ops.EqI64:
-            return xo.eq(yo) ? 1 : 0;
-        case ops.NeqI8:
-        case ops.NeqI16:
-        case ops.NeqI32:
-        case ops.NeqF32:
-        case ops.NeqF64:
-            return xn !== yn ? 1 : 0;
-        case ops.NeqI64:
-            return xo.neq(yo) ? 1 : 0;
-        case ops.LessS8:
-        case ops.LessU8:
-        case ops.LessS16:
-        case ops.LessU16:
-        case ops.LessS32:
-        case ops.LessU32:
-        case ops.LessF32:
-        case ops.LessF64:
-            return xn < yn ? 1 : 0;
-        case ops.LessS64:
-        case ops.LessU64:
-            return xo.lt(yo) ? 1 : 0;
-        case ops.LeqS8:
-        case ops.LeqU8:
-        case ops.LeqS16:
-        case ops.LeqU16:
-        case ops.LeqS32:
-        case ops.LeqU32:
-        case ops.LeqF32:
-        case ops.LeqF64:
-            return xn <= yn ? 1 : 0;
-        case ops.LeqS64:
-        case ops.LeqU64:
-            return xo.lte(yo) ? 1 : 0;
-        case ops.GreaterS8:
-        case ops.GreaterU8:
-        case ops.GreaterS16:
-        case ops.GreaterU16:
-        case ops.GreaterS32:
-        case ops.GreaterU32:
-        case ops.GreaterF32:
-        case ops.GreaterF64:
-            return xn > yn ? 1 : 0;
-        case ops.GreaterS64:
-        case ops.GreaterU64:
-            return xo.gt(yo) ? 1 : 0;
-        case ops.GeqS8:
-        case ops.GeqU8:
-        case ops.GeqS16:
-        case ops.GeqU16:
-        case ops.GeqS32:
-        case ops.GeqU32:
-        case ops.GeqF32:
-        case ops.GeqF64:
-            return xn >= yn ? 1 : 0;
-        case ops.GeqS64:
-        case ops.GeqU64:
-            return xo.gte(yo) ? 1 : 0;
-        case ops.MinF32:
-        case ops.MinF64:
-            return Math.min(xn, yn);
-        case ops.MaxF32:
-        case ops.MaxF64:
-            return Math.max(xn, yn);
-    }
-    assert(false, `unexpected ${op}`);
-    return null;
-}
-function consteval1(op, t, x) {
-    return null;
-}
-//# sourceMappingURL=consteval.js.map
-
-function optcf_op1(b, op, x) {
-    if (x.op.constant) {
-        assert(isNum(x.aux));
-        let val = consteval1(op, x.type, x.aux);
-        if (val !== null) {
-            return b.f.constVal(x.type, val);
-        }
-    }
-    return null;
-}
-function optcf_op2(b, op, x, y) {
-    if (!x.op.constant || !y.op.constant) {
-        return null;
-    }
-    assert(isNum(x.aux));
-    assert(isNum(y.aux));
-    let xval = x.aux;
-    let yval = y.aux;
-    if (x.type !== y.type) {
-        let lossless;
-        [yval, lossless] = numconv(yval, x.type);
-        if (!lossless) {
-            return null;
-        }
-    }
-    let val = consteval2(op, x.type, xval, yval);
-    if (val !== null) {
-        return b.f.constVal(x.type, val);
-    }
-    return null;
-}
-//# sourceMappingURL=opt_cf.js.map
 
 function opselect1(tok, x) {
     switch (tok) {
@@ -9344,7 +8738,6 @@ function fmtval(f, v) {
     if (v.reg) {
         s += ` {${style.orange(v.reg.name)}}`;
     }
-    s += ` : ${style.pink(v.uses.toString())}`;
     if (v.comment) {
         s += f.style.grey('  // ' + v.comment);
     }
@@ -9458,7 +8851,6 @@ function fmtir(v, options) {
     printir(v, w, options);
     return str.replace(/\r?\n$/, '');
 }
-//# sourceMappingURL=repr.js.map
 
 class LocalSlot {
     constructor(n, type, offs) {
@@ -9481,7 +8873,7 @@ class LocalSlot {
 }
 //# sourceMappingURL=localslot.js.map
 
-const dlog$1 = function (..._) { };
+const dlog = function (..._) { };
 const bitypes = builtInTypes;
 var IRBuilderFlags;
 (function (IRBuilderFlags) {
@@ -9494,19 +8886,17 @@ class IRBuilder {
     constructor() {
         this.sfile = null;
         this.diagh = null;
-        this.regalloc = null;
         this.flags = IRBuilderFlags.Default;
         this.tmpNames = [];
         this.tmpNameBytes = null;
         this.tmpNameHash = 0;
     }
-    init(config, diagh = null, regalloc = null, flags = IRBuilderFlags.Default) {
+    init(config, diagh = null, flags = IRBuilderFlags.Default) {
         const r = this;
         r.config = config;
         r.pkg = new Pkg();
         r.sfile = null;
         r.diagh = diagh;
-        r.regalloc = regalloc;
         r.vars = new Map();
         r.defvars = [];
         r.incompletePhis = null;
@@ -9615,7 +9005,7 @@ class IRBuilder {
             else {
                 line += '-';
             }
-            console.log(line);
+            
         }
         if (DEBUG) {
             
@@ -9727,7 +9117,7 @@ class IRBuilder {
             }
         }
         else {
-            dlog$1(`TODO: handle ${s.constructor.name}`);
+            dlog(`TODO: handle ${s.constructor.name}`);
         }
     }
     ret(val) {
@@ -9941,7 +9331,7 @@ class IRBuilder {
         if (s instanceof CallExpr) {
             return r.funcall(s);
         }
-        dlog$1(`TODO: handle ${s.constructor.name}`);
+        dlog(`TODO: handle ${s.constructor.name}`);
         return r.nilValue();
     }
     copy(v) {
@@ -10069,7 +9459,7 @@ class IRBuilder {
     }
     writeVariable(name, v, b) {
         const s = this;
-        dlog$1(`${b || s.b} ${name} = ${v.op} ${v}`);
+        dlog(`${b || s.b} ${name} = ${v.op} ${v}`);
         if (!b || b === s.b) {
             s.vars.set(name, v);
         }
@@ -10113,7 +9503,7 @@ class IRBuilder {
             s.addIncompletePhi(val, name, b);
         }
         else if (b.preds.length == 1) {
-            dlog$1(`${b} ${name} common case: single predecessor ${b.preds[0]}`);
+            dlog(`${b} ${name} common case: single predecessor ${b.preds[0]}`);
             val = s.readVariable(name, t, b.preds[0]);
             
         }
@@ -10135,7 +9525,7 @@ class IRBuilder {
         for (let pred of phi.b.preds) {
             let v = s.readVariable(name, phi.type, pred);
             if (v !== phi) {
-                dlog$1(`  ${pred} ${v}<${v.op}>`);
+                dlog(`  ${pred} ${v}<${v.op}>`);
                 phi.addArg(v);
             }
         }
@@ -10151,6 +9541,1183 @@ class IRBuilder {
     }
 }
 //# sourceMappingURL=builder.js.map
+
+const Nanosecond = 1;
+const Microsecond = 1000 * Nanosecond;
+const Millisecond = 1000 * Microsecond;
+const Second = 1000 * Millisecond;
+const Minute = 60 * Second;
+const Hour = 60 * Minute;
+const monotime = (typeof performance != 'undefined' ? () => performance.now() * Millisecond :
+    (typeof process != 'undefined' && process.hrtime) ? () => {
+        let t = process.hrtime();
+        return (t[0] * 1e9) + t[1];
+    } :
+        () => Date.now() * Millisecond);
+const wasmMemory = new WebAssembly.Memory({ initial: 2, maximum: 2 });
+const wasm$1 = (typeof WebAssembly != 'undefined' ?
+    new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([
+        0, 97, 115, 109, 1, 0, 0, 0, 1, 11, 2, 96, 0, 1, 127, 96, 2, 127, 127, 1, 127, 2, 16, 1, 3, 101,
+        110, 118, 6, 109, 101, 109, 111, 114, 121, 2, 1, 2, 2, 3, 4, 3, 0, 0, 1, 7, 34, 3, 6, 98, 117, 102,
+        112, 116, 114, 0, 0, 7, 98, 117, 102, 115, 105, 122, 101, 0, 1, 11, 102, 109, 116, 100, 117,
+        114, 97, 116, 105, 111, 110, 0, 2, 10, 231, 12, 3, 5, 0, 65, 128, 8, 11, 4, 0, 65, 32, 11, 217,
+        12, 5, 2, 127, 3, 126, 2, 127, 1, 126, 4, 127, 32, 0, 173, 32, 1, 173, 66, 32, 134, 132, 33, 4,
+        32, 4, 66, 0, 83, 33, 10, 66, 0, 32, 4, 125, 33, 6, 32, 10, 69, 4, 64, 32, 4, 33, 6, 11, 65, 159, 8,
+        65, 243, 0, 58, 0, 0, 2, 64, 32, 6, 66, 128, 148, 235, 220, 3, 84, 4, 64, 2, 64, 32, 6, 66, 0, 81,
+        4, 64, 2, 64, 65, 158, 8, 65, 48, 58, 0, 0, 65, 30, 15, 11, 11, 32, 6, 66, 232, 7, 84, 4, 64, 2, 64,
+        65, 158, 8, 65, 238, 0, 58, 0, 0, 65, 30, 33, 2, 11, 5, 2, 64, 32, 6, 66, 192, 132, 61, 84, 4, 127,
+        2, 127, 65, 158, 8, 65, 181, 127, 58, 0, 0, 65, 3, 33, 11, 65, 30, 11, 5, 2, 127, 65, 158, 8, 65,
+        237, 0, 58, 0, 0, 65, 6, 33, 11, 65, 30, 11, 11, 33, 2, 32, 6, 33, 4, 3, 64, 32, 4, 32, 4, 66, 10,
+        128, 34, 6, 66, 10, 126, 125, 33, 5, 32, 5, 66, 0, 82, 33, 8, 32, 7, 32, 8, 114, 33, 7, 32, 7, 65,
+        255, 1, 113, 69, 33, 12, 32, 2, 65, 127, 106, 33, 8, 32, 12, 69, 4, 64, 2, 64, 32, 8, 65, 128, 8,
+        106, 33, 13, 32, 5, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 32, 13,
+        32, 2, 58, 0, 0, 32, 8, 33, 2, 11, 11, 32, 3, 65, 1, 106, 33, 3, 32, 3, 32, 11, 71, 4, 64, 2, 64, 32,
+        6, 33, 4, 12, 2, 11, 11, 11, 32, 2, 65, 127, 106, 33, 3, 32, 12, 69, 4, 64, 2, 64, 32, 3, 65, 128,
+        8, 106, 33, 2, 32, 2, 65, 46, 58, 0, 0, 32, 3, 33, 2, 11, 11, 32, 4, 66, 10, 84, 4, 64, 2, 64, 32, 2,
+        65, 127, 106, 33, 2, 32, 2, 65, 128, 8, 106, 33, 3, 32, 3, 65, 48, 58, 0, 0, 12, 6, 11, 11, 11, 11,
+        3, 64, 32, 2, 65, 127, 106, 33, 2, 32, 6, 32, 6, 66, 10, 128, 34, 4, 66, 10, 126, 125, 33, 5, 32,
+        5, 167, 33, 3, 32, 3, 65, 48, 114, 33, 3, 32, 3, 65, 255, 1, 113, 33, 7, 32, 2, 65, 128, 8, 106,
+        33, 3, 32, 3, 32, 7, 58, 0, 0, 32, 6, 66, 10, 90, 4, 64, 2, 64, 32, 4, 33, 6, 12, 2, 11, 11, 11, 11,
+        5, 2, 64, 32, 6, 32, 6, 66, 10, 128, 34, 4, 66, 10, 126, 125, 33, 5, 32, 5, 66, 0, 81, 4, 127, 65,
+        31, 5, 2, 127, 32, 5, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 65,
+        158, 8, 32, 2, 58, 0, 0, 65, 30, 11, 11, 33, 7, 32, 4, 66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 5,
+        32, 5, 66, 0, 81, 33, 2, 32, 7, 65, 127, 106, 33, 3, 32, 2, 4, 64, 32, 7, 33, 2, 5, 2, 64, 32, 3, 65,
+        128, 8, 106, 33, 8, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2,
+        32, 8, 32, 2, 58, 0, 0, 32, 3, 33, 2, 32, 7, 65, 126, 106, 33, 3, 11, 11, 32, 6, 66, 228, 0, 128,
+        33, 4, 32, 4, 66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 5, 32, 5, 66, 0, 82, 4, 64, 2, 64, 32, 3,
+        65, 128, 8, 106, 33, 7, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33,
+        2, 32, 7, 32, 2, 58, 0, 0, 32, 3, 34, 2, 65, 127, 106, 33, 3, 11, 11, 32, 6, 66, 232, 7, 128, 33, 4,
+        32, 4, 66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 5, 32, 5, 66, 0, 82, 4, 64, 2, 64, 32, 3, 65, 128,
+        8, 106, 33, 7, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 32, 7,
+        32, 2, 58, 0, 0, 32, 3, 34, 2, 65, 127, 106, 33, 3, 11, 11, 32, 6, 66, 144, 206, 0, 128, 33, 4, 32,
+        4, 66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 5, 32, 5, 66, 0, 82, 4, 64, 2, 64, 32, 3, 65, 128, 8,
+        106, 33, 7, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 32, 7, 32,
+        2, 58, 0, 0, 32, 3, 34, 2, 65, 127, 106, 33, 3, 11, 11, 32, 6, 66, 160, 141, 6, 128, 33, 4, 32, 4,
+        66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 5, 32, 5, 66, 0, 82, 4, 64, 2, 64, 32, 3, 65, 128, 8,
+        106, 33, 7, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 32, 7, 32,
+        2, 58, 0, 0, 32, 3, 34, 2, 65, 127, 106, 33, 3, 11, 11, 32, 6, 66, 192, 132, 61, 128, 33, 4, 32, 4,
+        66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 5, 32, 5, 66, 0, 82, 4, 64, 2, 64, 32, 3, 65, 128, 8,
+        106, 33, 7, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 32, 7, 32,
+        2, 58, 0, 0, 32, 3, 34, 2, 65, 127, 106, 33, 3, 11, 11, 32, 6, 66, 128, 173, 226, 4, 128, 33, 4,
+        32, 4, 66, 10, 130, 33, 4, 32, 5, 32, 4, 132, 33, 9, 32, 9, 66, 0, 82, 4, 64, 2, 64, 32, 3, 65, 128,
+        8, 106, 33, 7, 32, 4, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2, 32, 7,
+        32, 2, 58, 0, 0, 32, 3, 34, 2, 65, 127, 106, 33, 3, 11, 11, 32, 6, 66, 128, 194, 215, 47, 128, 33,
+        4, 32, 4, 66, 10, 130, 33, 5, 32, 9, 32, 5, 132, 33, 4, 32, 4, 66, 0, 82, 4, 64, 2, 64, 32, 3, 65,
+        128, 8, 106, 33, 7, 32, 5, 167, 33, 2, 32, 2, 65, 48, 114, 33, 2, 32, 2, 65, 255, 1, 113, 33, 2,
+        32, 7, 32, 2, 58, 0, 0, 32, 3, 65, 127, 106, 33, 2, 32, 2, 65, 128, 8, 106, 33, 3, 32, 3, 65, 46,
+        58, 0, 0, 11, 11, 32, 6, 66, 128, 148, 235, 220, 3, 128, 33, 4, 32, 4, 66, 60, 130, 33, 4, 32, 4,
+        66, 0, 81, 4, 64, 2, 64, 32, 2, 65, 127, 106, 33, 2, 32, 2, 65, 128, 8, 106, 33, 3, 32, 3, 65, 48,
+        58, 0, 0, 11, 5, 3, 64, 32, 2, 65, 127, 106, 33, 2, 32, 4, 32, 4, 66, 10, 128, 34, 5, 66, 10, 126,
+        125, 33, 9, 32, 9, 167, 33, 3, 32, 3, 65, 48, 114, 33, 3, 32, 3, 65, 255, 1, 113, 33, 7, 32, 2, 65,
+        128, 8, 106, 33, 3, 32, 3, 32, 7, 58, 0, 0, 32, 4, 66, 10, 90, 4, 64, 2, 64, 32, 5, 33, 4, 12, 2, 11,
+        11, 11, 11, 32, 6, 66, 255, 175, 157, 194, 223, 1, 86, 4, 64, 2, 64, 32, 6, 66, 128, 176, 157,
+        194, 223, 1, 128, 33, 4, 32, 2, 65, 127, 106, 33, 3, 32, 3, 65, 128, 8, 106, 33, 7, 32, 7, 65,
+        237, 0, 58, 0, 0, 32, 4, 66, 60, 130, 33, 4, 32, 4, 66, 0, 81, 4, 64, 2, 64, 32, 2, 65, 126, 106,
+        33, 2, 32, 2, 65, 128, 8, 106, 33, 3, 32, 3, 65, 48, 58, 0, 0, 11, 5, 2, 64, 32, 3, 33, 2, 3, 64, 32,
+        2, 65, 127, 106, 33, 2, 32, 4, 32, 4, 66, 10, 128, 34, 5, 66, 10, 126, 125, 33, 9, 32, 9, 167, 33,
+        3, 32, 3, 65, 48, 114, 33, 3, 32, 3, 65, 255, 1, 113, 33, 7, 32, 2, 65, 128, 8, 106, 33, 3, 32, 3,
+        32, 7, 58, 0, 0, 32, 4, 66, 10, 90, 4, 64, 2, 64, 32, 5, 33, 4, 12, 2, 11, 11, 11, 11, 11, 32, 6, 66,
+        255, 191, 226, 133, 227, 232, 0, 86, 4, 64, 2, 64, 32, 6, 66, 128, 192, 226, 133, 227, 232, 0,
+        128, 33, 6, 32, 2, 65, 127, 106, 33, 2, 32, 2, 65, 128, 8, 106, 33, 3, 32, 3, 65, 232, 0, 58, 0, 0,
+        3, 64, 32, 2, 65, 127, 106, 33, 2, 32, 6, 32, 6, 66, 10, 128, 34, 4, 66, 10, 126, 125, 33, 5, 32,
+        5, 167, 33, 3, 32, 3, 65, 48, 114, 33, 3, 32, 3, 65, 255, 1, 113, 33, 7, 32, 2, 65, 128, 8, 106,
+        33, 3, 32, 3, 32, 7, 58, 0, 0, 32, 6, 66, 10, 90, 4, 64, 2, 64, 32, 4, 33, 6, 12, 2, 11, 11, 11, 11,
+        11, 11, 11, 11, 11, 11, 32, 10, 69, 4, 64, 32, 2, 15, 11, 32, 2, 65, 127, 106, 33, 3, 32, 3, 65,
+        128, 8, 106, 33, 2, 32, 2, 65, 45, 58, 0, 0, 32, 3, 11
+    ])), {
+        env: { memory: wasmMemory }
+    }).exports :
+    null);
+const fmtduration = (wasm$1 ? (() => {
+    let p = wasm$1.bufptr();
+    let z = wasm$1.bufsize();
+    let u8heap = new Uint8Array(wasmMemory.buffer);
+    return function fmtduration(d) {
+        let [low, high] = f64ToS32pair(d);
+        let w = wasm$1.fmtduration(low, high);
+        return String.fromCharCode.apply(null, u8heap.subarray(p + w, p + z));
+    };
+})() :
+    (d) => {
+        return `${(d / 1e9).toFixed(1)}ms`;
+    });
+function fmtduration2(d) {
+    return fmtduration(d < Nanosecond ? 1 :
+        d < Microsecond ? Math.round(d / (Nanosecond / 100)) * (Nanosecond / 100) :
+            d < Millisecond ? Math.round(d / (Microsecond / 100)) * (Microsecond / 100) :
+                d < Second ? Math.round(d / (Millisecond / 100)) * (Millisecond / 100) :
+                    d);
+}
+TEST("fmtduration", () => {
+    const samples = [
+        ["0s", 0],
+        ["1ns", 1 * Nanosecond],
+        ["1.1µs", 1100 * Nanosecond],
+        ["2.2ms", 2200 * Microsecond],
+        ["3.3s", 3300 * Millisecond],
+        ["4m5s", 4 * Minute + 5 * Second],
+        ["4m5.001s", 4 * Minute + 5001 * Millisecond],
+        ["5h6m7.001s", 5 * Hour + 6 * Minute + 7001 * Millisecond],
+        ["8m0.000000001s", 8 * Minute + 1 * Nanosecond],
+        ["2562047h47m16.854775807s",
+            SInt64.ONE.shl(63).sub(SInt64.ONE).toFloat64()
+        ],
+        ["-2562047h47m16.854775808s",
+            SInt64.ONENEG.shl(63).toFloat64()
+        ],
+    ];
+    for (let [expectedResult, input] of samples) {
+        let actualResult = fmtduration(input);
+        assert(actualResult == expectedResult, `${actualResult} == ${expectedResult}`);
+    }
+});
+//# sourceMappingURL=time.js.map
+
+function copyelim(f) {
+    for (let b of f.blocks) {
+        for (let v of b.values) {
+            copyelimValue(v);
+        }
+    }
+    for (let b of f.blocks) {
+        let v = b.control;
+        if (v && v.op === ops.Copy) {
+            b.setControl(v.args[0]);
+        }
+    }
+    for (let e of f.namedValues.values()) {
+        let values = e.values;
+        for (let i = 0; i < values.length; i++) {
+            let v = values[i];
+            if (v.op === ops.Copy) {
+                values[i] = v.args[0];
+            }
+        }
+    }
+}
+function copySource(v) {
+    assert(v.op === ops.Copy);
+    assert(v.args.length == 1);
+    let w = v.args[0];
+    let slow = w;
+    let advance = false;
+    while (w.op === ops.Copy) {
+        w = w.args[0];
+        if (w === slow) {
+            w.reset(ops.Unknown);
+            break;
+        }
+        if (advance) {
+            slow = slow.args[0];
+        }
+        advance = !advance;
+    }
+    while (v != w) {
+        let x = v.args[0];
+        v.setArg(0, w);
+        v = x;
+    }
+    return w;
+}
+function copyelimValue(v) {
+    for (let i = 0; i < v.args.length; i++) {
+        let a = v.args[i];
+        if (a.op === ops.Copy) {
+            v.setArg(i, copySource(a));
+        }
+    }
+}
+//# sourceMappingURL=copyelim.js.map
+
+function phielim(f) {
+    while (true) {
+        let change = false;
+        for (let b of f.blocks) {
+            for (let v of b.values) {
+                copyelimValue(v);
+                change = phielimValue(v) || change;
+            }
+        }
+        if (!change) {
+            break;
+        }
+    }
+}
+function phielimValue(v) {
+    if (v.op !== ops.Phi) {
+        return false;
+    }
+    let args = v.args;
+    assert(args, `Phi ${v} without args`);
+    var w = null;
+    for (let x of args) {
+        if (x === v) {
+            continue;
+        }
+        if (x === w) {
+            continue;
+        }
+        if (w) {
+            return false;
+        }
+        w = x;
+    }
+    if (!w) {
+        return false;
+    }
+    v.op = ops.Copy;
+    v.setArgs1(w);
+    debuglog(`eliminated phi ${v}`);
+    return true;
+}
+//# sourceMappingURL=phielim.js.map
+
+function rewrite(f, rb, rv) {
+    while (true) {
+        let change = false;
+        for (let b of f.blocks) {
+            if (b.control && b.control.op === ops.Copy) {
+                while (b.control.op === ops.Copy) {
+                    assert(b.control != null);
+                    assert(b.control.args[0] != null);
+                    b.setControl(b.control.args[0]);
+                }
+            }
+            if (rb(b)) {
+                change = true;
+            }
+            for (let j = 0; j < b.values.length; j++) {
+                let v = b.values[j];
+                change = phielimValue(v) || change;
+                for (let i = 0; i < v.args.length; i++) {
+                    let a = v.args[i];
+                    if (a.op !== ops.Copy) {
+                        continue;
+                    }
+                    let aa = copySource(a);
+                    v.setArg(i, aa);
+                    change = true;
+                    while (a.uses == 0) {
+                        let b = a.args[0];
+                        a.reset(ops.Invalid);
+                        a = b;
+                    }
+                }
+                change = rv(v) || change;
+            }
+        }
+        if (!change) {
+            break;
+        }
+    }
+    for (let b of f.blocks) {
+        let j = 0;
+        for (let i = 0; i < b.values.length; i++) {
+            let v = b.values[i];
+            if (v.op === ops.Invalid) {
+                f.freeValue(v);
+                continue;
+            }
+            if (i != j) {
+                b.values[j] = v;
+            }
+            j++;
+        }
+        b.values.length = j;
+    }
+}
+//# sourceMappingURL=rewrite.js.map
+
+function nullLowerBlock(_) { return false; }
+function nullLowerValue(_) { return false; }
+function lower(f, c) {
+    if (c.lowerBlock || c.lowerValue) {
+        rewrite(f, c.lowerBlock || nullLowerBlock, c.lowerValue || nullLowerValue);
+    }
+}
+//# sourceMappingURL=lower.js.map
+
+const dlog$1 = function (..._) { };
+function deadcode(f) {
+    assert(f.regAlloc == null, `deadcode after regalloc for ${f}`);
+    let reachable = reachableBlocks(f);
+    dlog$1(`reachable blocks:`, reachable
+        .map((reachable, id) => reachable ? id : undefined)
+        .filter(id => id !== undefined)
+        .join('  '));
+    for (let b of f.blocks) {
+        if (reachable[b.id]) {
+            continue;
+        }
+        let nsuccs = b.succs ? b.succs.length : 0;
+        for (let i = 0; i < nsuccs;) {
+            let e = b.succs[i];
+            if (reachable[e.id]) {
+                removeEdge(b, i);
+            }
+            else {
+                i++;
+            }
+        }
+    }
+    for (let b of f.blocks) {
+        if (!reachable[b.id]) {
+            continue;
+        }
+        if (b.kind != BlockKind.First) {
+            continue;
+        }
+        removeEdge(b, 1);
+        b.kind = BlockKind.Plain;
+        b.likely = BranchPrediction.Unknown;
+    }
+    copyelim(f);
+    let live = liveValues(f, reachable);
+    dlog$1(`live values:`, Object.keys(live).map(k => 'v' + k).join(', '));
+    let s = new Set();
+    for (let [key, e] of f.namedValues) {
+        let j = 0;
+        s.clear();
+        for (let v of e.values) {
+            if (live[v.id] && !s.has(v)) {
+                e.values[j] = v;
+                j++;
+                s.add(v);
+            }
+        }
+        if (j == 0) {
+            f.namedValues.delete(key);
+        }
+        else {
+            for (let k = e.values.length - 1; k >= j; k--) {
+                e.values[k] = undefined;
+            }
+            e.values.length = j;
+        }
+    }
+    dlog$1(`live names':`, Array.from(f.namedValues.keys()).join(', '));
+    for (let b of f.blocks) {
+        if (!reachable[b.id]) {
+            b.setControl(null);
+        }
+        for (let v of b.values) {
+            if (!live[v.id]) {
+                v.resetArgs();
+            }
+        }
+    }
+    for (let b of f.blocks) {
+        let i = 0;
+        for (let v of b.values) {
+            if (live[v.id]) {
+                b.values[i] = v;
+                i++;
+            }
+            else {
+                f.freeValue(v);
+            }
+        }
+        b.values.length = i;
+    }
+    let i = 0;
+    for (let b of f.blocks) {
+        if (reachable[b.id]) {
+            f.blocks[i] = b;
+            i++;
+        }
+        else {
+            if (b.values.length > 0) {
+                panic(`live values in unreachable block ${b}: ${b.values.join(', ')}`);
+            }
+            f.freeBlock(b);
+        }
+    }
+    f.blocks.length = i;
+}
+function reachableBlocks(f) {
+    let reachable = new Array(f.numBlocks());
+    reachable[f.entry.id] = true;
+    let p = [];
+    p.push(f.entry);
+    while (p.length > 0) {
+        let b = p.pop();
+        let succs = b.succs;
+        if (succs) {
+            if (b.kind == BlockKind.First) {
+                succs = succs.slice(0, 1);
+            }
+            for (let c of succs) {
+                assert(c.id < reachable.length, `block ${c} >= f.numBlocks()=${reachable.length}`);
+                if (!reachable[c.id]) {
+                    reachable[c.id] = true;
+                    p.push(c);
+                }
+            }
+        }
+    }
+    return reachable;
+}
+function liveValues(f, reachable) {
+    let live = new Array(f.numBlocks());
+    if (f.regAlloc) {
+        live.fill(true);
+        return live;
+    }
+    let q = [];
+    for (let b of f.blocks) {
+        if (!reachable[b.id]) {
+            continue;
+        }
+        let v = b.control;
+        if (v && !live[v.id]) {
+            live[v.id] = true;
+            q.push(v);
+        }
+        for (let v of b.values) {
+            if ((v.op.call || v.op.hasSideEffects) && !live[v.id]) {
+                live[v.id] = true;
+                q.push(v);
+            }
+            if (v.op.nilCheck && !live[v.id]) {
+                live[v.id] = true;
+                q.push(v);
+            }
+        }
+    }
+    while (q.length > 0) {
+        let v = q.pop();
+        for (let i = 0; i < v.args.length; i++) {
+            let x = v.args[i];
+            if (v.op === ops.Phi && !reachable[v.b.preds[i].id]) {
+                continue;
+            }
+            if (!live[x.id]) {
+                live[x.id] = true;
+                q.push(x);
+            }
+        }
+    }
+    return live;
+}
+function removeEdge(b, i) {
+    let c = b.succs[i];
+    b.removeNthSucc(i);
+    let j = c.removePred(b);
+    let n = c.preds.length;
+    for (let v of c.values) {
+        if (v.op !== ops.Phi) {
+            continue;
+        }
+        v.args[j].uses--;
+        v.args[j] = v.args[n];
+        v.args.length = n;
+        phielimValue(v);
+    }
+}
+//# sourceMappingURL=deadcode.js.map
+
+function shortcircuit(f) {
+    for (let b of f.blocks) {
+        for (let v of b.values) {
+            if (v.op !== ops.Phi) {
+                continue;
+            }
+            if (v.type !== t_bool) {
+                continue;
+            }
+            for (let i = 0; i < v.args.length; i++) {
+                let p = b.preds[i];
+                if (p.kind != BlockKind.If) {
+                    continue;
+                }
+                let a = v.args[i];
+                if (p.control !== a) {
+                    continue;
+                }
+            }
+        }
+    }
+}
+//# sourceMappingURL=shortcircuit.js.map
+
+class DesiredState {
+    constructor(copyOther) {
+        this.entries = [];
+        this.avoid = emptyRegSet;
+        if (copyOther) {
+            this.copy(copyOther);
+        }
+    }
+    toString() {
+        let s = '{';
+        s += this.entries.map(e => `v${e.id}[` + e.regs.filter(r => r != noReg).map(r => `r${r}`).join(' ') + ']').join(', ');
+        s += `}`;
+        if (!this.avoid.isZero()) {
+            s += `avoid=${fmtRegSet(this.avoid)}`;
+        }
+        return s;
+    }
+    clear() {
+        this.entries.length = 0;
+        this.avoid = emptyRegSet;
+    }
+    get(vid) {
+        for (let e of this.entries) {
+            if (e.id == vid) {
+                return e.regs;
+            }
+        }
+        return [noReg, noReg, noReg, noReg];
+    }
+    add(vid, r) {
+        const d = this;
+        d.avoid = d.avoid.or(UInt64.ONE.shl(r));
+        for (let e of d.entries) {
+            if (e.id != vid) {
+                continue;
+            }
+            if (e.regs[0] == r) {
+                return;
+            }
+            for (let j = 1; j < e.regs.length; j++) {
+                if (e.regs[j] == r) {
+                    e.regs.copyWithin(1, 0, j);
+                    e.regs[0] = r;
+                    return;
+                }
+            }
+            e.regs.copyWithin(1, 0);
+            e.regs[0] = r;
+            return;
+        }
+        d.entries.push({ id: vid, regs: [r, noReg, noReg, noReg] });
+    }
+    addList(vid, regs) {
+        for (let i = regs.length - 1; i >= 0; i--) {
+            let r = regs[i];
+            if (r != noReg) {
+                this.add(vid, r);
+            }
+        }
+    }
+    clobber(m) {
+        let d = this;
+        for (let i = 0; i < d.entries.length;) {
+            let e = d.entries[i];
+            let j = 0;
+            for (let r of e.regs) {
+                if (r != noReg && m.shr(r).and(UInt64.ONE).isZero()) {
+                    e.regs[j] = r;
+                    j++;
+                }
+            }
+            if (j == 0) {
+                d.entries[i] = d.entries[d.entries.length - 1];
+                d.entries.splice(d.entries.length - 1, 1);
+                continue;
+            }
+            for (; j < e.regs.length; j++) {
+                e.regs[j] = noReg;
+            }
+            i++;
+        }
+        d.avoid = d.avoid.and(m.not());
+    }
+    copy(x) {
+        this.entries.splice(0, this.entries.length, ...x.entries);
+        this.avoid = x.avoid;
+    }
+    remove(vid) {
+        for (let e of this.entries) {
+            if (e.id == vid) {
+                let regs = e.regs;
+                let z = this.entries.length - 1;
+                e = this.entries[z];
+                this.entries.splice(z, 1);
+                return regs;
+            }
+        }
+        return [noReg, noReg, noReg, noReg];
+    }
+    merge(x) {
+        this.avoid = this.avoid.or(x.avoid);
+        for (let e of x.entries) {
+            this.addList(e.id, e.regs);
+        }
+    }
+}
+//# sourceMappingURL=reg_desiredstate.js.map
+
+class IntGraph {
+    constructor() {
+        this.nodes = [];
+        this.length = 0;
+    }
+    copy() {
+        let g = new IntGraph();
+        g.length = this.length;
+        g.nodes = [];
+        for (let id = 0; id < this.nodes.length; id++) {
+            let s = this.nodes[id];
+            if (s !== undefined) {
+                g.nodes[id] = new Set(s);
+            }
+        }
+        return g;
+    }
+    has(id) {
+        return !!this.nodes[id];
+    }
+    add(id) {
+        if (!this.nodes[id]) {
+            this.nodes[id] = new Set();
+            this.length++;
+        }
+    }
+    remove(id) {
+        let s = this.nodes[id];
+        if (s) {
+            for (let id2 of s) {
+                this.nodes[id2].delete(id);
+            }
+            
+            this.nodes[id] = undefined;
+            this.length--;
+        }
+    }
+    connect(id1, id2) {
+        let s = this.nodes[id1];
+        if (!s) {
+            this.nodes[id1] = new Set([id2]);
+            this.length++;
+        }
+        else {
+            s.add(id2);
+        }
+        s = this.nodes[id2];
+        if (!s) {
+            this.nodes[id2] = new Set([id1]);
+            this.length++;
+        }
+        else {
+            s.add(id1);
+        }
+    }
+    connected(id1, id2) {
+        let s = this.nodes[id1];
+        return s && s.has(id2);
+    }
+    disconnect(id1, id2) {
+        let s = this.nodes[id1];
+        if (s) {
+            s.delete(id2);
+        }
+        s = this.nodes[id2];
+        if (s) {
+            s.delete(id1);
+        }
+    }
+    edges(id) {
+        return this.nodes[id];
+    }
+    degree(id) {
+        return this.nodes[id].size;
+    }
+    any() {
+        for (let id = 0; id < this.nodes.length; id++) {
+            if (this.nodes[id] !== undefined) {
+                return id;
+            }
+        }
+        return undefined;
+    }
+    keys() {
+        let keys = [];
+        for (let id = 0; id < this.nodes.length; id++) {
+            if (this.nodes[id] !== undefined) {
+                keys.push(id);
+            }
+        }
+        return keys;
+    }
+    fmt() {
+        let pairs = new Set();
+        for (let k in this.nodes) {
+            let id = k;
+            let edges = this.edges(id);
+            if (edges) {
+                if (edges.size > 0) {
+                    for (let id2 of edges) {
+                        if (id < id2) {
+                            pairs.add(`${id} -- ${id2}`);
+                        }
+                        else {
+                            pairs.add(`${id2} -- ${id}`);
+                        }
+                    }
+                }
+                else {
+                    pairs.add(`${id}`);
+                }
+            }
+        }
+        return Array.from(pairs).join('\n');
+    }
+}
+//# sourceMappingURL=intgraph.js.map
+
+const dlog$2 = function (..._) { };
+const allocatorCache = new Map();
+let allocator = null;
+function regalloc(f, config) {
+    if (!allocator || allocator.config !== config) {
+        allocator = allocatorCache.get(config) || null;
+        if (!allocator) {
+            allocator = new RegAllocator(config);
+            allocatorCache.set(config, allocator);
+        }
+    }
+    allocator.regallocFun(f);
+}
+const likelyDistance = 1;
+const normalDistance = 10;
+const unlikelyDistance = 100;
+const maxregs = 64;
+const noReg$1 = 255 >>> 0;
+function countRegs(m) {
+    return m.popcnt();
+}
+function pickReg(m) {
+    if (m.isZero()) {
+        panic("can't pick a register from an empty set");
+    }
+    for (let i = 0;; i++) {
+        if (!m.and(UInt64.ONE).isZero()) {
+            return i;
+        }
+        m = m.shr(1);
+    }
+}
+class ValState {
+    constructor(v) {
+        this.regs = emptyRegSet;
+        this.needReg = false;
+        this.rematerializeable = false;
+        this.mindist = 0;
+        this.maxdist = 0;
+        this.v = v;
+    }
+}
+class RegAllocator {
+    constructor(config) {
+        this.addrtype = t_u32;
+        this.visitOrder = [];
+        this.values = [];
+        this.live = [];
+        this.desired = [];
+        const a = this;
+        this.config = config;
+        this.addrtype = intTypes(config.addrSize)[1];
+        this.addrsize = config.addrSize;
+        this.registers = config.registers;
+        this.numregs = config.registers.length;
+        if (a.numregs == 0 || a.numregs > maxregs) {
+            panic(`invalid number of registers: ${a.numregs}`);
+        }
+        this.SPReg = noReg$1;
+        this.SBReg = noReg$1;
+        this.GReg = noReg$1;
+        for (let r = 0; r < a.numregs; r++) {
+            switch (a.registers[r].name) {
+                case "SP":
+                    a.SPReg = r;
+                    break;
+                case "SB":
+                    a.SBReg = r;
+                    break;
+                case "g":
+                    if (config.hasGReg) {
+                        a.GReg = r;
+                    }
+                    ;
+                    break;
+            }
+        }
+        if (a.SPReg == noReg$1) {
+            panic("no SP register found");
+        }
+        if (a.SBReg == noReg$1) {
+            panic("no SB register found");
+        }
+        if (config.hasGReg && a.GReg == noReg$1) {
+            panic("no g register found");
+        }
+        this.allocatable = config.gpRegMask.or(config.fpRegMask.or(config.specialRegMask));
+        this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SPReg).not());
+        this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SBReg).not());
+        this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.GReg).not());
+    }
+    regallocFun(f) {
+        const a = this;
+        a.f = f;
+        assert(f.regAlloc == null, `registers already allocated for ${f}`);
+        f.regAlloc = new Array(f.numValues());
+        const SP = f.newValue(f.entry, ops.SP, a.addrtype, null);
+        SP.reg = a.registers[this.SPReg];
+        f.entry.pushValueFront(SP);
+        a.visitOrder = f.blocks;
+        a.values = new Array(f.numValues());
+        for (let b of a.visitOrder) {
+            for (let v of b.values) {
+                let t = v.type;
+                let val = new ValState(v);
+                a.values[v.id] = val;
+                if (t.mem > 0 && !t.isTuple() && v !== SP) {
+                    val.needReg = true;
+                    val.rematerializeable = v.rematerializeable();
+                }
+            }
+        }
+        a.computeLive();
+        dlog$2("\nlive values at end of each block\n" + a.fmtLive());
+        for (let vs of a.values) {
+            if (vs) {
+                dlog$2(`  v${vs.v.id} - ` + [
+                    ['needReg', vs.needReg],
+                    ['mindist', vs.mindist],
+                    ['maxdist', vs.maxdist],
+                ].map(v => v.join(': ')).join(', '));
+            }
+        }
+        let ig = a.buildInterferenceGraph();
+        if (DEBUG) {
+            let ifstr = ig.fmt();
+            let vizurl = ('https://rsms.me/co/doc/chaitin/?' +
+                'input=ifg&enable-briggs=1&immediate=1&ifg=' +
+                encodeURIComponent(ifstr.trim().split(/[\r\n]+/).map(s => s.trim()).join('\n')).replace(/\%20/g, '+'));
+            
+        }
+        a.pickValues(ig);
+    }
+    pickValues(ig) {
+        const a = this;
+        let gpk = 3;
+        let valstack = [];
+        let spills = new Set();
+        let x = 20;
+        let sortedIds = ig.keys();
+        function sortIds() {
+            sortedIds.sort((a, b) => ig.degree(a) - ig.degree(b));
+        }
+        sortIds();
+        pick_loop: while (true && x--) {
+            for (let i = 0; i < sortedIds.length; i++) {
+                let id = sortedIds[i];
+                let edges = ig.edges(id);
+                assert(edges, `missing edge data for v${id}`);
+                if (edges.size < gpk) {
+                    dlog$2(`pick v${id} with degree ${edges.size} < R`);
+                    sortedIds.splice(i, 1);
+                    ig.remove(id);
+                    valstack.push({ id, edges });
+                    continue pick_loop;
+                }
+            }
+            if (ig.length == 0) {
+                break;
+            }
+            let id = sortedIds.shift();
+            let edges = ig.edges(id);
+            dlog$2(`pick v${id} with degree ${edges.size} >= R (maybe spill)`);
+            ig.remove(id);
+            valstack.push({ id, edges });
+            spills.add(id);
+        }
+        dlog$2(`spills:`, spills.size == 0 ? '(none)' :
+            Array.from(spills).map(id => `v${id}`).join(" "));
+        dlog$2('valstack:', valstack.map(v => `v${v.id}`).join(' '));
+        let reg = -1;
+        while (true) {
+            let v = valstack.pop();
+            if (!v) {
+                return true;
+            }
+            reg = (reg + 1) % gpk;
+            let i = gpk;
+            let conflict = true;
+            reg_conflict_loop: while (i--) {
+                for (let id2 of v.edges) {
+                    let reg2 = a.values[id2].v.reg;
+                    if (reg2 && reg2.num == reg) {
+                        reg = (reg + 1) % gpk;
+                        continue reg_conflict_loop;
+                    }
+                }
+                conflict = false;
+                break;
+            }
+            if (conflict) {
+                dlog$2(`unable to find register for v${v.id}`);
+                reg = noReg$1;
+            }
+            dlog$2(`pop v${v.id} {${reg}} edges:`, v.edges);
+            ig.add(v.id);
+            for (let id2 of v.edges) {
+                ig.connect(v.id, id2);
+            }
+            let val = a.values[v.id];
+            assert(val.needReg, `unexpected v${v.id}.needReg=false`);
+            val.v.reg = a.registers[reg];
+        }
+    }
+    buildInterferenceGraph() {
+        const a = this;
+        const f = a.f;
+        let g = new IntGraph();
+        for (let i = f.blocks.length, b; b = f.blocks[--i];) {
+            let live = new Set();
+            let liveout = a.live[b.id];
+            if (liveout) {
+                for (let e of liveout) {
+                    live.add(e.id);
+                }
+            }
+            for (let i = b.values.length - 1; i >= 0; --i) {
+                let v = b.values[i];
+                live.delete(v.id);
+                for (let id2 of live) {
+                    g.connect(v.id, id2);
+                }
+                for (let operand of v.args) {
+                    live.add(operand.id);
+                }
+            }
+        }
+        return g;
+    }
+    regspec(op) {
+        return op.reg;
+    }
+    computeLive() {
+        const a = this;
+        const f = a.f;
+        a.live = new Array(f.numBlocks());
+        a.desired = new Array(f.numBlocks());
+        let phis = [];
+        let live = new Map();
+        let t = new Map();
+        let desired = new DesiredState();
+        let po = f.postorder();
+        while (true) {
+            let changed = false;
+            for (let b of po) {
+                live.clear();
+                let liv = a.live[b.id];
+                if (liv)
+                    for (let e of liv) {
+                        live.set(e.id, { val: e.dist + b.values.length, pos: e.pos });
+                    }
+                if (b.control && a.values[b.control.id].needReg) {
+                    live.set(b.control.id, { val: b.values.length, pos: b.pos });
+                }
+                phis = [];
+                for (let i = b.values.length - 1; i >= 0; i--) {
+                    let v = b.values[i];
+                    let x = live.get(v.id);
+                    if (x) {
+                        a.values[v.id].maxdist = x.val;
+                        live.delete(v.id);
+                    }
+                    if (v.op === ops.Phi) {
+                        phis.push(v);
+                        continue;
+                    }
+                    if (v.op.call) {
+                        for (let v of live.values()) {
+                            v.val += unlikelyDistance;
+                        }
+                    }
+                    for (let arg of v.args) {
+                        if (a.values[arg.id].needReg) {
+                            live.set(arg.id, { val: i, pos: v.pos });
+                        }
+                    }
+                }
+                let other = a.desired[b.id];
+                if (other) {
+                    desired.copy(other);
+                }
+                else {
+                    desired.clear();
+                }
+                for (let i = b.values.length - 1; i >= 0; i--) {
+                    let v = b.values[i];
+                    let prefs = desired.remove(v.id);
+                    if (v.op === ops.Phi) {
+                        continue;
+                    }
+                    let regspec = a.regspec(v.op);
+                    desired.clobber(regspec.clobbers);
+                    for (let j of regspec.inputs) {
+                        if (countRegs(j.regs) != 1) {
+                            continue;
+                        }
+                        desired.clobber(j.regs);
+                        desired.add(v.args[j.idx].id, pickReg(j.regs));
+                    }
+                    if (v.op.resultInArg0) {
+                        if (v.op.commutative) {
+                            desired.addList(v.args[1].id, prefs);
+                        }
+                        desired.addList(v.args[0].id, prefs);
+                    }
+                }
+                for (let i = 0; i < b.preds.length; i++) {
+                    let p = b.preds[i];
+                    let delta = normalDistance;
+                    if (p.succs.length == 2) {
+                        if (p.succs[0] == b && p.likely == BranchPrediction.Likely ||
+                            p.succs[1] == b && p.likely == BranchPrediction.Unlikely) {
+                            delta = likelyDistance;
+                        }
+                        else if (p.succs[0] == b && p.likely == BranchPrediction.Unlikely ||
+                            p.succs[1] == b && p.likely == BranchPrediction.Likely) {
+                            delta = unlikelyDistance;
+                        }
+                    }
+                    let pdesired = a.desired[p.id];
+                    if (!pdesired) {
+                        a.desired[p.id] = new DesiredState(desired);
+                    }
+                    else {
+                        pdesired.merge(desired);
+                    }
+                    t.clear();
+                    let plive = a.live[p.id];
+                    if (plive)
+                        for (let e of plive) {
+                            t.set(e.id, { val: e.dist, pos: e.pos });
+                        }
+                    let update = false;
+                    for (let [key, e] of live) {
+                        let d = e.val + delta;
+                        let e2 = t.get(key);
+                        if (!e2 || d < e2.val) {
+                            update = true;
+                            t.set(key, { val: d, pos: e.pos });
+                        }
+                    }
+                    for (let v of phis) {
+                        let id = v.args[i].id;
+                        if (a.values[id].needReg) {
+                            let e2 = t.get(id);
+                            if (!e2 || delta < e2.val) {
+                                update = true;
+                                t.set(id, { val: delta, pos: v.pos });
+                            }
+                        }
+                    }
+                    if (!update) {
+                        continue;
+                    }
+                    let l = new Array(t.size), j = 0;
+                    for (let [key, e] of t) {
+                        l[j++] = { id: key, dist: e.val, pos: e.pos };
+                    }
+                    a.live[p.id] = l;
+                    changed = true;
+                }
+            }
+            if (!changed) {
+                break;
+            }
+        }
+    }
+    fmtLive() {
+        const a = this;
+        let s = '';
+        for (let b of a.f.blocks) {
+            s += `  ${b}:`;
+            let blive = a.live[b.id];
+            if (blive)
+                for (let x of blive) {
+                    s += `  v${x.id}`;
+                    let desired = a.desired[b.id];
+                    if (desired)
+                        for (let e of desired.entries) {
+                            if (e.id != x.id) {
+                                continue;
+                            }
+                            s += "[";
+                            let first = true;
+                            for (let r of e.regs) {
+                                if (r == noReg$1) {
+                                    continue;
+                                }
+                                if (!first) {
+                                    s += ",";
+                                }
+                                let reg = a.registers[r];
+                                s += `${reg.name}#${reg.num}`;
+                                first = false;
+                            }
+                            s += "]";
+                        }
+                }
+            if (a.desired[b.id]) {
+                let avoid = a.desired[b.id].avoid;
+                if (!avoid.isZero()) {
+                    s += " avoid=" + fmtRegSet(avoid);
+                }
+            }
+            s += "\n";
+        }
+        return s.trimRight();
+    }
+}
+//# sourceMappingURL=regalloc.js.map
+
+function optional(name, fn) {
+    return { name, fn, required: false };
+}
+function required(name, fn) {
+    return { name, fn, required: true };
+}
+const passes = [
+    optional("early phielim", phielim),
+    optional("early copyelim", copyelim),
+    optional("early deadcode", deadcode),
+    optional("short circuit", shortcircuit),
+    required("generic deadcode", deadcode),
+    required("lower", lower),
+    required("lowered deadcode", deadcode),
+    optional("early phielim", phielim),
+    optional("early copyelim", copyelim),
+    optional("late deadcode", deadcode),
+    required("regalloc", regalloc),
+];
+
+function runPassesDev(f, c, stopAt, post) {
+    let totaltime = 0;
+    for (let p of passes) {
+        if (p.name == stopAt) {
+            break;
+        }
+        if (c.optimize || p.required) {
+            console.log(`running pass ${p.name}`);
+            let t = monotime();
+            p.fn(f, c);
+            t = monotime() - t;
+            totaltime += t;
+            console.log(`pass ${p.name} finished in ${fmtduration2(t)}`);
+            if (post) {
+                post(p);
+            }
+        }
+    }
+    console.log(`passes over ${f.name} finished in ${fmtduration2(totaltime)}`);
+}
+//# sourceMappingURL=passes.js.map
 
 class Config {
     constructor(props) {
@@ -10382,7 +10949,7 @@ const archs = {
 };
 //# sourceMappingURL=all.js.map
 
-const wasm$1 = (typeof WebAssembly != 'undefined' ?
+const wasm$2 = (typeof WebAssembly != 'undefined' ?
     new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array([
         0, 97, 115, 109, 1, 0, 0, 0, 1, 9, 2, 96, 0, 1, 127, 96, 1, 127, 0, 3, 4, 3, 0, 1, 0, 6, 16, 3, 126, 1,
         66, 1, 11, 126, 1, 66, 2, 11, 127, 1, 65, 0, 11, 7, 37, 3, 8, 103, 101, 116, 95, 104, 105, 103,
@@ -10401,17 +10968,17 @@ function i32rand_mwc1616() {
     js_state1 = 30903 * (js_state1 & 0xffff) + (js_state1 >> 16);
     return js_state0 << 16 + (js_state1 & 0xffff);
 }
-const seed = (wasm$1 !== null ? wasm$1.seed : (n) => {
+const seed = (wasm$2 !== null ? wasm$2.seed : (n) => {
     js_state0 = n | 0;
     js_state1 = (n + 1) | 0;
 });
-const sint64rand = (wasm$1 !== null ? () => {
-    const low = wasm$1.xorshift128plus();
-    return new SInt64(low, wasm$1.get_high());
+const sint64rand = (wasm$2 !== null ? () => {
+    const low = wasm$2.xorshift128plus();
+    return new SInt64(low, wasm$2.get_high());
 } : () => new SInt64(i32rand_mwc1616(), i32rand_mwc1616()));
-const uint64rand = (wasm$1 !== null ? () => {
-    const low = wasm$1.xorshift128plus();
-    return new UInt64(low, wasm$1.get_high());
+const uint64rand = (wasm$2 !== null ? () => {
+    const low = wasm$2.xorshift128plus();
+    return new UInt64(low, wasm$2.get_high());
 } : () => new UInt64(i32rand_mwc1616(), i32rand_mwc1616()));
 seed((Math.random() * 0xffffffff) >>> 0);
 //# sourceMappingURL=int64_rand.js.map
@@ -10497,8 +11064,6 @@ class QCU32Gen extends QCGenBase {
         this.gen = () => Math.floor(Math.random() * (b + 1 - a) + a) >>> 0;
     }
 }
-const monotime = (typeof performance != 'undefined' ? () => performance.now() :
-    () => Date.now());
 function quickcheck(gen, arg1, arg2) {
     let check = arg2;
     let options = arg1;
@@ -13127,376 +13692,6 @@ TEST('general', () => {
 
 //# sourceMappingURL=all_tests.js.map
 
-function copyelim(f) {
-    for (let b of f.blocks) {
-        for (let v of b.values) {
-            copyelimValue(v);
-        }
-    }
-    for (let b of f.blocks) {
-        let v = b.control;
-        if (v && v.op === ops.Copy) {
-            b.setControl(v.args[0]);
-        }
-    }
-    for (let e of f.namedValues.values()) {
-        let values = e.values;
-        for (let i = 0; i < values.length; i++) {
-            let v = values[i];
-            if (v.op === ops.Copy) {
-                values[i] = v.args[0];
-            }
-        }
-    }
-}
-function copySource(v) {
-    assert(v.op === ops.Copy);
-    assert(v.args.length == 1);
-    let w = v.args[0];
-    let slow = w;
-    let advance = false;
-    while (w.op === ops.Copy) {
-        w = w.args[0];
-        if (w === slow) {
-            w.reset(ops.Unknown);
-            break;
-        }
-        if (advance) {
-            slow = slow.args[0];
-        }
-        advance = !advance;
-    }
-    while (v != w) {
-        let x = v.args[0];
-        v.setArg(0, w);
-        v = x;
-    }
-    return w;
-}
-function copyelimValue(v) {
-    for (let i = 0; i < v.args.length; i++) {
-        let a = v.args[i];
-        if (a.op === ops.Copy) {
-            v.setArg(i, copySource(a));
-        }
-    }
-}
-//# sourceMappingURL=copyelim.js.map
-
-function phielim(f) {
-    while (true) {
-        let change = false;
-        for (let b of f.blocks) {
-            for (let v of b.values) {
-                copyelimValue(v);
-                change = phielimValue(v) || change;
-            }
-        }
-        if (!change) {
-            break;
-        }
-    }
-}
-function phielimValue(v) {
-    if (v.op !== ops.Phi) {
-        return false;
-    }
-    let args = v.args;
-    assert(args, `Phi ${v} without args`);
-    var w = null;
-    for (let x of args) {
-        if (x === v) {
-            continue;
-        }
-        if (x === w) {
-            continue;
-        }
-        if (w) {
-            return false;
-        }
-        w = x;
-    }
-    if (!w) {
-        return false;
-    }
-    v.op = ops.Copy;
-    v.setArgs1(w);
-    debuglog(`eliminated phi ${v}`);
-    return true;
-}
-//# sourceMappingURL=phielim.js.map
-
-function rewrite(f, rb, rv) {
-    while (true) {
-        let change = false;
-        for (let b of f.blocks) {
-            if (b.control && b.control.op === ops.Copy) {
-                while (b.control.op === ops.Copy) {
-                    assert(b.control != null);
-                    let newctrl = (b.control.args && b.control.args[0]) || null;
-                    let oldctrl = b.control;
-                    b.setControl(newctrl);
-                }
-            }
-            debuglog(`call BlockRewriter on b${b.id}`);
-            if (rb(b)) {
-                change = true;
-            }
-            for (let j = 0; j < b.values.length; j++) {
-                let v = b.values[j];
-                change = phielimValue(v) || change;
-                for (let i = 0; i < v.args.length; i++) {
-                    let a = v.args[i];
-                    if (a.op !== ops.Copy) {
-                        continue;
-                    }
-                    let aa = copySource(a);
-                    v.setArg(i, aa);
-                    change = true;
-                    while (a.uses == 0) {
-                        let b = a.args[0];
-                        a.reset(ops.Invalid);
-                        a = b;
-                    }
-                }
-                change = rv(v) || change;
-            }
-        }
-        if (!change) {
-            break;
-        }
-    }
-    for (let b of f.blocks) {
-        let j = 0;
-        for (let i = 0; i < b.values.length; i++) {
-            let v = b.values[i];
-            if (v.op === ops.Invalid) {
-                f.freeValue(v);
-                continue;
-            }
-            if (i != j) {
-                b.values[j] = v;
-            }
-            j++;
-        }
-        b.values.length = j;
-    }
-}
-//# sourceMappingURL=rewrite.js.map
-
-function nullLowerBlock(_) { return false; }
-function nullLowerValue(_) { return false; }
-function lower(c, f) {
-    if (c.lowerBlock || c.lowerValue) {
-        rewrite(f, c.lowerBlock || nullLowerBlock, c.lowerValue || nullLowerValue);
-    }
-}
-//# sourceMappingURL=lower.js.map
-
-function deadcode(f) {
-    assert(f.regAlloc == null, `deadcode after regalloc for ${f}`);
-    let reachable = reachableBlocks(f);
-    debuglog(`reachable blocks:`, reachable
-        .map((reachable, id) => reachable ? id : undefined)
-        .filter(id => id !== undefined)
-        .join('  '));
-    for (let b of f.blocks) {
-        if (reachable[b.id]) {
-            continue;
-        }
-        let nsuccs = b.succs ? b.succs.length : 0;
-        for (let i = 0; i < nsuccs;) {
-            let e = b.succs[i];
-            if (reachable[e.id]) {
-                removeEdge(b, i);
-            }
-            else {
-                i++;
-            }
-        }
-    }
-    for (let b of f.blocks) {
-        if (!reachable[b.id]) {
-            continue;
-        }
-        if (b.kind != BlockKind.First) {
-            continue;
-        }
-        removeEdge(b, 1);
-        b.kind = BlockKind.Plain;
-        b.likely = BranchPrediction.Unknown;
-    }
-    copyelim(f);
-    let live = liveValues(f, reachable);
-    debuglog(`live values:`, Object.keys(live).map(k => 'v' + k).join(', '));
-    let s = new Set();
-    for (let [key, e] of f.namedValues) {
-        let loc = e.local;
-        let j = 0;
-        s.clear();
-        for (let v of e.values) {
-            if (live[v.id] && !s.has(v)) {
-                e.values[j] = v;
-                j++;
-                s.add(v);
-            }
-        }
-        if (j == 0) {
-            f.namedValues.delete(key);
-        }
-        else {
-            for (let k = e.values.length - 1; k >= j; k--) {
-                e.values[k] = undefined;
-            }
-            e.values.length = j;
-        }
-    }
-    debuglog(`live names':`, Array.from(f.namedValues.keys()).join(', '));
-    for (let b of f.blocks) {
-        if (!reachable[b.id]) {
-            b.setControl(null);
-        }
-        for (let v of b.values) {
-            if (!live[v.id]) {
-                v.resetArgs();
-            }
-        }
-    }
-    for (let b of f.blocks) {
-        let i = 0;
-        for (let v of b.values) {
-            if (live[v.id]) {
-                b.values[i] = v;
-                i++;
-            }
-            else {
-                f.freeValue(v);
-            }
-        }
-        b.values.length = i;
-    }
-    let i = 0;
-    for (let b of f.blocks) {
-        if (reachable[b.id]) {
-            f.blocks[i] = b;
-            i++;
-        }
-        else {
-            if (b.values.length > 0) {
-                panic(`live values in unreachable block ${b}: ${b.values.join(', ')}`);
-            }
-            f.freeBlock(b);
-        }
-    }
-    f.blocks.length = i;
-}
-function reachableBlocks(f) {
-    let reachable = new Array(f.numBlocks());
-    reachable[f.entry.id] = true;
-    let p = [];
-    p.push(f.entry);
-    while (p.length > 0) {
-        let b = p.pop();
-        let succs = b.succs;
-        if (succs) {
-            if (b.kind == BlockKind.First) {
-                succs = succs.slice(0, 1);
-            }
-            for (let c of succs) {
-                assert(c.id < reachable.length, `block ${c} >= f.numBlocks()=${reachable.length}`);
-                if (!reachable[c.id]) {
-                    reachable[c.id] = true;
-                    p.push(c);
-                }
-            }
-        }
-    }
-    return reachable;
-}
-function liveValues(f, reachable) {
-    let live = new Array(f.numBlocks());
-    if (f.regAlloc) {
-        live.fill(true);
-        return live;
-    }
-    let q = [];
-    for (let b of f.blocks) {
-        if (!reachable[b.id]) {
-            continue;
-        }
-        let v = b.control;
-        if (v && !live[v.id]) {
-            live[v.id] = true;
-            q.push(v);
-        }
-        for (let v of b.values) {
-            if ((v.op.call || v.op.hasSideEffects) && !live[v.id]) {
-                live[v.id] = true;
-                q.push(v);
-            }
-            if (v.op.nilCheck && !live[v.id]) {
-                live[v.id] = true;
-                q.push(v);
-            }
-        }
-    }
-    while (q.length > 0) {
-        let v = q.pop();
-        for (let i = 0; i < v.args.length; i++) {
-            let x = v.args[i];
-            if (v.op === ops.Phi && !reachable[v.b.preds[i].id]) {
-                continue;
-            }
-            if (!live[x.id]) {
-                live[x.id] = true;
-                q.push(x);
-            }
-        }
-    }
-    return live;
-}
-function removeEdge(b, i) {
-    let c = b.succs[i];
-    b.removeNthSucc(i);
-    let j = c.removePred(b);
-    let n = c.preds.length;
-    for (let v of c.values) {
-        if (v.op !== ops.Phi) {
-            continue;
-        }
-        v.args[j].uses--;
-        v.args[j] = v.args[n];
-        v.args.length = n;
-        phielimValue(v);
-    }
-}
-//# sourceMappingURL=deadcode.js.map
-
-function shortcircuit(f) {
-    for (let b of f.blocks) {
-        for (let v of b.values) {
-            if (v.op !== ops.Phi) {
-                continue;
-            }
-            if (v.type !== t_bool) {
-                continue;
-            }
-            for (let i = 0; i < v.args.length; i++) {
-                let p = b.preds[i];
-                if (p.kind != BlockKind.If) {
-                    continue;
-                }
-                let a = v.args[i];
-                if (p.control !== a) {
-                    continue;
-                }
-                debuglog(`${p}.control == ${a}`);
-            }
-        }
-    }
-}
-//# sourceMappingURL=shortcircuit.js.map
-
 let readFileSync;
 let isNodeJsLikeEnv = false;
 try {
@@ -13599,9 +13794,8 @@ async function main(options) {
         optimize: !options.noOptimize,
     });
     console.log(`selected target config: ${config}`);
-    const regalloc = null;
     const irb = new IRBuilder();
-    irb.init(config, diagh, regalloc, IRBuilderFlags.Comments);
+    irb.init(config, diagh, IRBuilderFlags.Comments);
     try {
         for (let file of r.pkg.files) {
             if (isNodeJsLikeEnv) {
@@ -13617,34 +13811,17 @@ async function main(options) {
                     printir(fn);
                 }
             }
-            const irpass = (name, fn) => {
-                if (isNodeJsLikeEnv) {
-                    banner(`[ir] ${name} (${file.sfile.name})`);
-                }
-                else {
-                    console.log(`running pass ${name}`);
-                }
-                for (let [_, f] of irb.pkg.funs) {
-                    fn(f);
+            let stopAtPass = options.genericIR ? "lower" : "";
+            for (let [_, f] of irb.pkg.funs) {
+                runPassesDev(f, config, stopAtPass, pass => {
                     if (isNodeJsLikeEnv) {
-                        console.log(`\n------------------------------------------------\n`);
+                        console.log(`------------------------------------------------\n` +
+                            `after ${pass.name}\n`);
                         printir(f);
+                        console.log(`------------------------------------------------`);
                     }
-                }
-            };
-            irpass('early phielim', phielim);
-            if (!config.optimize) {
-                continue;
+                });
             }
-            irpass('early deadcode', deadcode);
-            irpass('short circuit', shortcircuit);
-            if (options.genericIR) {
-                continue;
-            }
-            irpass('lower', f => lower(config, f));
-            irpass('lowered deadcode', deadcode);
-            const regalloc = new RegAllocator(config);
-            irpass('regalloc', f => regalloc.regallocFun(f));
         }
         return {
             success: true,
@@ -13696,5 +13873,6 @@ else {
         printir,
     };
 }
+//# sourceMappingURL=main.js.map
 })(typeof exports != "undefined" ? exports : this);
 //# sourceMappingURL=xlang.debug.js.map

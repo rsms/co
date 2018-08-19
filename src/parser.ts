@@ -52,28 +52,25 @@ import {
   SliceExpr,
 
   builtInTypes as bitypes,
-  builtInValues as bivals,
   GetTypeExpr,
 } from './ast'
 
 import {
   Type,
-  FloatType,
   IntType,
   NumType,
-  SIntType,
-  UIntType,
   FunType,
-  StrType,
   UnresolvedType,
   UnionType,
   TupleType,
   RestType,
 
   t_nil,
-  t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
-  t_uint, t_int, t_usize, t_isize,
-  t_f32, t_f64,
+  // t_u8, t_i8, t_u16, t_i16,
+  t_u32, t_i32, t_u64, t_i64,
+  // t_uint, t_int, t_usize, t_isize,
+  // t_f32,
+  t_f64,
   t_str0,
 } from './types'
 
