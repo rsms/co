@@ -68,10 +68,8 @@ function printblock(f :IRFmt, b :Block, indent :string) {
   f.println(indent + f.style.lightyellow(label + ':') + preds + meta + comment)
 
   let valindent = indent + '  '
-  let v = b.vhead
-  while (v) {
+  for (let v of b.values) {
     printval(f, v, valindent)
-    v = v.nextv
   }
 
   const fmtsucc = (b :Block) => {

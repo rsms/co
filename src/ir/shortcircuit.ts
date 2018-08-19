@@ -21,7 +21,7 @@ export function shortcircuit(f :Fun) {
   let cf :Value|null = null;  // cont false
   for (let b of f.blocks) {
     // visit all Phis in the block
-    for (let v = b.vhead; v; v = v.nextv) {
+    for (let v of b.values) {
       if (v.op !== ops.Phi) {
         continue
       }
@@ -40,6 +40,9 @@ export function shortcircuit(f :Fun) {
           continue
         }
         dlog(`${p}.control == ${a}`)
+        //
+        // TODO FIXME e.i is reverse edge index of succ -> b
+        //
         // if e.i == 0 {
         //   if ct == nil {
         //     ct = f.ConstBool(f.Config.Types.Bool, true)

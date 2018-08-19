@@ -17,7 +17,7 @@ export function phielim(f :Fun) {
   while (true) {
     let change = false
     for (let b of f.blocks) {
-      for (let v = b.vhead; v; v = v.nextv) {
+      for (let v of b.values) {
         copyelimValue(v)
         change = phielimValue(v) || change
       }

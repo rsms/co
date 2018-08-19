@@ -26,8 +26,8 @@ import { printir } from './repr'
 import { removeEdge } from './deadcode'
 import { LocalSlot } from './localslot'
 
-import { debuglog as dlog } from '../util'
-// const dlog = function(..._ :any[]){} // silence dlog
+// import { debuglog as dlog } from '../util'
+const dlog = function(..._ :any[]){} // silence dlog
 
 
 const bitypes = ast.builtInTypes
@@ -205,8 +205,12 @@ export class IRBuilder {
 
     // [optimization] change last value to TailCall when block returns
     // and last value is Call
-    if (b.kind == BlockKind.Ret && b.vtail && b.vtail.op == ops.Call) {
-      b.vtail.op = ops.TailCall
+    if (
+      b.kind == BlockKind.Ret &&
+      b.values.length &&
+      b.values[b.values.length-1].op == ops.Call
+    ) {
+      b.values[b.values.length-1].op = ops.TailCall
     }
 
     return b

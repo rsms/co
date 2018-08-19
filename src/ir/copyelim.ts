@@ -8,7 +8,7 @@ import { ops } from './op'
 export function copyelim(f :Fun) {
   // Modify all values so no arg (including args of ops.Copy) is a copy.
   for (let b of f.blocks) {
-    for (let v = b.vhead; v; v = v.nextv) {
+    for (let v of b.values) {
       copyelimValue(v)
     }
   }
@@ -21,7 +21,7 @@ export function copyelim(f :Fun) {
     }
   }
 
-  // TODO: Update named values
+  // Update named values
   for (let e of f.namedValues.values()) {
     let values = e.values
     for (let i = 0; i < values.length; i++) {

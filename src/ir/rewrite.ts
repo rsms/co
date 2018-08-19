@@ -18,10 +18,10 @@ export function rewrite(f :Fun, rb :BlockRewriter, rv :ValueRewriter) {
           let newctrl = (b.control.args && b.control.args[0]) || null
           let oldctrl = b.control
           b.setControl(newctrl)
-          if (oldctrl.uses == 0) {
-            oldctrl.args.length = 0  // TODO: .resetArgs() instead?
-            b.removeValue(oldctrl)
-          }
+          // if (oldctrl.uses == 0) {
+          //   oldctrl.args.length = 0  // TODO: .resetArgs() instead?
+          //   b.removeValue(oldctrl)
+          // }
         }
       }
 
@@ -30,7 +30,9 @@ export function rewrite(f :Fun, rb :BlockRewriter, rv :ValueRewriter) {
         change = true
       }
 
-      for (let v = b.vhead; v; v = v.nextv) {
+      for (let j = 0; j < b.values.length; j++) {
+        let v = b.values[j]
+
         // Attempt to eliminate/reduce Phi to a Copy, in case a previous
         // dead-code pass removed one of the values, or short-circuited v.
         //
@@ -74,14 +76,19 @@ export function rewrite(f :Fun, rb :BlockRewriter, rv :ValueRewriter) {
 
   // remove clobbered values
   for (let b of f.blocks) {
-    for (let v = b.vhead; v; v = v.nextv) {
+    let j = 0
+    for (let i = 0; i < b.values.length; i++) {
+      let v = b.values[i]
       if (v.op === ops.Invalid) {
-        v = b.removeValue(v)  // returns previous sibling
-        if (!v) {
-          break
-        }
+        f.freeValue(v)
+        continue
       }
+      if (i != j) {
+        b.values[j] = v
+      }
+      j++
     }
+    b.values.length = j
   }
 
 }

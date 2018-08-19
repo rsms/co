@@ -233,16 +233,11 @@ export class Block {
     // on the kind of the block. For instance, a BlockKind.If has a boolean
     // control value and BlockKind.Exit has a memory control value.
 
-  f        :Fun // containing function
+  f :Fun // containing function
 
-  // three-address code values
-  vhead    :Value|null = null  // first value (linked list)
-  vtail    :Value|null = null  // last value (linked list)
-  valcount :int = 0  // number of values in list
-
-  sealed   :bool = false
-    // true if no further predecessors will be added
-  comment  :string = '' // human readable short comment for IR formatting
+  values  :Value[] = [] // three-address code values
+  sealed  :bool = false // true if no further predecessors will be added
+  comment :string = '' // human readable short comment for IR formatting
 
   // Likely direction for branches.
   // If BranchLikely, succs[0] is the most likely branch taken.
@@ -257,82 +252,10 @@ export class Block {
     this.f = f
   }
 
-  // pushValue adds v to the end of the block
-  //
-  pushValue(v :Value) {
-    if (this.vtail) {
-      this.vtail.nextv = v
-      v.prevv = this.vtail
-    } else {
-      this.vhead = v
-    }
-    this.vtail = v
-    this.valcount++
-  }
-
   // pushValueFront adds v to the top of the block
   //
   pushValueFront(v :Value) {
-    if (this.vhead) {
-      this.vhead.prevv = v
-      v.nextv = this.vhead
-    } else {
-      this.vtail = v
-    }
-    this.vhead = v
-    this.valcount++
-  }
-
-  // insertValueBefore inserts newval before refval.
-  // Returns newvval
-  //
-  insertValueBefore(refval :Value, newval :Value) :Value {
-    assert(refval.b === this)
-    assert(newval.b === this)
-    newval.prevv = refval.prevv
-    newval.nextv = refval
-    refval.prevv = newval
-    if (newval.prevv) {
-      newval.prevv.nextv = newval
-    } else {
-      this.vhead = newval
-    }
-    this.valcount++
-    return newval
-  }
-
-  // removeValue removes v from this block.
-  // returns the previous sibling, if any.
-  //
-  removeValue(v :Value) :Value|null {
-
-    // assert(v.uses == 0, `removing value ${v} with ${v.uses} uses`)
-    if (v.uses != 0) {
-      console.error(`[removeValue] removing value ${v} with ${v.uses} uses`)
-      v.uses = 0
-    }
-
-    let prevv = v.prevv
-    let nextv = v.nextv
-    if (prevv) {
-      prevv.nextv = nextv
-    } else {
-      this.vhead = nextv
-    }
-    if (nextv) {
-      nextv.prevv = prevv
-    } else {
-      this.vtail = prevv
-    }
-
-    v.prevv = null
-    v.nextv = null
-
-    this.valcount--
-
-    this.f.freeValue(v)
-
-    return prevv
+    this.values.unshift(v)
   }
 
   // replaceValue replaces all uses of existingv value with newv
@@ -362,7 +285,7 @@ export class Block {
     // Remove self.
     // Note that we don't decrement this.uses since the definition
     // site doesn't count toward "uses".
-    this.removeValue(existingv)
+    this.f.freeValue(existingv)
 
     // clear block pointer.
     // Note: "uses" does not count for the value's ref to its block, so
@@ -422,14 +345,14 @@ export class Block {
 
   newPhi(t :BasicType) :Value {
     let v = this.f.newValue(this, ops.Phi, t, null)
-    this.pushValue(v)
+    this.values.push(v)
     return v
   }
 
   // newValue0 return a value with no args
   newValue0(op :Op, t :BasicType|null = null, aux :Aux|null = null) :Value {
     let v = this.f.newValue(this, op, t, aux)
-    this.pushValue(v)
+    this.values.push(v)
     return v
   }
 
@@ -438,7 +361,7 @@ export class Block {
     let v = this.f.newValue(this, op, t, aux)
     v.args = [arg0]
     arg0.uses++ //; arg0.users.add(v)
-    this.pushValue(v)
+    this.values.push(v)
     return v
   }
 
@@ -455,7 +378,7 @@ export class Block {
     v.args = [arg0, arg1]
     arg0.uses++ //; arg0.users.add(v)
     arg1.uses++ //; arg1.users.add(v)
-    this.pushValue(v)
+    this.values.push(v)
     return v
   }
 
@@ -507,6 +430,12 @@ export class Fun {
     let b = new Block(k, this.bid++, this)
     this.blocks.push(b)
     return b
+  }
+
+  freeBlock(b :Block) {
+    assert(b.f != null, `trying to free an already freed block ${b}`)
+    b.f = null as any as Fun
+    // TODO: put into free list
   }
 
   newValue(b :Block, op :Op, t :BasicType|null, aux :Aux|null) :Value {

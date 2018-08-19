@@ -222,8 +222,7 @@ export class RegAllocator {
     // s.orig = make([]*Value, f.NumValues())
     // s.copies = make(map[*Value]bool)
     for (let b of a.visitOrder) {
-      let v :Value|null = b.vhead
-      for (; v; v = v.nextv) {
+      for (let v of b.values) {
         let t = v.type
         let val = new ValState(v)
         a.values[v.id] = val
@@ -457,7 +456,9 @@ export class RegAllocator {
       }
 
       // visit instructions in reverse order
-      for (let v = b.vtail; v; v = v.prevv) {
+      for (let i = b.values.length-1; i >= 0; --i) {
+        let v = b.values[i]
+
         // remove definition from live set
         live.delete(v.id)
 
@@ -548,12 +549,12 @@ export class RegAllocator {
         live.clear()
         let liv = a.live[b.id];  // LiveInfo[] | undefined
         if (liv) for (let e of liv) {
-          live.set(e.id, { val: e.dist + b.valcount, pos: e.pos })
+          live.set(e.id, { val: e.dist + b.values.length, pos: e.pos })
         }
 
         // Mark control value as live
         if (b.control && a.values[b.control.id].needReg) {
-          live.set(b.control.id, { val: b.valcount, pos: b.pos })
+          live.set(b.control.id, { val: b.values.length, pos: b.pos })
         }
 
         // dlog(`live: ` + Array.from(live).map(p =>
@@ -563,10 +564,8 @@ export class RegAllocator {
         // Propagate backwards to the start of the block
         // Assumes Values have been scheduled.
         phis = []
-        let i = b.valcount - 1
-        for (let v = b.vtail; v; v = v.prevv, i--) {
-        // for (let i = b.valcount - 1; i >= 0; i--) {
-          // let v = b.Values[i]
+        for (let i = b.values.length - 1; i >= 0; i--) {
+          let v = b.values[i]
 
           // definition of v -- remove from live
           let x = live.get(v.id)
@@ -575,13 +574,6 @@ export class RegAllocator {
             a.values[v.id].maxdist = x.val
             live.delete(v.id)
           }
-          // else {
-          //   // never used -- dead
-          //   // TODO: remove this once we have a post-lowering deadcode pass
-          //   dlog(`dead ${v} (eliminated)`)
-          //   b.removeValue(v)
-          //   invalidateCFG = true
-          // }
 
           if (v.op === ops.Phi) {
             // save phi ops for later
@@ -608,7 +600,8 @@ export class RegAllocator {
           desired.clear()
         }
 
-        for (let v = b.vtail; v; v = v.prevv, i--) {
+        for (let i = b.values.length - 1; i >= 0; i--) {
+          let v = b.values[i]
           let prefs = desired.remove(v.id)
           if (v.op === ops.Phi) {
             // TODO: if v is a phi, save desired register for phi inputs.
@@ -774,80 +767,3 @@ export class RegAllocator {
 
 }
 
-
-
-// operands returns the register numbers for the expected operand count in v
-//
-// function operands(v :Value, n :int) :number[] {
-//   let args = v.args
-//   assert(args.length == n, `expected ${n} args but has ${args.length}`)
-//   return args.map(v => v.id)
-// }
-
-
-  // block(b :Block, _SP :Value) {
-  //   const a = this
-
-  //   let localoffs = 0
-
-  //   let limit = 50
-  //   let v = b.vhead
-  //   while (v && limit--) {
-
-  //     // normalize target-dependent types
-  //     dlog(`v ${v}`)
-
-  //     // switch on operation
-  //     switch (v.op) {
-
-  //     case ops.Arg: // ignore arg (handled early on)
-  //       break
-
-  //     case ops.AddI32: {
-  //       assert(v.args)
-
-  //       let operands = v.args
-        
-  //       let op0 = operands[0]
-  //       let loadreg = a.loadreg(b, op0, 1)
-  //       op0.uses--  // TODO: should we also remove from op0.users?
-  //       operands[0] = b.insertValueBefore(v, loadreg)
-
-  //       let op1 = operands[1]
-  //       loadreg = a.loadreg(b, op1, 2)
-  //       op0.uses--
-  //       operands[1] = b.insertValueBefore(v, loadreg)
-
-  //       // RegStore
-  //       dlog(`v=${v}, v.type=${v.type}`)
-  //       let storeaddr = b.f.constVal(a.addrtype, localoffs)
-  //       let storereg = b.f.newValue(b, ops.Store, v.type, 1)
-  //       storereg.args = [storeaddr] ; storeaddr.uses++ ; storeaddr.users.push(storereg)
-
-  //       // let operands = v.args
-  //       // let loadv0 = operands[0]
-  //       // let loadv1 = operands[1]
-  //       // loadv0.replaceBy(a.loadreg(b, loadv0, 1, -12))
-  //       // if (loadv0 !== loadv1) {
-  //       //   loadv1.replaceBy(a.loadreg(b, loadv1, 2, -16))
-  //       // }
-  //     }
-  //     break
-
-  //     }
-
-  //     v = v.nextv
-  //   }
-  // }
-
-  // loadreg(b :Block, v :Value, reg :int) :Value {
-  //   let regload = b.f.newValue(b, ops.Load, v.type, reg)
-  //   regload.args = [v]
-  //   v.uses++ ; v.users.push(regload)
-  //   return regload
-  // }
-
-  // loadreg(b :Block, v :Value, reg :int, fpoffs :int) :Value {
-  //   let loadv = b.f.newValue(Op.RegLoad, v.type, b, fpoffs)
-  //   return b.insertValueBefore(v, loadv)
-  // }

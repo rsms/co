@@ -243,17 +243,15 @@ async function main(options? :MainOptions) :Promise<MainResult> {
         }
       }
 
-      // Beyond this point the IR turns into target-specific code.
-      if (options.genericIR) {
-        // When genericIR is requested, we simply stop here.
-        continue
-      }
+
 
       // run IP passes separately for debugging (normally run inline)
 
       const irpass = (name :string, fn :(f:IRFun)=>void) => {
         if (isNodeJsLikeEnv) {
           banner(`[ir] ${name} (${file.sfile.name})`)
+        } else {
+          console.log(`running pass ${name}`)
         }
         for (let [_, f] of irb.pkg.funs) {
           fn(f)
@@ -267,11 +265,22 @@ async function main(options? :MainOptions) :Promise<MainResult> {
       // IR passes
       irpass('early phielim', phielim)
       // irpass('early copyelim', copyelim)
+
+      if (!config.optimize) {
+        continue
+      }
+
       irpass('early deadcode', deadcode)  // also runs copyelim
-      // irpass('short circuit', shortcircuit)
-      // irpass('lower', f => lower(config, f))
-      // irpass('lowered deadcode', deadcode)
-      process.exit(0)
+      irpass('short circuit', shortcircuit)
+
+      // Beyond this point the IR turns into target-specific code.
+      if (options.genericIR) {
+        continue
+      }
+
+      irpass('lower', f => lower(config, f))
+      irpass('lowered deadcode', deadcode)
+      // process.exit(0)
 
       const regalloc = new RegAllocator(config)
       irpass('regalloc', f => regalloc.regallocFun(f))

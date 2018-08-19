@@ -90,32 +90,42 @@ export function deadcode(f :Fun) {
     if (!reachable[b.id]) {
       b.setControl(null)
     }
-    for (let v = b.vhead; v; v = v.nextv) {
+    for (let v of b.values) {
       if (!live[v.id]) {
         v.resetArgs()
       }
     }
   }
 
-  // Remove dead values from blocks' value list. Return dead
-  // values to the allocator.
-  // for (let b of f.blocks) {
-  //   let i = 0
-  //   for (let v = b.vhead; v; v = v.nextv) {
-  //     if (live[v.id]) {
-  //       b.values[i] = v
-  //       i++
-  //     } else {
-  //       f.freeValue(v)
-  //     }
-  //   }
-  //   // aid GC
-  //   let tail = b.values.slice(i)
-  //   for (let j = 0; j < tail.length; j++) {
-  //     tail[j] = undefined as any as Value
-  //   }
-  //   b.values.length = i
-  // }
+  // Remove dead values from blocks' value list
+  for (let b of f.blocks) {
+    let i = 0
+    for (let v of b.values) {
+      if (live[v.id]) {
+        b.values[i] = v
+        i++
+      } else {
+        f.freeValue(v)
+      }
+    }
+    b.values.length = i
+  }
+
+  // Remove unreachable blocks
+  let i = 0
+  for (let b of f.blocks) {
+    if (reachable[b.id]) {
+      f.blocks[i] = b
+      i++
+    } else {
+      if (b.values.length > 0) {
+        panic(`live values in unreachable block ${b}: ${b.values.join(', ')}`)
+      }
+      f.freeBlock(b)
+    }
+  }
+
+  f.blocks.length = i
 
 } // deadcode
 
@@ -188,7 +198,7 @@ function liveValues(f :Fun, reachable :bool[]) :bool[] {
       live[v.id] = true
       q.push(v)
     }
-    for (let v = b.vhead; v; v = v.nextv) {
+    for (let v of b.values) {
       if ((v.op.call || v.op.hasSideEffects) && !live[v.id]) {
         live[v.id] = true
         q.push(v)
@@ -290,19 +300,15 @@ export function removeEdge(b :Block, i :int) {
   let j = c.removePred(b)
 
   // Remove phi args from c's phis.
-  let n = c.preds.length; // n is 
-  for (let v = c.vhead; v; v = v.nextv) {
+  let n = c.preds.length
+  for (let v of c.values) {
     if (v.op !== ops.Phi) {
       continue
     }
-    // remove the edge from Phi's args
-    //
-    // (Phi x y) -> (Phi x)
-    //
+    // remove the edge from Phi's args, i.e. (Phi x y) -> (Phi x)
     v.args[j].uses--
     v.args[j] = v.args[n]
-    // v.args[n] = null
-    v.args = v.args.slice(0, n)
+    v.args.length = n
 
     // (Phi x) -> (Copy x)
     phielimValue(v)
