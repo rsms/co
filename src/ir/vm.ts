@@ -14,17 +14,14 @@ function nnil<T>(v :T|null) :T {
 // operands returns the register numbers for the expected operand count in v
 //
 function operands(v :Value, n :int) :number[] {
-  assert(v.args, 'missing args')
-  let args = v.args as Value[]
-  assert(args.length == n, `expected ${n} args but has ${args.length}`)
-  return args.map(v => v.id)
+  assert(v.args.length == n, `expected ${n} args but has ${v.args.length}`)
+  return v.args.map(v => v.id)
 }
 
 function operand(v :Value) :number {
-  assert(v.args, 'missing args')
-  assert(v.args && v.args.length == 1,
+  assert(v.args.length == 1,
     `len(args) is ${v.args ? v.args.length : 0} but expected 1`)
-  return (v.args as Value[])[0].id
+  return v.args[0].id
 }
 
 
@@ -248,16 +245,16 @@ export class IRVirtualMachine {
     switch (b.kind) {
 
     case BlockKind.Plain:
-      m.jump(nnil(b.succs)[0])
+      m.jump(b.succs[0])
       break
 
     case BlockKind.If: {
       let control = nnil(b.control)
       let ctrl = f.regget(control.id)
       if (ctrl != 0) {
-        m.jump(nnil(b.succs)[0])
+        m.jump(b.succs[0])
       } else {
-        m.jump(nnil(b.succs)[1])
+        m.jump(b.succs[1])
       }
       break
     }
@@ -349,20 +346,19 @@ export class IRVirtualMachine {
       // longer need this and Phi nodes should be ignored.
       //
       assert(m.prevblock, 'phi in entry block')
-      assert(v.args && v.args.length > 0, 'Phi without operands')
+      assert(v.args.length > 0, 'Phi without operands')
       let prevblock = nnil(m.prevblock)
       let b = nnil(m.block)
-      let preds = nnil(b.preds)
+      let preds = b.preds
 
-      assert(v.args && v.args.length >= preds.length,
+      assert(v.args.length >= preds.length,
         'phi with fewer operands than block predecessors')
 
       let ok = false
       for (let i = 0; i < preds.length; i++) {
         let pred = preds[i]
-        if (pred === prevblock) {          
-          let args = v.args as Value[]
-          let op = args[i].id
+        if (pred === prevblock) {
+          let op = v.args[i].id
           let r = f.regget(op)
           f.regset(v.id, r)
           ok = true

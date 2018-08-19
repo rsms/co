@@ -3,9 +3,9 @@ import { fmtAsciiMatrix } from '../debug'
 import { UInt64 } from '../int64'
 import { Pos } from '../pos'
 import { Mem, t_int, t_uint, t_i32, t_u32, t_u64, intTypes } from '../types'
-import { ID, Fun, Block, Value, BranchPrediction } from './ssa'
-import { Op, ops } from './op'
-import { Register, Reg, RegSet, RegInfo, fmtRegSet, emptyRegSet } from './reg'
+import { ID, Fun, Block, Value, BranchPrediction, Location } from './ssa'
+import { RegInfo, Op, ops } from './op'
+import { Register, Reg, RegSet, fmtRegSet, emptyRegSet } from './reg'
 import { Config } from './config'
 import { layoutRegallocOrder } from './layout'
 import { fmtir } from './repr'
@@ -79,13 +79,16 @@ class ValState {
   v          :Value
   regs       = emptyRegSet as RegSet
     // the set of registers holding a Value (usually just one)
-  uses       = null as Use|null   // list of uses in this block
-  spill      = null as Value|null // spilled copy of the Value (if any)
-  restoreMin = 0 as int  // minimum of all restores' blocks' sdom.entry
-  restoreMax = 0 as int  // maximum of all restores' blocks' sdom.exit
+  // uses       = null as Use|null   // list of uses in this block
+  // spill      = null as Value|null // spilled copy of the Value (if any)
+  // restoreMin = 0 as int  // minimum of all restores' blocks' sdom.entry
+  // restoreMax = 0 as int  // maximum of all restores' blocks' sdom.exit
   needReg    = false as bool // cached value of
     // !v.Type.IsMemory() && !v.Type.IsVoid() && !.v.Type.IsFlags()
   rematerializeable = false as bool  // cached value of v.rematerializeable()
+
+  mindist :int = 0  // distance between definition and first use
+  maxdist :int = 0  // distance between definition and last use
 
   constructor(v :Value) {
     this.v = v
@@ -135,7 +138,7 @@ export class RegAllocator {
   // live and desired holds information about block's live values at the end
   // of the block, and those value's desired registers (if any.)
   // These are created by computeLive()
-  live    :LiveInfo[][] = []
+  live    :LiveInfo[][] = []  // indexed by block
   desired :DesiredState[] = []
 
 
@@ -185,6 +188,9 @@ export class RegAllocator {
     const a = this
     a.f = f
 
+    assert(f.regAlloc == null, `registers already allocated for ${f}`)
+    f.regAlloc = new Array<Location>(f.numValues())  // TODO: fill this
+
     // Add SP (stack pointer) value to the top of the entry block.
     // TODO: track the need for this when generating the initial IR.
     // Some functions do not need SP.
@@ -222,7 +228,7 @@ export class RegAllocator {
         let val = new ValState(v)
         a.values[v.id] = val
         // if (!t.isMemory() && !t.IsVoid() && !t.IsFlags() && !t.IsTuple())
-        if (t.mem > 0 && !t.isTuple()) {
+        if (t.mem > 0 && !t.isTuple() && v !== SP) {
           val.needReg = true
           val.rematerializeable = v.rematerializeable()
           // a.orig[v.id] = v
@@ -236,6 +242,18 @@ export class RegAllocator {
     // to a set of values alive at the point of the definition.
     a.computeLive()
     dlog("\nlive values at end of each block\n" + a.fmtLive())
+
+    // debug valstate
+    dlog(`\nvalstate:`)
+    for (let vs of a.values) {
+      if (vs) {
+        console.log(`  v${vs.v.id} - ` + [
+          ['needReg', vs.needReg],
+          ['mindist', vs.mindist],
+          ['maxdist', vs.maxdist],
+        ].map(v => v.join(': ')).join(', '))
+      }
+    }
 
     // We then build an interference graph of values that interfere.
     // Two values interfere if one of them is live at a definition point of
@@ -362,6 +380,8 @@ export class RegAllocator {
 
       if (conflict) {
         dlog(`unable to find register for v${v.id}`)
+        let val = a.values[v.id]
+        // dlog(``, val.)
         reg = noReg
       }
       // if (spills.has(v.id)) {
@@ -447,7 +467,7 @@ export class RegAllocator {
           g.connect(v.id, id2)
         }
 
-        if (v.args) for (let operand of v.args) {
+        for (let operand of v.args) {
           live.add(operand.id)
         }
       }
@@ -505,8 +525,8 @@ export class RegAllocator {
     // the probability that we will stabilize quickly.
     //
     // TODO: Do a better job yet. Here's one possibility:
-    // Calculate the dominator tree and locate all strongly connected components.
-    // If a value is live in one block of an SCC, it is live in all.
+    // Calculate the dominator tree and locate all strongly connected
+    // components. If a value is live in one block of an SCC, it is live in all.
     // Walk the dominator tree from end to beginning, just once, treating SCC
     // components as single blocks, duplicated calculated liveness information
     // out to all of them.
@@ -514,13 +534,16 @@ export class RegAllocator {
     let po = f.postorder()
     // dlog('postorder blocks:', po.join(' '))
 
+    // will be set to true if f.invalidateCFG() needs to be called at the end
+    // let invalidateCFG = false
+
 
     while (true) {
       let changed = false
 
       for (let b of po) {
         // Start with known live values at the end of the block.
-        // Add len(b.Values) to adjust from end-of-block distance
+        // Add b.values.length to adjust from end-of-block distance
         // to beginning-of-block distance.
         live.clear()
         let liv = a.live[b.id];  // LiveInfo[] | undefined
@@ -545,7 +568,21 @@ export class RegAllocator {
         // for (let i = b.valcount - 1; i >= 0; i--) {
           // let v = b.Values[i]
 
-          live.delete(v.id)
+          // definition of v -- remove from live
+          let x = live.get(v.id)
+          if (x) {
+            // save longest distance
+            a.values[v.id].maxdist = x.val
+            live.delete(v.id)
+          }
+          // else {
+          //   // never used -- dead
+          //   // TODO: remove this once we have a post-lowering deadcode pass
+          //   dlog(`dead ${v} (eliminated)`)
+          //   b.removeValue(v)
+          //   invalidateCFG = true
+          // }
+
           if (v.op === ops.Phi) {
             // save phi ops for later
             phis.push(v)
@@ -556,7 +593,7 @@ export class RegAllocator {
               v.val += unlikelyDistance
             }
           }
-          if (v.args) for (let arg of v.args) {
+          for (let arg of v.args) {
             if (a.values[arg.id].needReg) {
               live.set(arg.id, { val: i, pos: v.pos })
             }
@@ -588,16 +625,14 @@ export class RegAllocator {
               continue
             }
             desired.clobber(j.regs)
-            assert(v.args, `null args in ${v}`)
-            desired.add((v.args as Value[])[j.idx].id, pickReg(j.regs))
+            desired.add(v.args[j.idx].id, pickReg(j.regs))
           }
           // Set desired register of input 0 if this is a 2-operand instruction.
           if (v.op.resultInArg0) {
-            assert(v.args, `null args in ${v}`)
             if (v.op.commutative) {
-              desired.addList((v.args as Value[])[1].id, prefs)
+              desired.addList(v.args[1].id, prefs)
             }
-            desired.addList((v.args as Value[])[0].id, prefs)
+            desired.addList(v.args[0].id, prefs)
           }
         }
 
@@ -607,14 +642,14 @@ export class RegAllocator {
         // For each predecessor of b, expand its list of live-at-end values.
         // invariant: live contains the values live at the start of b
         // (excluding phi inputs)
-        if (b.preds) for (let i = 0; i < b.preds.length; i++) {
+        for (let i = 0; i < b.preds.length; i++) {
           let p = b.preds[i]
 
           // Compute additional distance for the edge.
           // Note: delta must be at least 1 to distinguish the control
           // value use from the first user in a successor block.
           let delta = normalDistance
-          if (p.succs && p.succs.length == 2) {
+          if (p.succs.length == 2) {
             if (
               p.succs[0] == b && p.likely == BranchPrediction.Likely ||
               p.succs[1] == b && p.likely == BranchPrediction.Unlikely
@@ -658,8 +693,7 @@ export class RegAllocator {
           // All phis are at distance delta (we consider them
           // simultaneously happening at the start of the block).
           for (let v of phis) {
-            assert(v.args, 'phi without args')
-            let id = (v.args as Value[])[i].id
+            let id = v.args[i].id
             if (a.values[id].needReg) {
               let e2 = t.get(id)
               if (!e2 || delta < e2.val) {
@@ -689,6 +723,11 @@ export class RegAllocator {
 
       // break
     }
+
+    // if (invalidateCFG) {
+    //   f.invalidateCFG()
+    // }
+
   } // computeLive
 
 
@@ -699,7 +738,8 @@ export class RegAllocator {
       s += `  ${b}:`
       let blive = a.live[b.id]
       if (blive) for (let x of blive) {
-        s += ` v${x.id}`
+        // s += `  v${x.id} (${x.dist})`
+        s += `  v${x.id}`
         let desired = a.desired[b.id]
         if (desired) for (let e of desired.entries) {
           if (e.id != x.id) {
@@ -739,8 +779,7 @@ export class RegAllocator {
 // operands returns the register numbers for the expected operand count in v
 //
 // function operands(v :Value, n :int) :number[] {
-//   assert(v.args, 'missing args')
-//   let args = v.args as Value[]
+//   let args = v.args
 //   assert(args.length == n, `expected ${n} args but has ${args.length}`)
 //   return args.map(v => v.id)
 // }
@@ -767,7 +806,7 @@ export class RegAllocator {
   //     case ops.AddI32: {
   //       assert(v.args)
 
-  //       let operands = v.args as Value[]
+  //       let operands = v.args
         
   //       let op0 = operands[0]
   //       let loadreg = a.loadreg(b, op0, 1)
@@ -785,7 +824,7 @@ export class RegAllocator {
   //       let storereg = b.f.newValue(b, ops.Store, v.type, 1)
   //       storereg.args = [storeaddr] ; storeaddr.uses++ ; storeaddr.users.push(storereg)
 
-  //       // let operands = v.args as Value[]
+  //       // let operands = v.args
   //       // let loadv0 = operands[0]
   //       // let loadv1 = operands[1]
   //       // loadv0.replaceBy(a.loadreg(b, loadv0, 1, -12))

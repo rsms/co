@@ -65,6 +65,7 @@ fun foo(x, _, y int) int {
   // x + y
 
   a = x + y
+  a = a + 5
   // d = a
   // c = a + d
 

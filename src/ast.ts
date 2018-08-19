@@ -382,6 +382,10 @@ export class TypeDecl extends Decl {
 
 export class Expr extends Stmt {
   type :Type|null = null  // effective type of expression. null until resolved.
+
+  isIdent() :this is Ident {
+    return this instanceof Ident
+  }
 }
 
 // BadExpr is a placeholder for an expression that failed to parse correctly

@@ -2,14 +2,20 @@
 // constant-folding optimizations
 //
 import { BasicType, IntType } from '../types'
-import { Num, numconv } from '../num'
+import { Num, numconv, isNum } from '../num'
 import { Op, ops } from './op'
 import { Value, Block } from './ssa'
-import { consteval2 } from './consteval'
+import { consteval1, consteval2 } from './consteval'
 
 
-export function optcf_op1(_b :Block, _op :Op, _x :Value) :Value|null {
-  // TODO implement unary operations
+export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
+  if (x.op.constant) {
+    assert(isNum(x.aux))
+    let val = consteval1(op, x.type, x.aux as Num)
+    if (val !== null) {
+      return b.f.constVal(x.type, val)
+    }
+  }
   return null
 }
 
@@ -20,13 +26,20 @@ export function optcf_op2(b :Block, op :Op, x :Value, y :Value) :Value|null {
     return null
   }
 
+  assert(isNum(x.aux))
+  assert(isNum(y.aux))
+
   let xval = x.aux as Num
   let yval = y.aux as Num
 
   if (x.type !== y.type) {
     // different types
-    yval = numconv(yval, x.type)[0]
-    // TODO: warn here if not lossless?
+    let lossless :bool
+    ;[yval, lossless] = numconv(yval, x.type)
+    if (!lossless) {
+      // lossy conversion
+      return null
+    }
   }
 
   // attempt to evaluate the operation

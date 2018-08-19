@@ -40,7 +40,7 @@ export function optdce(fn :Fun) {
         // register operands as being live (since they are read)
         // dlog(`${v} is live  ${fmtir(v)}`)
         // TODO: don't eliminate ops with hasSideEffects==true
-        if (v.args) for (let operand of v.args) {
+        for (let operand of v.args) {
           live.add(operand)
         }
         v = v.prevv

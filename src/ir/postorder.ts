@@ -29,7 +29,7 @@ export function postorder(f :Fun) :Block[] {
     let b = x.b
     let i = x.index
 
-    if (b.succs && i < b.succs.length) {
+    if (i < b.succs.length) {
       s[tos].index++
       let bb = b.succs[i]
       if (!explored[bb.id]) {

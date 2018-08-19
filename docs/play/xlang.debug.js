@@ -1,9 +1,9 @@
-/* xlang 1.0.0-debug+051deb76cf */
+/* xlang 1.0.0-debug+be65992204 */
 (function(global){
 
 'use strict';
 
-var VERSION = "1.0.0-debug+051deb76cf", DEBUG = true;
+var VERSION = "1.0.0-debug+be65992204", DEBUG = true;
 var global=
 void 0!==global?global:
 "undefined"!=typeof window?window:
@@ -3783,6 +3783,14 @@ const _Int32_SINT8_MIN = -0x80 | 0;
 const _Int64_UINT8_MAX = UInt64.fromInt32(_Int32_UINT8_MAX);
 const _Int64_SINT8_MAX = SInt64.fromInt32(_Int32_SINT8_MAX);
 const _Int64_SINT8_MIN = SInt64.fromInt32(_Int32_SINT8_MIN);
+function numIsZero(v) {
+    return (typeof v == 'number') ? v == 0 : v.isZero();
+}
+function isNum(v) {
+    return (typeof v == 'number' ||
+        v instanceof SInt64 ||
+        v instanceof UInt64);
+}
 function numconv(v, t) {
     let lossless = false;
     if (t === t_int) {
@@ -4381,6 +4389,9 @@ class Expr extends Stmt {
     constructor() {
         super(...arguments);
         this.type = null;
+    }
+    isIdent() {
+        return this instanceof Ident;
     }
 }
 class BadExpr extends Expr {
@@ -7466,13 +7477,6 @@ class TypeResolver extends ErrorReporter {
 
 const emptyRegSet = UInt64.ZERO;
 const noReg$1 = 255;
-class RegInfo {
-    constructor() {
-        this.inputs = [];
-        this.outputs = [];
-        this.clobbers = emptyRegSet;
-    }
-}
 function fmtRegSet(m) {
     let s = '{';
     for (let r = 0 >>> 0; !m.isZero(); r++) {
@@ -7501,141 +7505,13 @@ function regBuilder(names) {
 }
 //# sourceMappingURL=reg.js.map
 
-class Config {
-    constructor(props) {
-        this.arch = '?';
-        this.addrSize = 4;
-        this.regSize = 4;
-        this.intSize = 4;
-        this.registers = [];
-        this.hasGReg = false;
-        this.gpRegMask = emptyRegSet;
-        this.fpRegMask = emptyRegSet;
-        this.specialRegMask = emptyRegSet;
-        this.optimize = false;
-        if (props)
-            for (let k of Object.keys(props)) {
-                if (!(k in this)) {
-                    panic(`invalid config property ${k}`);
-                }
-                
-                this[k] = props[k];
-            }
-    }
-    toString() {
-        return `${this.arch}/${this.addrSize * 8}/${this.optimize ? 'opt' : 'debug'}`;
+class RegInfo {
+    constructor(inputs = [], outputs = [], clobbers = emptyRegSet) {
+        this.inputs = inputs.map((regs, idx) => ({ idx, regs }));
+        this.outputs = outputs.map((regs, idx) => ({ idx, regs }));
+        this.clobbers = clobbers;
     }
 }
-//# sourceMappingURL=config.js.map
-
-class ArchInfo {
-    constructor(name, props) {
-        this.addrSize = 4;
-        this.regSize = 0;
-        this.intSize = 0;
-        this.ops = [];
-        this.regNames = [];
-        this.gpRegMask = emptyRegSet;
-        this.fpRegMask = emptyRegSet;
-        this.specialRegMask = emptyRegSet;
-        this.generic = false;
-        this.name = name;
-        for (let k of Object.keys(props)) {
-            assert(k in this);
-            this[k] = props[k];
-        }
-        assert(this.regNames.length <= 64, 'too many registers');
-        assert(this.addrSize == 4 || this.addrSize == 8, `invalid addrSize ${this.addrSize}`);
-        this.regSize = this.regSize || this.addrSize;
-        this.intSize = this.intSize || this.addrSize;
-    }
-    config(props) {
-        const registers = this.regNames.map((name, num) => ({ num, name }));
-        const c = {
-            arch: this.name,
-            registers,
-            addrSize: this.addrSize,
-            regSize: this.regSize,
-            intSize: this.intSize,
-            hasGReg: this.regNames.includes("g"),
-            gpRegMask: this.gpRegMask,
-            fpRegMask: this.fpRegMask,
-            specialRegMask: this.specialRegMask,
-        };
-        if (props) {
-            Object.assign(c, props);
-        }
-        return new Config(c);
-    }
-}
-//# sourceMappingURL=arch.js.map
-
-const regNames = [
-    "R0",
-    "R1",
-    "R2",
-    "R3",
-    "R4",
-    "R5",
-    "R6",
-    "R7",
-    "R8",
-    "R9",
-    "R10",
-    "R11",
-    "R12",
-    "R13",
-    "R14",
-    "R15",
-    "R16",
-    "R17",
-    "R18",
-    "R19",
-    "R20",
-    "R21",
-    "R22",
-    "R24",
-    "R25",
-    "R28",
-    "R29",
-    "SP",
-    "g",
-    "F0",
-    "F2",
-    "F4",
-    "F6",
-    "F8",
-    "F10",
-    "F12",
-    "F14",
-    "F16",
-    "F18",
-    "F20",
-    "F22",
-    "F24",
-    "F26",
-    "F28",
-    "F30",
-    "SB",
-];
-const buildReg = regBuilder(regNames);
-const gp = buildReg(`
-  R1  R2  R3  R4  R5  R6  R7  R8  R9  R10 R11 R12 R13 R14 R15 R16
-  R17 R18 R19 R20 R21 R22     R24 R25         R28 R29
-`);
-const fp = buildReg(`
-  F0 F2 F4 F6 F8 F10 F12 F14 F16 F18 F20 F22 F24 F26 F28 F30
-`);
-const ops$1 = [];
-var covm = new ArchInfo("covm", {
-    addrSize: 4,
-    ops: ops$1,
-    regNames: regNames,
-    gpRegMask: gp,
-    fpRegMask: fp,
-});
-//# sourceMappingURL=covm.js.map
-
 var SymEffect;
 (function (SymEffect) {
     SymEffect[SymEffect["None"] = 0] = "None";
@@ -7943,19 +7819,6 @@ const ops = {
     AtomicAnd8: op("AtomicAnd8", 3, { type: t_addr, hasSideEffects: true }),
     AtomicOr8: op("AtomicOr8", 3, { type: t_addr, hasSideEffects: true }),
 };
-for (let name in ops) {
-    let op = ops[name];
-    if (!op.zeroWidth && !op.call) {
-        let regs = covm.gpRegMask;
-        if (op.argLen > 0) {
-            op.reg.inputs = new Array(op.argLen);
-            for (let i = 0; i < op.argLen; i++) {
-                op.reg.inputs[i] = { idx: i, regs };
-            }
-        }
-        op.reg.outputs = [{ idx: 0, regs }];
-    }
-}
 //# sourceMappingURL=op.js.map
 
 function postorder(f) {
@@ -7968,7 +7831,7 @@ function postorder(f) {
         let x = s[tos];
         let b = x.b;
         let i = x.index;
-        if (b.succs && i < b.succs.length) {
+        if (i < b.succs.length) {
             s[tos].index++;
             let bb = b.succs[i];
             if (!explored[bb.id]) {
@@ -7990,7 +7853,7 @@ const byteStr_anonfun = asciiByteStr("anonfun");
 class Value {
     constructor(id, b, op, type, aux) {
         this.pos = NoPos;
-        this.args = null;
+        this.args = [];
         this.comment = '';
         this.prevv = null;
         this.nextv = null;
@@ -8008,15 +7871,30 @@ class Value {
     toString() {
         return 'v' + this.id;
     }
-    appendArg(v) {
-        assert(this.op === ops.Phi, "appendArg on non-phi value");
+    auxIsZero() {
+        assert(isNum(this.aux), `aux is not a number`);
+        return numIsZero(this.aux);
+    }
+    reset(op) {
+        assert(op, `null op`);
+        const v = this;
+        v.op = op;
+        v.resetArgs();
+        v.aux = null;
+    }
+    setArgs1(a) {
+        this.resetArgs();
+        this.addArg(a);
+    }
+    resetArgs() {
+        for (let a of this.args) {
+            a.uses--;
+        }
+        this.args.length = 0;
+    }
+    addArg(v) {
         assert(v !== this, `using self as arg to self`);
-        if (!this.args) {
-            this.args = [v];
-        }
-        else {
-            this.args.push(v);
-        }
+        this.args.push(v);
         v.uses++;
         v.users.push(this);
     }
@@ -8024,12 +7902,11 @@ class Value {
         if (!this.op.rematerializeable) {
             return false;
         }
-        if (this.args)
-            for (let a of this.args) {
-                if (a.op !== ops.SP && a.op !== ops.SB) {
-                    return false;
-                }
+        for (let a of this.args) {
+            if (a.op !== ops.SP && a.op !== ops.SB) {
+                return false;
             }
+        }
         return true;
     }
 }
@@ -8039,6 +7916,7 @@ var BlockKind;
     BlockKind[BlockKind["Plain"] = 1] = "Plain";
     BlockKind[BlockKind["If"] = 2] = "If";
     BlockKind[BlockKind["Ret"] = 3] = "Ret";
+    BlockKind[BlockKind["First"] = 4] = "First";
 })(BlockKind || (BlockKind = {}));
 var BranchPrediction;
 (function (BranchPrediction) {
@@ -8050,8 +7928,8 @@ class Block$1 {
     constructor(kind, id, f) {
         this.pos = NoPos;
         this.kind = BlockKind.Invalid;
-        this.succs = null;
-        this.preds = null;
+        this.succs = [];
+        this.preds = [];
         this.control = null;
         this.vhead = null;
         this.vtail = null;
@@ -8101,6 +7979,7 @@ class Block$1 {
         return newval;
     }
     removeValue(v) {
+        assert(v.uses == 0, `removing value ${v} with ${v.uses} uses`);
         let prevv = v.prevv;
         let nextv = v.nextv;
         if (prevv) {
@@ -8124,18 +8003,47 @@ class Block$1 {
         assert(existingv !== newv, 'trying to replace V with V');
         for (let user of existingv.users) {
             assert(user !== newv, `TODO user==newv (newv=${newv} existingv=${existingv}) -- CYCLIC USE!`);
-            if (user.args)
-                for (let i = 0; i < user.args.length; i++) {
-                    if (user.args[i] === existingv) {
-                        user.args[i] = newv;
-                        newv.users.push(user);
-                        newv.uses++;
-                        existingv.uses--;
-                    }
+            for (let i = 0; i < user.args.length; i++) {
+                if (user.args[i] === existingv) {
+                    user.args[i] = newv;
+                    newv.users.push(user);
+                    newv.uses++;
+                    existingv.uses--;
                 }
+            }
         }
         this.removeValue(existingv);
         existingv.b = null;
+    }
+    setControl(v) {
+        let existing = this.control;
+        if (existing) {
+            existing.uses--;
+        }
+        this.control = v;
+        if (v) {
+            v.uses++;
+        }
+    }
+    removeNthPred(i) {
+        this.preds.splice(i, 1);
+        this.f.invalidateCFG();
+    }
+    removePred(e) {
+        let i = this.preds.indexOf(e);
+        assert(i > -1, `${e} not a predecessor of ${this}`);
+        this.removeNthPred(i);
+        return i;
+    }
+    removeNthSucc(i) {
+        this.succs.splice(i, 1);
+        this.f.invalidateCFG();
+    }
+    removeSucc(s) {
+        let i = this.succs.indexOf(s);
+        assert(i > -1, `${s} not a successor of ${this}`);
+        this.removeNthSucc(i);
+        return i;
     }
     newPhi(t) {
         let v = this.f.newValue(this, ops.Phi, t, null);
@@ -8239,6 +8147,12 @@ class Fun {
             nvmap.set(c, v);
         }
         return v;
+    }
+    removeBlock(b) {
+        let i = this.blocks.indexOf(b);
+        assert(i != -1, `block ${b} not part of function`);
+        this.blocks.splice(i, 1);
+        this.invalidateCFG();
     }
     numBlocks() {
         return this.bid;
@@ -8523,12 +8437,10 @@ function pickReg(m) {
 class ValState {
     constructor(v) {
         this.regs = emptyRegSet;
-        this.uses = null;
-        this.spill = null;
-        this.restoreMin = 0;
-        this.restoreMax = 0;
         this.needReg = false;
         this.rematerializeable = false;
+        this.mindist = 0;
+        this.maxdist = 0;
         this.v = v;
     }
 }
@@ -8595,7 +8507,7 @@ class RegAllocator {
                 let t = v.type;
                 let val = new ValState(v);
                 a.values[v.id] = val;
-                if (t.mem > 0 && !t.isTuple()) {
+                if (t.mem > 0 && !t.isTuple() && v !== SP) {
                     val.needReg = true;
                     val.rematerializeable = v.rematerializeable();
                 }
@@ -8603,6 +8515,16 @@ class RegAllocator {
         }
         a.computeLive();
         debuglog("\nlive values at end of each block\n" + a.fmtLive());
+        debuglog(`\nvalstate:`);
+        for (let vs of a.values) {
+            if (vs) {
+                console.log(`  v${vs.v.id} - ` + [
+                    ['needReg', vs.needReg],
+                    ['mindist', vs.mindist],
+                    ['maxdist', vs.maxdist],
+                ].map(v => v.join(': ')).join(', '));
+            }
+        }
         let ig = a.buildInterferenceGraph();
         if (DEBUG) {
             let ifstr = ig.fmt();
@@ -8674,6 +8596,7 @@ class RegAllocator {
             }
             if (conflict) {
                 debuglog(`unable to find register for v${v.id}`);
+                let val = a.values[v.id];
                 reg = noReg;
             }
             debuglog(`pop v${v.id} {${reg}} edges:`, v.edges);
@@ -8703,10 +8626,9 @@ class RegAllocator {
                 for (let id2 of live) {
                     g.connect(v.id, id2);
                 }
-                if (v.args)
-                    for (let operand of v.args) {
-                        live.add(operand.id);
-                    }
+                for (let operand of v.args) {
+                    live.add(operand.id);
+                }
             }
         }
         return g;
@@ -8724,6 +8646,7 @@ class RegAllocator {
         let t = new Map();
         let desired = new DesiredState();
         let po = f.postorder();
+        let invalidateCFG = false;
         while (true) {
             let changed = false;
             for (let b of po) {
@@ -8739,7 +8662,16 @@ class RegAllocator {
                 phis = [];
                 let i = b.valcount - 1;
                 for (let v = b.vtail; v; v = v.prevv, i--) {
-                    live.delete(v.id);
+                    let x = live.get(v.id);
+                    if (x) {
+                        a.values[v.id].maxdist = x.val;
+                        live.delete(v.id);
+                    }
+                    else {
+                        debuglog(`dead ${v} (eliminated)`);
+                        b.removeValue(v);
+                        invalidateCFG = true;
+                    }
                     if (v.op === ops.Phi) {
                         phis.push(v);
                         continue;
@@ -8749,12 +8681,11 @@ class RegAllocator {
                             v.val += unlikelyDistance;
                         }
                     }
-                    if (v.args)
-                        for (let arg of v.args) {
-                            if (a.values[arg.id].needReg) {
-                                live.set(arg.id, { val: i, pos: v.pos });
-                            }
+                    for (let arg of v.args) {
+                        if (a.values[arg.id].needReg) {
+                            live.set(arg.id, { val: i, pos: v.pos });
                         }
+                    }
                 }
                 let other = a.desired[b.id];
                 if (other) {
@@ -8775,78 +8706,77 @@ class RegAllocator {
                             continue;
                         }
                         desired.clobber(j.regs);
-                        assert(v.args, `null args in ${v}`);
                         desired.add(v.args[j.idx].id, pickReg(j.regs));
                     }
                     if (v.op.resultInArg0) {
-                        assert(v.args, `null args in ${v}`);
                         if (v.op.commutative) {
                             desired.addList(v.args[1].id, prefs);
                         }
                         desired.addList(v.args[0].id, prefs);
                     }
                 }
-                if (b.preds)
-                    for (let i = 0; i < b.preds.length; i++) {
-                        let p = b.preds[i];
-                        let delta = normalDistance;
-                        if (p.succs && p.succs.length == 2) {
-                            if (p.succs[0] == b && p.likely == BranchPrediction.Likely ||
-                                p.succs[1] == b && p.likely == BranchPrediction.Unlikely) {
-                                delta = likelyDistance;
-                            }
-                            else if (p.succs[0] == b && p.likely == BranchPrediction.Unlikely ||
-                                p.succs[1] == b && p.likely == BranchPrediction.Likely) {
-                                delta = unlikelyDistance;
-                            }
+                for (let i = 0; i < b.preds.length; i++) {
+                    let p = b.preds[i];
+                    let delta = normalDistance;
+                    if (p.succs.length == 2) {
+                        if (p.succs[0] == b && p.likely == BranchPrediction.Likely ||
+                            p.succs[1] == b && p.likely == BranchPrediction.Unlikely) {
+                            delta = likelyDistance;
                         }
-                        let pdesired = a.desired[p.id];
-                        if (!pdesired) {
-                            a.desired[p.id] = new DesiredState(desired);
+                        else if (p.succs[0] == b && p.likely == BranchPrediction.Unlikely ||
+                            p.succs[1] == b && p.likely == BranchPrediction.Likely) {
+                            delta = unlikelyDistance;
                         }
-                        else {
-                            pdesired.merge(desired);
-                        }
-                        t.clear();
-                        let plive = a.live[p.id];
-                        if (plive)
-                            for (let e of plive) {
-                                t.set(e.id, { val: e.dist, pos: e.pos });
-                            }
-                        let update = false;
-                        for (let [key, e] of live) {
-                            let d = e.val + delta;
-                            let e2 = t.get(key);
-                            if (!e2 || d < e2.val) {
-                                update = true;
-                                t.set(key, { val: d, pos: e.pos });
-                            }
-                        }
-                        for (let v of phis) {
-                            assert(v.args, 'phi without args');
-                            let id = v.args[i].id;
-                            if (a.values[id].needReg) {
-                                let e2 = t.get(id);
-                                if (!e2 || delta < e2.val) {
-                                    update = true;
-                                    t.set(id, { val: delta, pos: v.pos });
-                                }
-                            }
-                        }
-                        if (!update) {
-                            continue;
-                        }
-                        let l = new Array(t.size), j = 0;
-                        for (let [key, e] of t) {
-                            l[j++] = { id: key, dist: e.val, pos: e.pos };
-                        }
-                        a.live[p.id] = l;
-                        changed = true;
                     }
+                    let pdesired = a.desired[p.id];
+                    if (!pdesired) {
+                        a.desired[p.id] = new DesiredState(desired);
+                    }
+                    else {
+                        pdesired.merge(desired);
+                    }
+                    t.clear();
+                    let plive = a.live[p.id];
+                    if (plive)
+                        for (let e of plive) {
+                            t.set(e.id, { val: e.dist, pos: e.pos });
+                        }
+                    let update = false;
+                    for (let [key, e] of live) {
+                        let d = e.val + delta;
+                        let e2 = t.get(key);
+                        if (!e2 || d < e2.val) {
+                            update = true;
+                            t.set(key, { val: d, pos: e.pos });
+                        }
+                    }
+                    for (let v of phis) {
+                        let id = v.args[i].id;
+                        if (a.values[id].needReg) {
+                            let e2 = t.get(id);
+                            if (!e2 || delta < e2.val) {
+                                update = true;
+                                t.set(id, { val: delta, pos: v.pos });
+                            }
+                        }
+                    }
+                    if (!update) {
+                        continue;
+                    }
+                    let l = new Array(t.size), j = 0;
+                    for (let [key, e] of t) {
+                        l[j++] = { id: key, dist: e.val, pos: e.pos };
+                    }
+                    a.live[p.id] = l;
+                    changed = true;
+                }
             }
             if (!changed) {
                 break;
             }
+        }
+        if (invalidateCFG) {
+            f.invalidateCFG();
         }
     }
     fmtLive() {
@@ -8857,7 +8787,7 @@ class RegAllocator {
             let blive = a.live[b.id];
             if (blive)
                 for (let x of blive) {
-                    s += ` v${x.id}`;
+                    s += `  v${x.id}`;
                     let desired = a.desired[b.id];
                     if (desired)
                         for (let e of desired.entries) {
@@ -8891,31 +8821,7 @@ class RegAllocator {
         return s.trimRight();
     }
 }
-
-function optdce(fn) {
-    let live = new Set();
-    let i = fn.blocks.length;
-    while (i > 0) {
-        let b = fn.blocks[--i];
-        if (b.control) {
-            live.add(b.control);
-        }
-        let v = b.vtail;
-        while (v) {
-            if (v.op.call || live.delete(v)) {
-                if (v.args)
-                    for (let operand of v.args) {
-                        live.add(operand);
-                    }
-                v = v.prevv;
-            }
-            else {
-                v = b.removeValue(v);
-            }
-        }
-    }
-}
-//# sourceMappingURL=opt_dce.js.map
+//# sourceMappingURL=regalloc.js.map
 
 function consteval2(op, t, x, y) {
     const xn = x;
@@ -9124,20 +9030,35 @@ function consteval2(op, t, x, y) {
     assert(false, `unexpected ${op}`);
     return null;
 }
-
+function consteval1(op, t, x) {
+    return null;
+}
 //# sourceMappingURL=consteval.js.map
 
-function optcf_op1(_b, _op, _x) {
+function optcf_op1(b, op, x) {
+    if (x.op.constant) {
+        assert(isNum(x.aux));
+        let val = consteval1(op, x.type, x.aux);
+        if (val !== null) {
+            return b.f.constVal(x.type, val);
+        }
+    }
     return null;
 }
 function optcf_op2(b, op, x, y) {
     if (!x.op.constant || !y.op.constant) {
         return null;
     }
+    assert(isNum(x.aux));
+    assert(isNum(y.aux));
     let xval = x.aux;
     let yval = y.aux;
     if (x.type !== y.type) {
-        yval = numconv(yval, x.type)[0];
+        let lossless;
+        [yval, lossless] = numconv(yval, x.type);
+        if (!lossless) {
+            return null;
+        }
     }
     let val = consteval2(op, x.type, xval, yval);
     if (val !== null) {
@@ -9454,6 +9375,148 @@ function opselect2(tok, x, y) {
 
 //# sourceMappingURL=opselect.js.map
 
+class IRFmt {
+    constructor(types, style$$1, println) {
+        this.types = types;
+        this.style = style$$1;
+        this.println = println;
+        this.rarr = style$$1.grey(' —> ');
+        this.larr = style$$1.grey(' <— ');
+    }
+}
+function fmtval(f, v) {
+    assert(v.op, `value ${v} without .op`);
+    let s = `v${v.id} = `;
+    s += v.op.name;
+    if (f.types) {
+        s += ' ' + f.style.grey(`<${v.type}>`);
+    }
+    for (let arg of v.args) {
+        s += ' ' + arg;
+    }
+    if (v.aux !== null) {
+        s += ` [${v.aux}]`;
+    }
+    if (v.reg) {
+        s += ` {${style.orange(v.reg.name)}}`;
+    }
+    if (v.comment) {
+        s += f.style.grey('  // ' + v.comment);
+    }
+    return s;
+}
+function printval(f, v, indent) {
+    f.println(indent + fmtval(f, v));
+}
+function printblock(f, b, indent) {
+    let label = b.toString();
+    let preds = '';
+    let meta = '';
+    if (b.preds.length) {
+        preds = f.larr + b.preds.map(b => f.style.lightyellow(b.toString())).join(', ');
+        f.println('');
+    }
+    let comment = b.comment ? f.style.grey('  // ' + b.comment) : '';
+    f.println(indent + f.style.lightyellow(label + ':') + preds + meta + comment);
+    let valindent = indent + '  ';
+    let v = b.vhead;
+    while (v) {
+        printval(f, v, valindent);
+        v = v.nextv;
+    }
+    const fmtsucc = (b) => {
+        let s = f.style.lightyellow(b.toString());
+        switch (b.likely) {
+            case BranchPrediction.Likely:
+                s += f.style.grey(' (likely)');
+                break;
+            case BranchPrediction.Unlikely:
+                s += f.style.grey(' (unlikely)');
+                break;
+        }
+        return s;
+    };
+    switch (b.kind) {
+        case BlockKind.Plain: {
+            let contb = b.succs[0];
+            if (contb) {
+                f.println(indent +
+                    f.style.cyan('cont') + f.rarr +
+                    fmtsucc(contb));
+            }
+            break;
+        }
+        case BlockKind.First:
+        case BlockKind.If: {
+            let thenb = b.succs[0];
+            let elseb = b.succs[1];
+            if (thenb && elseb) {
+                assert(b.control, "missing control (condition) value");
+                f.println(indent +
+                    f.style.cyan(b.kind == BlockKind.If ? 'if' : 'first') +
+                    ` ${b.control}${f.rarr}` +
+                    fmtsucc(thenb) + ', ' + fmtsucc(elseb));
+            }
+            break;
+        }
+        case BlockKind.Ret: {
+            assert(b.succs.length == 0, "can't have successor to return block");
+            f.println(indent +
+                f.style.cyan('ret') + (b.control ? ' ' + b.control : ''));
+            break;
+        }
+        default:
+            assert(false, `unexpected block kind ${BlockKind[b.kind]}`);
+    }
+}
+function printfun(f, fn) {
+    f.println(f.style.white(fn.toString()) +
+        ' (' + fn.type.args.join(' ') + ')->' + fn.type.result);
+    for (let b of fn.blocks) {
+        printblock(f, b, '  ');
+    }
+}
+function printpkg(f, pkg) {
+    let isFirst = true;
+    for (let fn of pkg.funs.values()) {
+        printfun(f, fn);
+        if (isFirst) {
+            isFirst = false;
+        }
+        else {
+            f.println('');
+        }
+    }
+}
+function printir(v, w, o) {
+    let f = new IRFmt(!(o && o.noTypes), (o && o.colors ? style :
+        o && o.colors === false ? noStyle :
+            stdoutStyle), w || console.log.bind(console));
+    if (v instanceof Pkg) {
+        printpkg(f, v);
+    }
+    else if (v instanceof Fun) {
+        printfun(f, v);
+    }
+    else if (v instanceof Block$1) {
+        printblock(f, v, '');
+    }
+    else if (v instanceof Value) {
+        printval(f, v, '');
+    }
+    else {
+        let o = v;
+        assert(false, `unexpected value ${o && typeof o == 'object' ? o.constructor.name : o}`);
+    }
+}
+function fmtir(v, options) {
+    let str = '';
+    let w = (s) => { str += s + '\n'; };
+    printir(v, w, options);
+    return str.replace(/\r?\n$/, '');
+}
+//# sourceMappingURL=repr.js.map
+
 const dlog$1 = function (..._) { };
 const bitypes = builtInTypes;
 var IRBuilderFlags;
@@ -9575,9 +9638,6 @@ class IRBuilder {
     endFun() {
         const s = this;
         assert(s.f, "ending function without a current function");
-        if (s.config.optimize) {
-            optdce(s.f);
-        }
         if (s.regalloc) {
             s.regalloc.regallocFun(s.f);
         }
@@ -9709,6 +9769,14 @@ class IRBuilder {
         ifb.preds = [entryb];
         s.startBlock(ifb);
         let control = s.expr(n.cond);
+        if (s.config.optimize && control.op.constant) {
+            if (control.auxIsZero()) {
+                ifb.kind = BlockKind.Plain;
+                s.sealBlock(ifb);
+                printir(entryb);
+                return;
+            }
+        }
         ifb = s.endBlock();
         ifb.control = control;
         let thenb = s.f.newBlock(BlockKind.Plain);
@@ -9723,6 +9791,34 @@ class IRBuilder {
         nextb.preds = [ifb];
         ifb.succs = [thenb, nextb];
         s.startSealedBlock(nextb);
+        if (s.config.optimize && !control.op.constant && control.op.argLen > 0) {
+            let args;
+            for (let i = 0; i < control.args.length; i++) {
+                let arg = control.args[i];
+                if (arg.op === ops.Phi && arg.b === ifb) {
+                    if (!args) {
+                        args = control.args.slice();
+                    }
+                    assert(ifb.preds[0] === entryb, `entryb not at expected index`);
+                    args[i] = arg.args[0];
+                }
+            }
+            if (args) {
+                let constctrl = null;
+                if (args.length == 2) {
+                    constctrl = optcf_op2(ifb, control.op, args[0], args[1]);
+                }
+                else if (args.length == 1) {
+                    constctrl = optcf_op1(ifb, control.op, args[0]);
+                }
+                if (constctrl && constctrl.auxIsZero()) {
+                    entryb.succs = [nextb];
+                    nextb.preds = [entryb];
+                    s.f.removeBlock(ifb);
+                    s.f.removeBlock(thenb);
+                }
+            }
+        }
         if (s.flags & IRBuilderFlags.Comments) {
             ifb.comment = 'while';
             thenb.comment = 'then';
@@ -9732,6 +9828,17 @@ class IRBuilder {
     if_(s) {
         const r = this;
         let control = r.expr(s.cond);
+        if (r.config.optimize && control.op.constant) {
+            if (control.auxIsZero()) {
+                if (s.els_) {
+                    r.block(s.els_);
+                }
+            }
+            else {
+                r.block(s.then);
+            }
+            return;
+        }
         let ifb = r.endBlock();
         ifb.kind = BlockKind.If;
         ifb.control = control;
@@ -9761,7 +9868,7 @@ class IRBuilder {
         else {
             thenb.succs = [elseb];
             elseb.preds = [ifb, thenb];
-            elseb.succs = null;
+            elseb.succs = [];
             r.startSealedBlock(elseb);
             if (r.flags & IRBuilderFlags.Comments) {
                 thenb.comment = 'then';
@@ -9837,6 +9944,9 @@ class IRBuilder {
                 v = r.expr(s.rhs[i]);
             }
             v = r.assign(left, v);
+            if (r.flags & IRBuilderFlags.Comments && left.isIdent()) {
+                v.comment = left.toString();
+            }
         }
         return v;
     }
@@ -9866,6 +9976,9 @@ class IRBuilder {
                 if (r.config.optimize) {
                     let v = optcf_op2(r.b, op, left, right);
                     if (v) {
+                        if (r.b !== v.b) {
+                            v = r.copy(v);
+                        }
                         return v;
                     }
                 }
@@ -9875,6 +9988,9 @@ class IRBuilder {
             if (r.config.optimize) {
                 let v = optcf_op1(r.b, op, left);
                 if (v) {
+                    if (r.b !== v.b) {
+                        v = r.copy(v);
+                    }
                     return v;
                 }
             }
@@ -9885,6 +10001,9 @@ class IRBuilder {
         }
         dlog$1(`TODO: handle ${s.constructor.name}`);
         return r.nilValue();
+    }
+    copy(v) {
+        return this.b.newValue1(ops.Copy, v.type, v);
     }
     opAndAnd(n) {
         const s = this;
@@ -9938,9 +10057,11 @@ class IRBuilder {
             for (let i = 0; i < argvals.length; i++) {
                 let v = argvals[i];
                 let v2 = s.b.newValue1(ops.CallArg, v.type, v);
-                let param = fx.sig.params[i];
-                if (param.name) {
-                    v2.comment = funstr + param.name.toString();
+                if (s.flags & IRBuilderFlags.Comments) {
+                    let param = fx.sig.params[i];
+                    if (param.name) {
+                        v2.comment = funstr + param.name.toString();
+                    }
                 }
             }
         }
@@ -10020,12 +10141,12 @@ class IRBuilder {
             val = b.newPhi(t);
             s.addIncompletePhi(val, name, b);
         }
-        else if (b.preds && b.preds.length == 1) {
+        else if (b.preds.length == 1) {
             dlog$1(`${b} ${name} common case: single predecessor ${b.preds[0]}`);
             val = s.readVariable(name, t, b.preds[0]);
             
         }
-        else if (!b.preds || b.preds.length == 0) {
+        else if (b.preds.length == 0) {
             val = s.readGlobal(name);
         }
         else {
@@ -10039,12 +10160,12 @@ class IRBuilder {
     addPhiOperands(name, phi) {
         const s = this;
         assert(phi.op === ops.Phi);
-        assert(phi.b.preds, 'phi in block without predecessors');
+        assert(phi.b.preds.length > 0, 'phi in block without predecessors');
         for (let pred of phi.b.preds) {
             let v = s.readVariable(name, phi.type, pred);
             if (v !== phi) {
                 dlog$1(`  ${pred} ${v}<${v.op}>`);
-                phi.appendArg(v);
+                phi.addArg(v);
             }
         }
         return s.tryRemoveTrivialPhi(phi);
@@ -10052,28 +10173,50 @@ class IRBuilder {
     tryRemoveTrivialPhi(phi) {
         const s = this;
         assert(phi.op === ops.Phi);
+        assert(phi.b != null);
+        let b = phi.b;
         let same = null;
-        dlog$1(`${phi.b} ${phi}`);
         assert(phi.args != null, "phi without operands");
         for (let operand of phi.args) {
             if (operand === same || operand === phi) {
                 continue;
             }
             if (same != null) {
-                dlog$1(`${phi.b} ${phi} not trivial (keep)`);
                 return phi;
             }
             same = operand;
         }
-        dlog$1(`${phi.b} ${phi} is trivial (remove)`);
         if (same == null) {
-            dlog$1(`${phi.b} ${phi} unreachable or in the start block`);
-            same = new Value(0, phi.b, ops.Invalid, t_nil, null);
+            same = new Value(0, b, ops.Invalid, t_nil, null);
         }
         let users = phi.users;
-        dlog$1(`${phi.b} replace ${phi} with ${same} (aux = ${same.aux})`);
-        phi.b.replaceValue(phi, same);
+        dlog$1(`${b} replace ${phi} with ${same} ` +
+            `(${same}.aux = ${same.aux}, ${phi}.uses = ${phi.uses})`);
+        b.replaceValue(phi, same);
         assert(phi.uses == 0, `still used even after Value.replaceBy`);
+        if (s.incompletePhis) {
+            let entries = s.incompletePhis.get(b);
+            if (entries) {
+                for (let [name, phi2] of entries) {
+                    if (phi2 === phi) {
+                        let varv = s.vars.get(name);
+                        if (varv === phi) {
+                            s.vars.set(name, same);
+                        }
+                        else {
+                            let m = s.defvars[b.id];
+                            if (m) {
+                                let varv = m.get(name);
+                                if (varv === phi) {
+                                    m.set(name, same);
+                                }
+                            }
+                        }
+                        entries.delete(name);
+                    }
+                }
+            }
+        }
         for (let user of users) {
             if (user.op === ops.Phi && user !== phi) {
                 s.tryRemoveTrivialPhi(user);
@@ -10090,150 +10233,351 @@ class IRBuilder {
         }
     }
 }
-//# sourceMappingURL=builder.js.map
 
-class IRFmt {
-    constructor(types, style$$1, println) {
-        this.types = types;
-        this.style = style$$1;
-        this.println = println;
-        this.rarr = style$$1.grey(' —> ');
-        this.larr = style$$1.grey(' <— ');
+function phielimValue(v) {
+    if (v.op !== ops.Phi) {
+        return false;
     }
-}
-function fmtval(f, v) {
-    let s = `v${v.id} = `;
-    s += v.op.name;
-    if (f.types) {
-        s += ' ' + f.style.grey(`<${v.type}>`);
-    }
-    if (v.args)
-        for (let arg of v.args) {
-            s += ' ' + arg;
+    let args = v.args;
+    assert(args, `Phi ${v} without args`);
+    var w = null;
+    for (let x of args) {
+        if (x === v) {
+            continue;
         }
-    if (v.aux !== null) {
-        s += ` [${v.aux}]`;
-    }
-    if (v.reg) {
-        s += ` {${style.orange(v.reg.name)}}`;
-    }
-    if (v.comment) {
-        s += f.style.grey('  // ' + v.comment);
-    }
-    return s;
-}
-function printval(f, v, indent) {
-    f.println(indent + fmtval(f, v));
-}
-function printblock(f, b, indent) {
-    let label = b.toString();
-    let preds = '';
-    let meta = '';
-    if (b.preds && b.preds.length) {
-        preds = f.larr + b.preds.map(b => f.style.lightyellow(b.toString())).join(', ');
-        f.println('');
-    }
-    let comment = b.comment ? f.style.grey('  // ' + b.comment) : '';
-    f.println(indent + f.style.lightyellow(label + ':') + preds + meta + comment);
-    let valindent = indent + '  ';
-    let v = b.vhead;
-    while (v) {
-        printval(f, v, valindent);
-        v = v.nextv;
-    }
-    const fmtsucc = (b) => {
-        let s = f.style.lightyellow(b.toString());
-        switch (b.likely) {
-            case BranchPrediction.Likely:
-                s += f.style.grey(' (likely)');
-                break;
-            case BranchPrediction.Unlikely:
-                s += f.style.grey(' (unlikely)');
-                break;
+        if (x === w) {
+            continue;
         }
-        return s;
-    };
-    switch (b.kind) {
-        case BlockKind.Plain: {
-            assert(b.succs != null, 'missing successor for plain block');
-            assert(b.succs && b.succs.length == 1, `b.succs.length = ${b.succs && b.succs.length || 0}; expected 1`);
-            let succs = b.succs;
-            let contb = succs[0];
-            f.println(indent +
-                f.style.cyan('cont') + f.rarr +
-                fmtsucc(contb));
+        if (w) {
+            return false;
+        }
+        w = x;
+    }
+    if (!w) {
+        return false;
+    }
+    v.op = ops.Copy;
+    v.setArgs1(w);
+    debuglog(`eliminated phi ${v}`);
+    return true;
+}
+//# sourceMappingURL=phielim.js.map
+
+function rewrite(f, rb, rv) {
+    while (true) {
+        let change = false;
+        for (let b of f.blocks) {
+            if (b.control && b.control.op === ops.Copy) {
+                while (b.control.op === ops.Copy) {
+                    assert(b.control != null);
+                    let newctrl = (b.control.args && b.control.args[0]) || null;
+                    b.setControl(newctrl);
+                }
+            }
+            debuglog(`call BlockRewriter on b${b.id}`);
+            if (rb(b)) {
+                change = true;
+            }
+            for (let v = b.vhead; v; v = v.nextv) {
+                change = phielimValue(v) || change;
+                if (rv(v)) {
+                    change = true;
+                }
+            }
+        }
+        if (!change) {
             break;
         }
-        case BlockKind.If: {
-            assert(b.succs != null, 'missing successors for if block');
-            assert(b.succs && b.succs.length == 2, `b.succs.length = ${b.succs && b.succs.length || 0}; expected 2`);
-            assert(b.control, "missing control (condition) value");
-            let succs = b.succs;
-            let thenb = succs[0];
-            let elseb = succs[1];
-            f.println(indent +
-                f.style.cyan('if') +
-                ` ${b.control}${f.rarr}` +
-                fmtsucc(thenb) + ', ' + fmtsucc(elseb));
-            break;
-        }
-        case BlockKind.Ret: {
-            assert(b.succs == null, "can't have successor to return block");
-            f.println(indent +
-                f.style.cyan('ret') + (b.control ? ' ' + b.control : ''));
-            break;
-        }
-        default:
-            assert(false, `unexpected block kind ${BlockKind[b.kind]}`);
     }
 }
-function printfun(f, fn) {
-    f.println(f.style.white(fn.toString()) +
-        ' (' + fn.type.args.join(' ') + ')->' + fn.type.result);
-    for (let b of fn.blocks) {
-        printblock(f, b, '  ');
+//# sourceMappingURL=rewrite.js.map
+
+function nullLowerBlock(_) { return false; }
+function nullLowerValue(_) { return false; }
+function lower(c, f) {
+    if (c.lowerBlock || c.lowerValue) {
+        rewrite(f, c.lowerBlock || nullLowerBlock, c.lowerValue || nullLowerValue);
     }
 }
-function printpkg(f, pkg) {
-    let isFirst = true;
-    for (let fn of pkg.funs.values()) {
-        printfun(f, fn);
-        if (isFirst) {
-            isFirst = false;
+//# sourceMappingURL=lower.js.map
+
+function deadcode(f) {
+    let reachable = reachableBlocks(f);
+    debuglog(`reachable blocks:`, reachable
+        .map((reachable, id) => reachable ? id : undefined)
+        .filter(id => id !== undefined)
+        .join('  '));
+    for (let b of f.blocks) {
+        if (reachable[b.id]) {
+            continue;
         }
-        else {
-            f.println('');
+        let nsuccs = b.succs ? b.succs.length : 0;
+        for (let i = 0; i < nsuccs;) {
+            let e = b.succs[i];
+            if (reachable[e.id]) {
+                removeEdge(b, i);
+            }
+            else {
+                i++;
+            }
         }
     }
 }
-function printir(v, w, o) {
-    let f = new IRFmt(!(o && o.noTypes), (o && o.colors ? style :
-        o && o.colors === false ? noStyle :
-            stdoutStyle), w || console.log.bind(console));
-    if (v instanceof Pkg) {
-        printpkg(f, v);
+function reachableBlocks(f) {
+    let reachable = new Array(f.numBlocks());
+    reachable[f.entry.id] = true;
+    let p = [];
+    p.push(f.entry);
+    while (p.length > 0) {
+        let b = p.pop();
+        let succs = b.succs;
+        if (succs) {
+            if (b.kind == BlockKind.First) {
+                succs = succs.slice(0, 1);
+            }
+            for (let c of succs) {
+                assert(c.id < reachable.length, `block ${c} >= f.numBlocks()=${reachable.length}`);
+                if (!reachable[c.id]) {
+                    reachable[c.id] = true;
+                    p.push(c);
+                }
+            }
+        }
     }
-    else if (v instanceof Fun) {
-        printfun(f, v);
-    }
-    else if (v instanceof Block$1) {
-        printblock(f, v, '');
-    }
-    else if (v instanceof Value) {
-        printval(f, v, '');
-    }
-    else {
-        let o = v;
-        assert(false, `unexpected value ${o && typeof o == 'object' ? o.constructor.name : o}`);
+    return reachable;
+}
+function removeEdge(b, i) {
+    let c = b.succs[i];
+    b.removeNthSucc(i);
+    let j = c.removePred(b);
+    let n = c.preds.length;
+    for (let v = c.vhead; v; v = v.nextv) {
+        if (v.op !== ops.Phi) {
+            continue;
+        }
+        v.args[j].uses--;
+        v.args[j] = v.args[n];
+        v.args = v.args.slice(0, n);
+        phielimValue(v);
     }
 }
-function fmtir(v, options) {
-    let str = '';
-    let w = (s) => { str += s + '\n'; };
-    printir(v, w, options);
-    return str.replace(/\r?\n$/, '');
+//# sourceMappingURL=deadcode.js.map
+
+class Config {
+    constructor(props) {
+        this.arch = '?';
+        this.optimize = false;
+        this.addrSize = 4;
+        this.regSize = 4;
+        this.intSize = 4;
+        this.registers = [];
+        this.hasGReg = false;
+        this.gpRegMask = emptyRegSet;
+        this.fpRegMask = emptyRegSet;
+        this.specialRegMask = emptyRegSet;
+        this.lowerBlock = null;
+        this.lowerValue = null;
+        if (props)
+            for (let k of Object.keys(props)) {
+                if (!(k in this)) {
+                    panic(`invalid config property ${k}`);
+                }
+                
+                this[k] = props[k];
+            }
+    }
+    toString() {
+        return `${this.arch}/${this.addrSize * 8}/${this.optimize ? 'opt' : 'debug'}`;
+    }
 }
-//# sourceMappingURL=repr.js.map
+//# sourceMappingURL=config.js.map
+
+class ArchInfo {
+    constructor(name, props) {
+        this.addrSize = 4;
+        this.regSize = 0;
+        this.intSize = 0;
+        this.ops = [];
+        this.regNames = [];
+        this.gpRegMask = emptyRegSet;
+        this.fpRegMask = emptyRegSet;
+        this.specialRegMask = emptyRegSet;
+        this.generic = false;
+        this.lowerBlock = null;
+        this.lowerValue = null;
+        this.name = name;
+        for (let k of Object.keys(props)) {
+            assert(k in this);
+            this[k] = props[k];
+        }
+        assert(this.regNames.length <= 64, 'too many registers');
+        assert(this.addrSize == 4 || this.addrSize == 8, `invalid addrSize ${this.addrSize}`);
+        this.regSize = this.regSize || this.addrSize;
+        this.intSize = this.intSize || this.addrSize;
+    }
+    config(props) {
+        const registers = this.regNames.map((name, num) => ({ num, name }));
+        const c = {
+            arch: this.name,
+            registers,
+            addrSize: this.addrSize,
+            regSize: this.regSize,
+            intSize: this.intSize,
+            hasGReg: this.regNames.includes("g"),
+            gpRegMask: this.gpRegMask,
+            fpRegMask: this.fpRegMask,
+            specialRegMask: this.specialRegMask,
+            lowerBlock: this.lowerBlock,
+            lowerValue: this.lowerValue,
+        };
+        if (props) {
+            Object.assign(c, props);
+        }
+        return new Config(c);
+    }
+}
+//# sourceMappingURL=arch.js.map
+
+const regNames = [
+    "R0",
+    "R1",
+    "R2",
+    "R3",
+    "R4",
+    "R5",
+    "R6",
+    "R7",
+    "R8",
+    "R9",
+    "R10",
+    "R11",
+    "R12",
+    "R13",
+    "R14",
+    "R15",
+    "R16",
+    "R17",
+    "R18",
+    "R19",
+    "R20",
+    "R21",
+    "R22",
+    "R24",
+    "R25",
+    "R28",
+    "R29",
+    "SP",
+    "g",
+    "F0",
+    "F2",
+    "F4",
+    "F6",
+    "F8",
+    "F10",
+    "F12",
+    "F14",
+    "F16",
+    "F18",
+    "F20",
+    "F22",
+    "F24",
+    "F26",
+    "F28",
+    "F30",
+    "SB",
+];
+const buildReg = regBuilder(regNames);
+const gp = buildReg(`
+  R1  R2  R3  R4  R5  R6  R7  R8  R9  R10 R11 R12 R13 R14 R15 R16
+  R17 R18 R19 R20 R21 R22     R24 R25         R28 R29
+`);
+const fp = buildReg(`
+  F0 F2 F4 F6 F8 F10 F12 F14 F16 F18 F20 F22 F24 F26 F28 F30
+`);
+for (let name in ops) {
+    let op = ops[name];
+    if (!op.zeroWidth && !op.call) {
+        let regs = gp;
+        if (op.argLen > 0) {
+            op.reg.inputs = [];
+            for (let i = 0; i < op.argLen; i++) {
+                op.reg.inputs[i] = { idx: i, regs };
+            }
+        }
+        op.reg.outputs = [{ idx: 0, regs }];
+    }
+}
+const gpg = gp.or(buildReg("g"));
+const gpspg = gpg.or(buildReg("SP"));
+const gp01 = new RegInfo([], [gp]);
+const gp21 = new RegInfo([gpg, gpg], [gp]);
+const gp11sp = new RegInfo([gpspg], [gp]);
+function op$1(name, argLen, props) {
+    return new Op(name, argLen, props);
+}
+const aops = {
+    MOVWconst: op$1("MOVWconst", 0, {
+        reg: gp01,
+        aux: t_u32,
+        type: t_u32,
+        rematerializeable: true,
+    }),
+    ADDW: op$1("ADDW", 2, { reg: gp21, type: t_u32, commutative: true }),
+    ADDWconst: op$1("ADDWconst", 1, {
+        reg: gp11sp,
+        type: t_u32,
+        aux: t_u32,
+        commutative: true,
+    }),
+};
+var covm = new ArchInfo("covm", {
+    addrSize: 4,
+    ops: Object.values(aops),
+    regNames: regNames,
+    gpRegMask: gp,
+    fpRegMask: fp,
+    lowerBlock: lowerBlockCovm,
+    lowerValue: lowerValueCovm,
+});
+function lowerBlockCovm(b) {
+    return false;
+}
+const valueLoweringFuns = new Map([
+    [ops.ConstI32, (v) => {
+            let val = v.aux;
+            v.reset(aops.MOVWconst);
+            v.aux = val;
+            return true;
+        }],
+    [ops.AddI32, (v) => {
+            let [x, y] = v.args;
+            v.reset(aops.ADDW);
+            v.addArg(x);
+            v.addArg(y);
+            return true;
+        }],
+    [aops.ADDW, (v) => {
+            while (true) {
+                let x = v.args[0];
+                let v_1 = v.args[1];
+                if (v_1.op !== aops.MOVWconst) {
+                    break;
+                }
+                let c = v_1.aux;
+                v.reset(aops.ADDWconst);
+                v.aux = c;
+                v.addArg(x);
+                debuglog(`rewrite ${v} (ADD x (MOVWconst [c])) -> (ADDWconst [c] x)`);
+                return true;
+            }
+            return false;
+        }],
+]);
+function lowerValueCovm(v) {
+    let lf = valueLoweringFuns.get(v.op);
+    return lf ? lf(v) : false;
+}
+//# sourceMappingURL=covm.js.map
 
 const archs = {
     [covm.name]: covm,
@@ -13071,7 +13415,8 @@ async function main(options) {
     const typeres = new TypeResolver();
     const parser = new Parser();
     options = options || {};
-    const _sources = options.sources || ['example/ssa1.xl'];
+    const _sources = (options.sources && options.sources.length ? options.sources :
+        ['example/ssa1.xl']);
     diagnostics = [];
     let r = await parsePkg("example", _sources, universe, parser, typeres);
     if (!r.success) {
@@ -13104,19 +13449,26 @@ async function main(options) {
                     printir(fn);
                 }
             }
-            if (!options.genericIR) {
+            if (options.genericIR) {
+                continue;
+            }
+            const irpass = (name, fn) => {
                 if (isNodeJsLikeEnv) {
-                    banner(`ssa-ir ${file.sfile.name} regalloc`);
+                    banner(`ssa-ir ${file.sfile.name} ${name}`);
                 }
-                const regalloc = new RegAllocator(config);
-                for (let [_, fn] of irb.pkg.funs) {
-                    regalloc.regallocFun(fn);
-                    if (isNodeJsLikeEnv && fn) {
-                        console.log(`\n-----------------------\n`);
-                        printir(fn);
+                for (let [_, f] of irb.pkg.funs) {
+                    fn(f);
+                    if (isNodeJsLikeEnv) {
+                        console.log(`\n------------------------------------------------\n`);
+                        printir(f);
                     }
                 }
-            }
+            };
+            irpass('lower', f => lower(config, f));
+            irpass('deadcode', f => deadcode(f));
+            process.exit(0);
+            const regalloc = new RegAllocator(config);
+            irpass('regalloc', f => regalloc.regallocFun(f));
         }
         return {
             success: true,
@@ -13151,7 +13503,10 @@ if (isNodeJsLikeEnv) {
         console.log('only running unit tests');
     }
     else {
-        main().catch(err => {
+        main({
+            sources: process.argv.slice(2).filter(v => !v.startsWith('-')),
+            noOptimize: process.argv.includes('-no-optimize'),
+        }).catch(err => {
             console.error(err.stack || '' + err);
             process.exit(1);
         });

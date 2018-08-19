@@ -16,25 +16,6 @@ export const emptyRegSet = UInt64.ZERO
 export const noReg :Reg = 255
 
 
-export interface InputInfo {
-  idx  :int    // index in Args array
-  regs :RegSet // allowed input registers
-}
-
-export interface OutputInfo {
-  idx  :int    // index in output tuple
-  regs :RegSet // allowed output registers
-}
-
-export class RegInfo {
-  inputs   :InputInfo[] = []  // allowed input registers
-  outputs  :OutputInfo[] = [] // allowed output registers
-  clobbers :RegSet = emptyRegSet
-
-  // inputs and outputs are ordered in register allocation order
-}
-
-
 export function fmtRegSet(m :RegSet) :string {
   let s = '{'
   for (let r :Reg = 0 >>> 0; !m.isZero(); r++) {

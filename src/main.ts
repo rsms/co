@@ -10,15 +10,20 @@ import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 
-import { Pkg as IRPkg } from './ir/ssa'
+import { Pkg as IRPkg, Fun as IRFun } from './ir/ssa'
 import { RegAllocator } from './ir/regalloc'
 import { IRBuilder, IRBuilderFlags } from './ir/builder'
 import { printir, fmtir } from './ir/repr'
 // import { IRVirtualMachine } from './ir/vm'
 
 import { archs } from './arch/all'
-
 import './all_tests'
+
+import { phielim } from './ir/phielim'
+import { lower } from './ir/lower'
+import { deadcode } from './ir/deadcode'
+import { copyelim } from './ir/copyelim'
+import { shortcircuit } from './ir/shortcircuit'
 
 
 // fs
@@ -181,7 +186,10 @@ async function main(options? :MainOptions) :Promise<MainResult> {
 
   options = options || {}
 
-  const _sources = options.sources || ['example/ssa1.xl']
+  const _sources = (
+    options.sources && options.sources.length ? options.sources :
+    ['example/ssa1.xl']
+  )
 
   // clear diagnostics from past run (this is a global var)
   diagnostics = []
@@ -235,20 +243,38 @@ async function main(options? :MainOptions) :Promise<MainResult> {
         }
       }
 
-      if (!options.genericIR) {
-        // run regalloc as separate pass for debugging (normally run inline IRB)
+      // Beyond this point the IR turns into target-specific code.
+      if (options.genericIR) {
+        // When genericIR is requested, we simply stop here.
+        continue
+      }
+
+      // run IP passes separately for debugging (normally run inline)
+
+      const irpass = (name :string, fn :(f:IRFun)=>void) => {
         if (isNodeJsLikeEnv) {
-          banner(`ssa-ir ${file.sfile.name} regalloc`)
+          banner(`[ir] ${name} (${file.sfile.name})`)
         }
-        const regalloc = new RegAllocator(config)
-        for (let [_, fn] of irb.pkg.funs) {
-          regalloc.regallocFun(fn)
-          if (isNodeJsLikeEnv && fn) {
-            console.log(`\n-----------------------\n`)
-            printir(fn)
+        for (let [_, f] of irb.pkg.funs) {
+          fn(f)
+          if (isNodeJsLikeEnv) {
+            console.log(`\n------------------------------------------------\n`)
+            printir(f)
           }
         }
       }
+
+      // IR passes
+      irpass('early phielim', phielim)
+      // irpass('early copyelim', copyelim)
+      irpass('early deadcode', deadcode)  // also runs copyelim
+      // irpass('short circuit', shortcircuit)
+      // irpass('lower', f => lower(config, f))
+      // irpass('lowered deadcode', deadcode)
+      process.exit(0)
+
+      const regalloc = new RegAllocator(config)
+      irpass('regalloc', f => regalloc.regallocFun(f))
 
     }
 
@@ -313,7 +339,10 @@ if (isNodeJsLikeEnv) {
     //     return { success: false, diagnostics }
     //   })
     // }
-    main().catch(err => {
+    main({
+      sources: process.argv.slice(2).filter(v => !v.startsWith('-')),
+      noOptimize: process.argv.includes('-no-optimize'),
+    }).catch(err => {
       console.error(err.stack || ''+err)
       process.exit(1)
       // return { success: false, diagnostics }

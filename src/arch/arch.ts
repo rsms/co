@@ -1,6 +1,6 @@
 import { Op } from '../ir/op'
 import { Register, RegSet, emptyRegSet } from '../ir/reg'
-import { Config } from '../ir/config'
+import { Config, BlockRewriter, ValueRewriter } from '../ir/config'
 
 
 export class ArchInfo {
@@ -15,6 +15,9 @@ export class ArchInfo {
   readonly fpRegMask       = emptyRegSet as RegSet
   readonly specialRegMask  = emptyRegSet as RegSet
   readonly generic         = false as bool
+
+  readonly lowerBlock :BlockRewriter|null = null // lowering function
+  readonly lowerValue :ValueRewriter|null = null // lowering function
 
   // readonly pkg     :string // obj package to import for this arch.
   // readonly genfile :string // source file containing opcode code generation.
@@ -57,6 +60,9 @@ export class ArchInfo {
       gpRegMask:      this.gpRegMask,
       fpRegMask:      this.fpRegMask,
       specialRegMask: this.specialRegMask,
+
+      lowerBlock:     this.lowerBlock,
+      lowerValue:     this.lowerValue,
     }
 
     if (props) {

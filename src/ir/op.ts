@@ -21,9 +21,7 @@ import {
 
   t_str,
 } from '../types'
-import { RegInfo, InputInfo } from './reg'
-import covm from '../arch/covm'
-// import { buildReg as covm_buildReg } from '../arch/covm'
+import { RegSet, emptyRegSet } from './reg'
 
 
 // Strategy borrowed from
@@ -32,6 +30,30 @@ import covm from '../arch/covm'
 // Instruction set inspired by
 //   go/src/cmd/compile/internal/ssa/gen/genericOps.go
 //
+
+
+interface RegInfoEntry {
+  idx  :int    // index in Args array
+  regs :RegSet // allowed input registers
+}
+
+export class RegInfo {
+  inputs   :RegInfoEntry[]  // allowed input registers
+  outputs  :RegInfoEntry[]  // allowed output registers
+  clobbers :RegSet
+
+  constructor(
+    inputs   :RegSet[] = [],
+    outputs  :RegSet[] = [],
+    clobbers :RegSet = emptyRegSet
+  ) {
+    this.inputs = inputs.map((regs, idx) => ({ idx, regs }))
+    this.outputs = outputs.map((regs, idx) => ({ idx, regs }))
+    this.clobbers = clobbers
+  }
+
+  // inputs and outputs are ordered in register allocation order
+}
 
 
 // A SymEffect describes the effect that an SSA Value has on the variable
@@ -117,7 +139,8 @@ export const ops = {
   Copy:     op("Copy", 1),  // output = arg0
   Arg:      op("Arg", 0, {zeroWidth: true}), // argument to current function
   CallArg:  op("CallArg", 1, {zeroWidth: true}), // argument for function call
-
+  NilCheck: op("NilCheck", 2,
+    {nilCheck: true, faultOnNilArg0: true}), // panic if arg0 is nil. arg1=mem.
 
   // function calls
   //
@@ -576,23 +599,4 @@ export const ops = {
 } // end `const op`
 
 
-for (let name in ops as {[name:string]:Op}) {
-  let op = (ops as {[name:string]:Op})[name]
-  if (!op.zeroWidth && !op.call) {
-    // assign allowed input and output registers
-    let regs = covm.gpRegMask  // XXX FIXME this is specific to the covm arch
-    // TODO: add reg info to ops above. For instance, ConvI64toF32 accepts
-    // inputs in gp regs, and outputs in fp regs.
-    if (op.argLen > 0) {
-      op.reg.inputs = new Array<InputInfo>(op.argLen)
-      for (let i = 0; i < op.argLen; i++) {
-        op.reg.inputs[i] = { idx: i, regs }
-      }
-    }
-    op.reg.outputs = [ { idx: 0, regs } ]
 
-    // if (name == "AddI32") {
-    //   op.reg.inputs = [ { idx: 0, regs: covm_buildReg("R4") } ]
-    // }
-  }
-}

@@ -20,12 +20,13 @@ class IRFmt {
 }
 
 function fmtval(f :IRFmt, v :Value) :string {
+  assert(v.op, `value ${v} without .op`)
   let s = `v${v.id} = `
   s += v.op.name
   if (f.types) {
     s += ' ' + f.style.grey(`<${v.type}>`)
   }
-  if (v.args) for (let arg of v.args) {
+  for (let arg of v.args) {
     s += ' ' + arg
   }
   if (v.aux !== null) {
@@ -37,6 +38,7 @@ function fmtval(f :IRFmt, v :Value) :string {
   if (v.reg) {
     s += ` {${style.orange(v.reg.name)}}`
   }
+  s += ` : ${style.pink(v.uses.toString())}`
   if (v.comment) {
     s += f.style.grey('  // ' + v.comment)
   }
@@ -54,7 +56,7 @@ function printblock(f :IRFmt, b :Block, indent :string) {
   let preds = ''
   let meta = ''
 
-  if (b.preds && b.preds.length) {
+  if (b.preds.length) {
     preds = f.larr + b.preds.map(b => 
       f.style.lightyellow(b.toString())
     ).join(', ')
@@ -89,40 +91,41 @@ function printblock(f :IRFmt, b :Block, indent :string) {
 
     case BlockKind.Plain: {
       // check & print successors
-      assert(b.succs != null, 'missing successor for plain block')
-      assert(b.succs && b.succs.length == 1,
-        `b.succs.length = ${b.succs && b.succs.length || 0}; expected 1`)
-      let succs = b.succs as Block[]
-      let contb = succs[0]
-      f.println(
-        indent +
-        f.style.cyan('cont') + f.rarr +
-        fmtsucc(contb)
-      )
+      // assert(b.succs.length == 1,
+      //   `b.succs.length = ${b.succs && b.succs.length || 0}; expected 1`)
+      let contb = b.succs[0]
+      if (contb) {
+        f.println(
+          indent +
+          f.style.cyan('cont') + f.rarr +
+          fmtsucc(contb)
+        )
+      }
       break
     }
 
+    case BlockKind.First:
     case BlockKind.If: {
       // check & print successors
-      assert(b.succs != null, 'missing successors for if block')
-      assert(b.succs && b.succs.length == 2,
-        `b.succs.length = ${b.succs && b.succs.length || 0}; expected 2`)
-      assert(b.control, "missing control (condition) value")
-      let succs = b.succs as Block[]
-      let thenb = succs[0]
-      let elseb = succs[1]
-      f.println(
-        indent +
-        f.style.cyan('if') +
-        ` ${b.control}${f.rarr}` +
-        fmtsucc(thenb) + ', ' + fmtsucc(elseb)
-      )
+      // assert(b.succs.length == 2,
+      //   `b.succs.length = ${b.succs && b.succs.length || 0}; expected 2`)
+      let thenb = b.succs[0]
+      let elseb = b.succs[1]
+      if (thenb && elseb) {
+        assert(b.control, "missing control (condition) value")
+        f.println(
+          indent +
+          f.style.cyan(b.kind == BlockKind.If ? 'if' : 'first') +
+          ` ${b.control}${f.rarr}` +
+          fmtsucc(thenb) + ', ' + fmtsucc(elseb)
+        )
+      }
       break
     }
 
     case BlockKind.Ret: {
       // check successors
-      assert(b.succs == null, "can't have successor to return block")
+      assert(b.succs.length == 0, "can't have successor to return block")
       f.println(
         indent +
         f.style.cyan('ret') + (b.control ? ' ' + b.control : '')

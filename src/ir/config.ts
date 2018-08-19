@@ -1,6 +1,8 @@
 import { Register, Reg, RegSet, emptyRegSet } from './reg'
+import { Value, Block } from './ssa'
 
-// TODO: maybe rename to "target" instead of "config"?
+export type BlockRewriter = (b :Block)=>bool
+export type ValueRewriter = (v :Value)=>bool
 
 // Config holds readonly compilation information.
 // It is created once, early during compilation, and shared across
@@ -34,6 +36,7 @@ export class Config {
   // BigEndian      bool          //
 
   arch      :string = '?' // e.g. "covm"
+  optimize  :bool = false  // Do optimization
 
   addrSize  :int = 4  // 4 or 8 bytes
   regSize   :int = 4  // 4 or 8 bytes
@@ -46,7 +49,8 @@ export class Config {
   fpRegMask      :RegSet = emptyRegSet // floating point register mask
   specialRegMask :RegSet = emptyRegSet // special register mask
   
-  optimize :bool = false  // Do optimization
+  lowerBlock     :BlockRewriter|null = null // lowering function
+  lowerValue     :ValueRewriter|null = null // lowering function
 
   constructor(props?: Partial<Config>) {
     if (props) for (let k of Object.keys(props as Object)) {

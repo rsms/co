@@ -49,6 +49,23 @@ const _Int64_UINT8_MAX = UInt64.fromInt32(_Int32_UINT8_MAX)
 const _Int64_SINT8_MAX = SInt64.fromInt32(_Int32_SINT8_MAX)
 const _Int64_SINT8_MIN = SInt64.fromInt32(_Int32_SINT8_MIN)
 
+
+// numIsZero return true if the number is zero
+//
+export function numIsZero(v :Num) :bool {
+  return (typeof v == 'number') ? v == 0 : v.isZero()
+}
+
+// numIsZero return true if the number is zero
+//
+export function isNum(v :any) :v is Num {
+  return (
+    typeof v == 'number' ||
+    v instanceof SInt64 ||
+    v instanceof UInt64
+  )
+}
+
 // numconv coverts a number to a type.
 //
 // Conversion always succeeds but might be lossy;

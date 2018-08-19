@@ -2,8 +2,7 @@ import { ByteStr, asciiByteStr } from '../bytestr'
 import { Pos, SrcFile } from '../pos'
 import { token, tokstr } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
-import { Num } from '../num'
-// import { debuglog as dlog } from '../util'
+import { Num, numIsZero, isNum } from '../num'
 import * as ast from '../ast'
 import * as types from '../types'
 import {
@@ -17,15 +16,18 @@ import {
   t_nil,
   t_bool,
 } from '../types'
-import { optdce } from './opt_dce'
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops, Op } from './op'
 import { Aux, Value, Block, BlockKind, Fun, Pkg, BranchPrediction } from './ssa'
 import { RegAllocator } from './regalloc'
 import { opselect1, opselect2 } from './opselect'
 import { Config } from './config'
+import { printir } from './repr'
+import { removeEdge } from './deadcode'
+import { LocalSlot } from './localslot'
 
-const dlog = function(..._ :any[]){} // silence dlog
+import { debuglog as dlog } from '../util'
+// const dlog = function(..._ :any[]){} // silence dlog
 
 
 const bitypes = ast.builtInTypes
@@ -34,6 +36,10 @@ const bitypes = ast.builtInTypes
 export enum IRBuilderFlags {
   Default  = 0,
   Comments = 1 << 1,  // include comments in some values, for formatting
+}
+
+
+class TmpName extends ByteStr {
 }
 
 
@@ -184,9 +190,9 @@ export class IRBuilder {
 
     // move block-local vars to long-term definition data
     // first we fill any holes in defvars
-    while (r.defvars.length <= b.id) {
-      r.defvars.push(null)
-    }
+    // while (r.defvars.length <= b.id) {
+    //   r.defvars.push(null)
+    // }
     r.defvars[b.id] = r.vars
 
     // reset block-local vars
@@ -215,14 +221,30 @@ export class IRBuilder {
   endFun() {
     const s = this
     assert(s.f, "ending function without a current function")
-    if (s.config.optimize) {
-      // perform early dead-code elimination
-      optdce(s.f)
+
+    dlog(`s.f.namedValues:`)
+    for (let name of s.f.namedValues.keys()) {
+      let e = s.f.namedValues.get(name)
+      let line = `  {${name}}\t=> `
+      if (e && e.values.length) {
+        line += e.values.join(', ')
+      } else {
+        line += '-'
+      }
+      console.log(line)
     }
-    if (s.regalloc) {
-      // perform register allocation
-      s.regalloc.regallocFun(s.f)
-    }
+
+    // TODO: run passes on s.f here
+
+    // if (s.config.optimize) {
+    //   // perform early dead-code elimination
+    //   optdce(s.f)
+    // }
+    // if (s.regalloc) {
+    //   // perform register allocation
+    //   s.regalloc.regallocFun(s.f)
+    // }
+
     if (DEBUG) {
       ;(s as any).f = null
     }
@@ -295,7 +317,7 @@ export class IRBuilder {
         // assert(!(x.body instanceof ast.ReturnStmt),
         //   "'return' as function expression body should have called "+
         //   "ret() to close block")
-        r.b.control = bodyval
+        r.b.setControl(bodyval)
       }
       // when body is a block and it didn't end, it was empty and thus
       // the return type is nil (no control value.)
@@ -317,6 +339,9 @@ export class IRBuilder {
   }
 
 
+  // block generates values from an AST block.
+  // It's the caller's responsibility to create and manage IR blocks.
+  //
   block(x :ast.Expr) :Value|null {
     const r = this
     if (x instanceof ast.Block) {
@@ -392,10 +417,38 @@ export class IRBuilder {
     const r = this
     let b = r.endBlock()
     b.kind = BlockKind.Ret
-    b.control = val
+    b.setControl(val)
   }
 
 
+  // while_ builds a conditional loop.
+  //
+  // The current block is first ended as a simple "cont" and a new block
+  // is created for the loop condition, which when true branches to
+  // the loop body, and after the loop when false.
+  //
+  // Example:
+  //   x = 5
+  //   while x > 0 {
+  //     x--
+  //   }
+  // Becomes:
+  //   b0:
+  //     v0 = ConstI32 [5]  // x
+  //     v1 = ConstI32 [0]
+  //     v2 = ConstI32 [1]
+  //   cont -> b1
+  //   b1: <- b0  // while
+  //     v3 = Phi v1 v5
+  //     v4 = GreaterS32 v1 v2
+  //   if v4 -> b2, b3
+  //   b2: <- b1  // then
+  //     v5 = SubI32 v3 v2  // x = x - 1
+  //   cont -> b1
+  //   b3:  // end while
+  //   ret
+  // 
+  //
   while_(n: ast.WhileStmt) {
     const s = this
 
@@ -409,10 +462,58 @@ export class IRBuilder {
     // start "if" block
     s.startBlock(ifb) // note: not sealed
     let control = s.expr(n.cond) // condition for looping
-    // TODO: inspect control and if constant, short-circuit branching.
+
+    // potentially inline or eliminate branches when control is constant
+    if (s.config.optimize && control.op.constant) {
+      if (control.auxIsZero()) {
+        // while loop never taken
+
+        // convert condition block to continuation block and seal it
+        ifb.kind = BlockKind.Plain
+        s.sealBlock(ifb)  // no more preds
+
+        printir(entryb)
+
+        // Note: later fuse pass will combine the two immediately-adjacent
+        // blocks into one, so no need to do that here. It's non-trivial.
+
+        return
+      }
+      // else:
+      //   "then" branch always taken.
+      //
+      //   TODO:
+      //     - search body for a break condition
+      //     - search body for mutations of control
+      //
+      //   If no break or no control mutation is found, then the loop is
+      //   infinite and we should either emit an error (or a warning and
+      //   remove the branch)
+      //
+      //   For now, we have to assume there's a break or control mutation
+      //   in the loop body, so continue with generating the branch.
+    }
+    // else:
+    //   control is probably not constant
+    //
+    //   Later on when we have completed building the while construct, we
+    //   traverse possible Phi args of control to see if that makes it
+    //   constant If an arg of the control is used in the while loop, which
+    //   is common, it will be referenced by an incomplete Phi, which would
+    //   cause the constant-evaluator run in expr() to see that the operator
+    //   is variable, since the constant-evaluator doesn't have knowledge of
+    //   the fact that the arg is mutated only in the loop body.
+    //
+    //   But we know that. So, look at control.args and if an arg is an
+    //   incomplete Phi, then jump to the partial phi.arg and temporarily
+    //   replace the control.arg[N] with the phi.arg and attempt to run
+    //   the constant-evaluator. If the result is constant, we can perform
+    //   the steps above in the `if (control.op.constant) {...}` block.
+    //
+
     // end "if" block and assign condition
     ifb = s.endBlock()
-    ifb.control = control
+    ifb.setControl(control)
 
     // create "then" block, to be visited on each loop iteration
     let thenb = s.f.newBlock(BlockKind.Plain)
@@ -435,6 +536,42 @@ export class IRBuilder {
     // start "next" block and return
     s.startSealedBlock(nextb)
 
+    // possibly eliminate dead while loop.
+    // (See notes earlier in this function.)
+    // if (s.config.optimize && !control.op.constant && control.op.argLen > 0) {
+    //   let args :Value[]|undefined
+    //   for (let i = 0; i < control.args.length; i++) {
+    //     let arg = control.args[i]
+    //     if (arg.op === ops.Phi && arg.b === ifb) {
+    //       if (!args) {
+    //         args = control.args.slice() // copy
+    //       }
+    //       assert(ifb.preds[0] === entryb, `entryb not at expected index`)
+    //       args[i] = arg.args[0]
+    //     }
+    //   }
+    //   // args will be set only if we found at least one Phi in control.args
+    //   if (args) {
+    //     // attempt constant evaluation of control value
+    //     let constctrl :Value|null = null
+    //     if (args.length == 2) {
+    //       constctrl = optcf_op2(ifb, control.op, args[0], args[1])
+    //     } else if (args.length == 1) {
+    //       constctrl = optcf_op1(ifb, control.op, args[0])
+    //     }
+    //     if (constctrl && constctrl.auxIsZero()) {
+    //       // while loop never taken -- shortcut entryb -> nextb
+    //       removeEdge(entryb, 0)
+    //       entryb.succs = [nextb]
+    //       removeEdge(ifb, 0)
+    //       nextb.preds = [entryb]
+    //       // s.f.removeBlock(ifb)
+    //       // s.f.removeBlock(thenb)
+    //     }
+    //   }
+    // }
+
+    // add comments
     if (s.flags & IRBuilderFlags.Comments) {
       ifb.comment = 'while'
       thenb.comment = 'then'
@@ -474,10 +611,25 @@ export class IRBuilder {
     // generate control condition
     let control = r.expr(s.cond)
 
+    // potentially inline or eliminate branches when control is constant
+    if (r.config.optimize && control.op.constant) {
+      if (control.auxIsZero()) {
+        // "else" branch always taken
+        if (s.els_) {
+          r.block(s.els_)
+        }
+        // else: no else branch -- entire if-expression is eliminated
+      } else {
+        // "then" branch always taken
+        r.block(s.then)
+      }
+      return
+    }
+
     // end predecessor block (leading up to and including "if")
     let ifb = r.endBlock()
     ifb.kind = BlockKind.If
-    ifb.control = control
+    ifb.setControl(control)
 
     // create blocks for then and else branches
     let thenb = r.f.newBlock(BlockKind.Plain)
@@ -516,7 +668,7 @@ export class IRBuilder {
       // if cond then A end
       thenb.succs = [elseb] // then -> else
       elseb.preds = [ifb, thenb] // else <- if, then
-      elseb.succs = null
+      elseb.succs = []
       r.startSealedBlock(elseb)
 
       if (r.flags & IRBuilderFlags.Comments) {
@@ -657,6 +809,9 @@ export class IRBuilder {
         v = r.expr(s.rhs[i])
       }
       v = r.assign(left, v)
+      if (r.flags & IRBuilderFlags.Comments && left.isIdent()) {
+        v.comment = left.toString()
+      }
     }
 
     return v as Value
@@ -701,6 +856,11 @@ export class IRBuilder {
           // attempt to evaluate constant expression
           let v = optcf_op2(r.b, op, left, right)
           if (v) {
+            // if (r.b !== v.b) {
+            //   // place a Copy when the definition is in a different block
+            //   // to maintain CFG integrity.
+            //   v = r.copy(v)
+            // }
             return v
           }
         }
@@ -715,6 +875,11 @@ export class IRBuilder {
         // attempt to evaluate constant expression
         let v = optcf_op1(r.b, op, left)
         if (v) {
+          // if (r.b !== v.b) {
+          //   // place a Copy when the definition is in a different block
+          //   // to maintain CFG integrity.
+          //   v = r.copy(v)
+          // }
           return v
         }
       }
@@ -728,6 +893,35 @@ export class IRBuilder {
 
     dlog(`TODO: handle ${s.constructor.name}`)
     return r.nilValue()
+  }
+
+
+  copy(v :Value) :Value {
+    return this.b.newValue1(ops.Copy, v.type, v)
+  }
+
+
+  tmpNames :TmpName[] = []
+  tmpNameBytes :Uint8Array|null = null
+  tmpNameHash :int = 0
+
+  allocTmpName() :TmpName {
+    let n = this.tmpNames.pop()
+    if (!n) {
+      if (this.tmpNameBytes) {
+        n = new TmpName(this.tmpNameHash, this.tmpNameBytes)
+      } else {
+        n = asciiByteStr('tmp')
+        this.tmpNameBytes = n.bytes
+        this.tmpNameHash = n.hash
+      }
+    }
+    return n
+  }
+
+
+  freeTmpName(n :TmpName) {
+    this.tmpNames.push(n)
   }
 
 
@@ -783,7 +977,7 @@ export class IRBuilder {
     const s = this
     assert(n.y != null)
 
-    let tmpname = asciiByteStr('tmp') // TODO: use `s` (just need a ref)
+    let tmpname = s.allocTmpName()
 
     let left = s.expr(n.x)
     s.writeVariable(tmpname, left)
@@ -796,17 +990,17 @@ export class IRBuilder {
     // end entry "if" block
     let ifb = s.endBlock()
     ifb.kind = BlockKind.If
-    ifb.control = left
+    ifb.setControl(left)
 
     if (n.op == token.OROR) {
       // flip branches; equivalent to "ifFalse"/"ifz"
-      contb.likely = BranchPrediction.Likely
-      rightb.likely = BranchPrediction.Unlikely
+      // contb.likely = BranchPrediction.Likely
+      // rightb.likely = BranchPrediction.Unlikely
       ifb.succs = [contb, rightb] // if -> contb, rightb
     } else {
       assert(n.op == token.ANDAND)
-      rightb.likely = BranchPrediction.Likely
-      contb.likely = BranchPrediction.Unlikely
+      // rightb.likely = BranchPrediction.Likely
+      // contb.likely = BranchPrediction.Unlikely
       ifb.succs = [rightb, contb] // if -> rightb, contb
     }
 
@@ -819,8 +1013,9 @@ export class IRBuilder {
     //   s.writeVariable(tmpname, right)
     // and then navigate the resulting Phi when lowering to target code?
     //
-    let tmpv = s.b.newValue1(ops.Copy, right.type, right)
-    s.writeVariable(tmpname, tmpv)
+    // let tmpv = s.b.newValue1(ops.Copy, right.type, right)
+    // s.writeVariable(tmpname, tmpv)
+    s.writeVariable(tmpname, right)
 
     rightb = s.endBlock()
     rightb.succs = [contb] // rightb -> contb
@@ -831,7 +1026,13 @@ export class IRBuilder {
     contb.preds = [ifb, rightb] // contb <- ifb, rightb
     s.startSealedBlock(contb)
 
-    return s.readVariable(tmpname, t_bool, null)
+    let v = s.readVariable(tmpname, t_bool, null)
+
+    // remove tmpname
+    s.removeVariable(ifb, tmpname)
+    s.freeTmpName(tmpname)
+
+    return v
   }
 
 
@@ -860,9 +1061,11 @@ export class IRBuilder {
       for (let i = 0; i < argvals.length; i++) {
         let v = argvals[i]
         let v2 = s.b.newValue1(ops.CallArg, v.type, v)
-        let param = fx.sig.params[i]
-        if (param.name) {
-          v2.comment = funstr + param.name.toString()
+        if (s.flags & IRBuilderFlags.Comments) {
+          let param = fx.sig.params[i]
+          if (param.name) {
+            v2.comment = funstr + param.name.toString()
+          }
         }
       }
     } else {
@@ -914,6 +1117,15 @@ export class IRBuilder {
   }
 
 
+  removeVariable(b :Block, name :ByteStr) :bool {
+    if (b === this.b) {
+      return this.vars.delete(name)
+    }
+    let m = this.defvars[b.id]
+    return m ? m.delete(name) : false
+  }
+
+
   readGlobal(name :ByteStr) :Value {
     const s = this
     dlog(`TODO readGlobal ${name}`)
@@ -927,15 +1139,30 @@ export class IRBuilder {
     if (!b || b === s.b) {
       s.vars.set(name, v)
     } else {
-      while (s.defvars.length <= b.id) {
-        // fill any holes
-        s.defvars.push(null)
-      }
+      // while (s.defvars.length <= b.id) {
+      //   // fill any holes
+      //   s.defvars.push(null)
+      // }
       let m = s.defvars[b.id]
       if (m) {
         m.set(name, v)
       } else {
         s.defvars[b.id] = new Map<ByteStr,Value>([[name, v]])
+      }
+    }
+
+    if (!(name instanceof TmpName)) {
+      // TODO: find a better and more efficient way to map a LocalSlot
+      // in a map structure. For now, we use a string representation of its
+      // internal state, but that's pretty slow.
+      // Also, when we find a way to actually key with a LocalSlot, we can
+      // simplify Fun.namedValues to be Map<LocalSlot,Value[]>
+      let local = new LocalSlot(name, v.type, 0)
+      let e = s.f.namedValues.get(local.key())
+      if (e) {
+        e.values.push(v)
+      } else {
+        s.f.namedValues.set(local.key(), { local, values: [v] })
       }
     }
   }
@@ -965,13 +1192,13 @@ export class IRBuilder {
       val = b.newPhi(t)
       s.addIncompletePhi(val, name, b)
 
-    } else if (b.preds && b.preds.length == 1) {
+    } else if (b.preds.length == 1) {
       dlog(`${b} ${name} common case: single predecessor ${b.preds[0]}`)
       // Optimize the common case of one predecessor: No phi needed
       val = s.readVariable(name, t, b.preds[0])
       dlog(`found ${name} : ${val}`)
 
-    } else if (!b.preds || b.preds.length == 0) {
+    } else if (b.preds.length == 0) {
       dlog(`${b} ${name} uncommon case: outside of function`)
       // entry block
       val = s.readGlobal(name)
@@ -993,62 +1220,18 @@ export class IRBuilder {
   addPhiOperands(name :ByteStr, phi :Value) :Value {
     const s = this
     assert(phi.op === ops.Phi)
-    assert(phi.b.preds, 'phi in block without predecessors')
+    assert(phi.b.preds.length > 0, 'phi in block without predecessors')
     // Determine operands from predecessors
     dlog(`${name} phi=${phi}`)
-    for (let pred of phi.b.preds as Block[]) {
+    for (let pred of phi.b.preds) {
       dlog(`  ${pred}`)
       let v = s.readVariable(name, phi.type, pred)
       if (v !== phi) {
         dlog(`  ${pred} ${v}<${v.op}>`)
-        phi.appendArg(v)
+        phi.addArg(v)
       }
     }
-    return s.tryRemoveTrivialPhi(phi)
-  }
-
-
-  tryRemoveTrivialPhi(phi :Value) :Value {
-    const s = this
-    assert(phi.op === ops.Phi)
-    let same :Value|null = null
-    dlog(`${phi.b} ${phi}`)
-
-    assert(phi.args != null, "phi without operands")
-    for (let operand of phi.args as Value[]) {
-      if (operand === same || operand === phi) {
-        continue // Unique value or self−reference
-      }
-      if (same != null) {
-        dlog(`${phi.b} ${phi} not trivial (keep)`)
-        return phi // The phi merges at least two values: not trivial
-      }
-      same = operand
-    }
-
-    dlog(`${phi.b} ${phi} is trivial (remove)`)
-
-    if (same == null) {
-      dlog(`${phi.b} ${phi} unreachable or in the start block`)
-      same = new Value(0, phi.b, ops.Invalid, t_nil, null) // dummy FIXME
-      // same = new Undef() // The phi is unreachable or in the start block
-    }
-
-    let users = phi.users;  // Remember all users
-    dlog(`${phi.b} replace ${phi} with ${same} (aux = ${same.aux})`)
-    // Reroute all uses of phi to same and remove phi
-    phi.b.replaceValue(phi, same)
-    //phi.replaceBy(same)
-    assert(phi.uses == 0, `still used even after Value.replaceBy`)
-
-    // Try to recursively remove all phi users, which might have become trivial
-    for (let user of users) {
-      if (user.op === ops.Phi && user !== phi) {
-        s.tryRemoveTrivialPhi(user)
-      }
-    }
-
-    return same
+    return phi
   }
 
 

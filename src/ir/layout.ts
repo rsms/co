@@ -27,7 +27,7 @@ export function layoutRegallocOrder(f :Fun) :Block[] {
       continue
     }
 
-    let npreds = b.preds ? b.preds.length : 0
+    let npreds = b.preds.length
     indegree[b.id] = npreds
     if (npreds == 0) {
       zerodegree.add(b.id)
@@ -51,7 +51,7 @@ export function layoutRegallocOrder(f :Fun) :Block[] {
       break
     }
 
-    if (b.succs) for (let c of b.succs) {
+    for (let c of b.succs) {
       indegree[c.id]--
       if (indegree[c.id] == 0) {
         posdegree.delete(c.id)
@@ -66,10 +66,10 @@ export function layoutRegallocOrder(f :Fun) :Block[] {
     let likely :Block|undefined|null
     switch (b.likely) {
       case BranchPrediction.Likely:
-        likely = b.succs && b.succs[0]
+        likely = b.succs[0]
         break
       case BranchPrediction.Unlikely:
-        likely = b.succs && b.succs[1]
+        likely = b.succs[1]
         break
     }
     if (likely && !scheduled[likely.id]) {
@@ -81,7 +81,7 @@ export function layoutRegallocOrder(f :Fun) :Block[] {
     bid = 0
     let mindegree = maxblocks
     let lastb = order[orderi-1]
-    if (lastb.succs) for (let c of lastb.succs) {
+    for (let c of lastb.succs) {
       if (scheduled[c.id] || c.kind == BlockKind.Ret) {
         continue
       }

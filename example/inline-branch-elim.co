@@ -1,0 +1,63 @@
+//
+// These test the inline dead-branch elimination
+// of ir/builder (only enabled when optimize=true).
+//
+// In an essence, the builder evaluates constant-
+// expressions as it builds the IR, and when it is
+// about to build branches, like "if", it will look
+// to see if the control value is constant and only
+// only build the branch that is taken.
+//
+// This can mean that no branch at all is built, in
+// the case of `if 0 { ... }`.
+//
+
+fun eliminate_branch int {
+  x = 1
+  y = 2
+  if x > y {  // branch eliminated
+    x = x + 30
+  }
+  x + y
+}
+
+fun inline_then_branch int {
+  x = 1
+  y = 2
+  if x < y {  // branch always taken
+    x = x + 30
+  } else {  // branch never taken
+    x = x + 40
+  }
+  x + y
+}
+
+fun inline_else_branch int {
+  x = 1
+  y = 2
+  if x > y {  // branch never taken
+    x = x + 30
+  } else {  // branch always taken
+    x = x + 40
+  }
+  x + y
+}
+
+fun elim_trivial_while_branch int {
+  x = 1
+  y = 2
+  while 0 {  // branch never taken
+    x = x + 30
+  }
+  x + y
+}
+
+fun elim_while_branch int {
+  x = 1
+  y = 2
+  while x > y {  // branch never taken
+    x = x + 30
+  }
+  x + y
+}
+
