@@ -437,7 +437,11 @@ class Console {
     }
 
     c.el.appendChild(ent)
-    ent.scrollIntoViewIfNeeded()
+    if (ent.scrollIntoViewIfNeeded) {
+      ent.scrollIntoViewIfNeeded()
+    } else {
+      ent.scrollIntoView()
+    }
   }
 
   log() { this.logv(null, [].slice.call(arguments)) }
