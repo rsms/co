@@ -287,9 +287,9 @@ body {
         <input name="optimize" type="checkbox" checked>
         Optimize
       </label>
-      <label title='Do not generate target-specific IR (target in this playground is "covm")'>
-        <input name="generic-ir" type="checkbox" checked>
-        Generic IR
+      <label title='Generate target-specific code (target=covm in this playground)'>
+        <input name="codegen" type="checkbox">
+        Codegen
       </label>
     </div>
   </div>
@@ -315,7 +315,7 @@ let monotime = (
 let ui = new UIBindings(document.location.search)
 
 let optimizeVar = ui.bind('optimize', () => setNeedsCompile())
-let genericIRVar = ui.bind('generic-ir', () => setNeedsCompile())
+let codegenVar = ui.bind('codegen', () => setNeedsCompile())
 
 
 let _templateCache = {}
@@ -532,7 +532,7 @@ var pkg = {
     try {
       let compileOptions = {
         noOptimize: !optimizeVar.getValue(),
-        genericIR: genericIRVar.getValue(),
+        genericIR: !codegenVar.getValue(),
         noIR: false,
       }
       compilePkg(sources, compileOptions).then(r => {
