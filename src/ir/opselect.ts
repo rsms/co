@@ -2,6 +2,7 @@ import { token } from '../token'
 import {
   Mem,
   BasicType,
+  t_bool,
   t_u8,
   t_i8,
   t_u16,
@@ -290,84 +291,94 @@ export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
 
 // opselectConv returns the IR operation for converting x to y.
 //
-export function opselectConv(x :BasicType, y :BasicType) :Op {
-  switch (x) {
+export function opselectConv(src :BasicType, dst :BasicType) :Op {
+  switch (src) {
 
-  case t_i8: switch (y) {
-    case t_i16: return ops.SignExtI8to16
-    case t_i32: return ops.SignExtI8to32
-    case t_i64: return ops.SignExtI8to64
+  case t_i8: switch (dst) {
+    case t_bool: return ops.TruncI8toBool
+    case t_i16:  return ops.SignExtI8to16
+    case t_i32:  return ops.SignExtI8to32
+    case t_i64:  return ops.SignExtI8to64
   }; break
 
-  case t_u8: switch (y) {
-    case t_u16: return ops.ZeroExtI8to16
-    case t_u32: return ops.ZeroExtI8to32
-    case t_u64: return ops.ZeroExtI8to64
+  case t_u8: switch (dst) {
+    case t_bool: return ops.TruncI8toBool
+    case t_u16:  return ops.ZeroExtI8to16
+    case t_u32:  return ops.ZeroExtI8to32
+    case t_u64:  return ops.ZeroExtI8to64
   }; break
 
-  case t_i16: switch (y) {
-    case t_i8:  return ops.TruncI16to8
-    case t_i32: return ops.SignExtI16to32
-    case t_i64: return ops.SignExtI16to64
+  case t_i16: switch (dst) {
+    case t_bool: return ops.TruncI16toBool
+    case t_i8:   return ops.TruncI16to8
+    case t_i32:  return ops.SignExtI16to32
+    case t_i64:  return ops.SignExtI16to64
   }; break
 
-  case t_u16: switch (y) {
-    case t_u8:  return ops.TruncI16to8
-    case t_u32: return ops.ZeroExtI16to32
-    case t_u64: return ops.ZeroExtI16to64
+  case t_u16: switch (dst) {
+    case t_bool: return ops.TruncI16toBool
+    case t_u8:   return ops.TruncI16to8
+    case t_u32:  return ops.ZeroExtI16to32
+    case t_u64:  return ops.ZeroExtI16to64
   }; break
 
-  case t_i32: switch (y) {
-    case t_i8:  return ops.TruncI32to8
-    case t_i16: return ops.TruncI32to16
-    case t_i64: return ops.SignExtI32to64
-    case t_f32: return ops.ConvI32toF32
-    case t_f64: return ops.ConvI32toF64
+  case t_i32: switch (dst) {
+    case t_bool: return ops.TruncI32toBool
+    case t_i8:   return ops.TruncI32to8
+    case t_i16:  return ops.TruncI32to16
+    case t_i64:  return ops.SignExtI32to64
+    case t_f32:  return ops.ConvI32toF32
+    case t_f64:  return ops.ConvI32toF64
   }; break
 
-  case t_u32: switch (y) {
-    case t_u8:  return ops.TruncI32to8
-    case t_u16: return ops.TruncI32to16
-    case t_u64: return ops.ZeroExtI32to64
-    case t_f32: return ops.ConvU32toF32
-    case t_f64: return ops.ConvU32toF64
+  case t_u32: switch (dst) {
+    case t_bool: return ops.TruncI32toBool
+    case t_u8:   return ops.TruncI32to8
+    case t_u16:  return ops.TruncI32to16
+    case t_u64:  return ops.ZeroExtI32to64
+    case t_f32:  return ops.ConvU32toF32
+    case t_f64:  return ops.ConvU32toF64
   }; break
 
-  case t_i64: switch (y) {
-    case t_i8:  return ops.TruncI64to8
-    case t_i16: return ops.TruncI64to16
-    case t_i32: return ops.TruncI64to32
-    case t_f32: return ops.ConvI64toF32
-    case t_f64: return ops.ConvI64toF64
+  case t_i64: switch (dst) {
+    case t_bool: return ops.TruncI64toBool
+    case t_i8:   return ops.TruncI64to8
+    case t_i16:  return ops.TruncI64to16
+    case t_i32:  return ops.TruncI64to32
+    case t_f32:  return ops.ConvI64toF32
+    case t_f64:  return ops.ConvI64toF64
   }; break
 
-  case t_u64: switch (y) {
-    case t_u8:  return ops.TruncI64to8
-    case t_u16: return ops.TruncI64to16
-    case t_u32: return ops.TruncI64to32
-    case t_f32: return ops.ConvU64toF32
-    case t_f64: return ops.ConvU64toF64
+  case t_u64: switch (dst) {
+    case t_bool: return ops.TruncI64toBool
+    case t_u8:   return ops.TruncI64to8
+    case t_u16:  return ops.TruncI64to16
+    case t_u32:  return ops.TruncI64to32
+    case t_f32:  return ops.ConvU64toF32
+    case t_f64:  return ops.ConvU64toF64
   }; break
 
-  case t_f32: switch (y) {
-    case t_i32: return ops.ConvF32toI32
-    case t_u32: return ops.ConvF32toU32
-    case t_i64: return ops.ConvF32toI64
-    case t_u64: return ops.ConvF32toU64
-    case t_f64: return ops.ConvF32toF64
+  case t_f32: switch (dst) {
+    case t_bool: return ops.TruncF32toBool
+    case t_i32:  return ops.ConvF32toI32
+    case t_u32:  return ops.ConvF32toU32
+    case t_i64:  return ops.ConvF32toI64
+    case t_u64:  return ops.ConvF32toU64
+    case t_f64:  return ops.ConvF32toF64
   }; break
 
-  case t_f64: switch (y) {
-    case t_i32: return ops.ConvF64toI32
-    case t_u32: return ops.ConvF64toU32
-    case t_i64: return ops.ConvF64toI64
-    case t_u64: return ops.ConvF64toU64
-    case t_f32: return ops.ConvF64toF32
+  case t_f64: switch (dst) {
+    case t_bool: return ops.TruncF64toBool
+    case t_i32:  return ops.ConvF64toI32
+    case t_u32:  return ops.ConvF64toU32
+    case t_i64:  return ops.ConvF64toI64
+    case t_u64:  return ops.ConvF64toU64
+    case t_f32:  return ops.ConvF64toF32
   }; break
 
   } // switch
 
   // unhandled operator token
-  assert(false, `invalid conversion ${x} -> ${y}`)
+  assert(false, `invalid conversion ${src} -> ${dst}`)
   return ops.Invalid
 }

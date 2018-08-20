@@ -1567,9 +1567,12 @@ export class Parser extends scanner.Scanner {
       const tprec = p.prec
       const op = p.tok
       p.next()
-      x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx))
+
+      let y = p.binaryExpr(tprec, ctx)
+      x = new Operation(pos, p.scope, op, x, y)
 
       p.types.resolve(x)
+
       // Note: We need to resolve types here rather than outside this
       // loop since x may be an identifier in the left-hand-side of an
       // assignment operation, which would cause type resolution to fail,

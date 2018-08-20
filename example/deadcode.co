@@ -17,38 +17,21 @@
 //   x + y
 // }
 
-fun shortcircuit1 int {
+// fun foo2 int {
+//   x = 1
+//   y = x > 0
+//   z = 9
+//   while y {  // branch never taken
+//     x = x + 1
+//   }
+//   x
+// }
+
+fun shortcircuit1(a int) bool {
   x = 1
-  y = x > 0
-  z = 9
-  while y {  // branch never taken
-    x = x + 1
-  }
-  x
+  y = 3
+  x && a && y
 }
-
-/*
-
-elim_while_branch ()->int
-  b0:
-    v0 = ConstI32 <i32> [1] : 1  // x
-    v1 = ConstI32 <i32> [2] : 2  // y
-    v2 = ConstI32 <i32> [91] : 1  // z
-  cont —> b1
-
-  b1: <— b0, b2  // while
-    v3 = Phi <i32> v0 v2 : 2
-    v5 = GreaterS32 <bool> v3 v1 : 1
-  if v5 —> b2, b3
-
-  b2: <— b1  // then
-  cont —> b1
-
-  b3: <— b1  // endwhile
-    v7 = AddI32 <i32> v3 v1 : 1
-  ret v7
-
-*/
 
 // fun foo(x int) int {
 //   x = 1

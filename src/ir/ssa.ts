@@ -493,6 +493,10 @@ export class Fun {
     return v as Value
   }
 
+  constBool(c :bool) :Value {
+    return this.constVal(t_bool, c ? 1 : 0)
+  }
+
   removeBlock(b :Block) {
     let i = this.blocks.indexOf(b)
     assert(i != -1, `block ${b} not part of function`)

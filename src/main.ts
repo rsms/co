@@ -239,6 +239,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
 
       // run IP passes separately for debugging (normally run online)
       let stopAtPass = options.genericIR ? "lower" : ""
+      // stopAtPass = "generic deadcode"
       for (let [_, f] of irb.pkg.funs) {
         runPassesDev(f, config, stopAtPass, pass => {
           if (isNodeJsLikeEnv) {

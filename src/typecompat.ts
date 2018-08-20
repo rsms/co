@@ -10,6 +10,7 @@ import {
   BasicType,
   t_uint,
   t_int,
+  t_bool,
   t_i8,
   t_i16,
   t_i32,
@@ -39,6 +40,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_uint, TypeCompat.LOSSLESS],
     [t_int,  TypeCompat.LOSSLESS],
 
+    [t_bool,TypeCompat.LOSSLESS],
+
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
     [t_i32, TypeCompat.LOSSLESS],
@@ -55,6 +58,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
   [t_i64, new Map<BasicType,TypeCompat>([
     [t_uint, uintz <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSLESS],
+
+    [t_bool,TypeCompat.LOSSLESS],
 
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
@@ -73,6 +78,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
+    [t_bool,TypeCompat.LOSSLESS],
+
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
     [t_i32, TypeCompat.LOSSLESS],
@@ -90,6 +97,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
+    [t_bool,TypeCompat.LOSSLESS],
+
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
     [t_i64, TypeCompat.LOSSY],
@@ -105,6 +114,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
 
   [t_uint, new Map<BasicType,TypeCompat>([
     [t_int, TypeCompat.LOSSLESS],
+
+    [t_bool,TypeCompat.LOSSLESS],
 
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
@@ -122,6 +133,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
 
   [t_int, new Map<BasicType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
+
+    [t_bool,TypeCompat.LOSSLESS],
 
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
@@ -141,6 +154,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
+    [t_bool,TypeCompat.LOSSLESS],
+
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
     [t_i32, TypeCompat.LOSSY],
@@ -157,6 +172,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
   [t_i16, new Map<BasicType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
+
+    [t_bool,TypeCompat.LOSSLESS],
 
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i32, TypeCompat.LOSSY],
@@ -175,6 +192,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
+    [t_bool,TypeCompat.LOSSLESS],
+
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSY],
     [t_i32, TypeCompat.LOSSY],
@@ -192,6 +211,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
+    [t_bool,TypeCompat.LOSSLESS],
+
     [t_i16, TypeCompat.LOSSY],
     [t_i32, TypeCompat.LOSSY],
     [t_i64, TypeCompat.LOSSY],
@@ -205,9 +226,49 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
+  // strict boolean conversion (nothing can be converted to bool)
+  // [t_bool, new Map<BasicType,TypeCompat>([
+  //   [t_uint, TypeCompat.LOSSY],
+  //   [t_int,  TypeCompat.LOSSY],
+
+  //   [t_i8,  TypeCompat.LOSSY],
+  //   [t_i16, TypeCompat.LOSSY],
+  //   [t_i32, TypeCompat.LOSSY],
+  //   [t_i64, TypeCompat.LOSSY],
+
+  //   [t_u8,  TypeCompat.LOSSY],
+  //   [t_u16, TypeCompat.LOSSY],
+  //   [t_u32, TypeCompat.LOSSY],
+  //   [t_u64, TypeCompat.LOSSY],
+
+  //   [t_f32, TypeCompat.LOSSY],
+  //   [t_f64, TypeCompat.LOSSY],
+  // ])],
+
+  // allow conversion to bool without errors
+  [t_bool, new Map<BasicType,TypeCompat>([
+    [t_uint, TypeCompat.LOSSLESS],
+    [t_int,  TypeCompat.LOSSLESS],
+
+    [t_i8,  TypeCompat.LOSSLESS],
+    [t_i16, TypeCompat.LOSSLESS],
+    [t_i32, TypeCompat.LOSSLESS],
+    [t_i64, TypeCompat.LOSSLESS],
+
+    [t_u8,  TypeCompat.LOSSLESS],
+    [t_u16, TypeCompat.LOSSLESS],
+    [t_u32, TypeCompat.LOSSLESS],
+    [t_u64, TypeCompat.LOSSLESS],
+
+    [t_f32, TypeCompat.LOSSLESS],
+    [t_f64, TypeCompat.LOSSLESS],
+  ])],
+
   [t_f32, new Map<BasicType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
+
+    [t_bool,TypeCompat.LOSSLESS],
 
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],
@@ -225,6 +286,8 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
   [t_f64, new Map<BasicType,TypeCompat>([
     [t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+
+    [t_bool,TypeCompat.LOSSLESS],
 
     [t_i8,  TypeCompat.LOSSLESS],
     [t_i16, TypeCompat.LOSSLESS],

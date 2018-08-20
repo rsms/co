@@ -36,7 +36,7 @@ function fmtval(f :IRFmt, v :Value) :string {
   if (v.reg) {
     s += ` {${style.orange(v.reg.name)}}`
   }
-  // s += ` : ${style.pink(v.uses.toString())}`
+  s += ` : ${style.pink(v.uses.toString())}`
   if (v.comment) {
     s += f.style.grey('  // ' + v.comment)
   }

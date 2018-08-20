@@ -519,6 +519,14 @@ export const ops = {
   ZeroExtI16to64: op("ZeroExtU16to64", 1, {type: t_u64}), // u16 -> u64
   ZeroExtI32to64: op("ZeroExtU32to64", 1, {type: t_u64}), // u32 -> u64
   //
+  // truncations to bool
+  TruncI8toBool:  op("TruncI8toBool",  1, {type: t_bool}),
+  TruncI16toBool: op("TruncI16toBool", 1, {type: t_bool}),
+  TruncI32toBool: op("TruncI32toBool", 1, {type: t_bool}),
+  TruncI64toBool: op("TruncI64toBool", 1, {type: t_bool}),
+  TruncF32toBool: op("TruncF32toBool", 1, {type: t_bool}),
+  TruncF64toBool: op("TruncF64toBool", 1, {type: t_bool}),
+  //
   // truncations
   TruncI16to8:  op("TruncI16to8",  1), // i16 -> i8  ; u16 -> u8
   TruncI32to8:  op("TruncI32to8",  1), // i32 -> i8  ; u32 -> u8

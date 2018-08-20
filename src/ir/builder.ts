@@ -8,19 +8,25 @@ import {
   Type,
   BasicType,
   FunType,
-  t_nil,
-  t_bool,
+
+  t_nil, t_bool,
+  t_u8, t_i8, t_u16, t_i16,
+  t_u32, t_i32, t_u64, t_i64,
+  // t_uint, t_int, t_usize, t_isize,
+  t_f32,
+  t_f64,
+  // t_str0,
 } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops } from './op'
 import { Value, Block, BlockKind, Fun, Pkg } from './ssa'
-import { opselect1, opselect2 } from './opselect'
+import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'
 import { printir } from './repr'
 import { LocalSlot } from './localslot'
 
-// import { debuglog as dlog } from '../util'
-const dlog = function(..._ :any[]){} // silence dlog
+import { debuglog as dlog } from '../util'
+// const dlog = function(..._ :any[]){} // silence dlog
 
 
 const bitypes = ast.builtInTypes
@@ -885,8 +891,22 @@ export class IRBuilder {
       return r.funcall(s)
     }
 
+    if (s instanceof ast.TypeConvExpr) {
+      return r.conv(s)
+    }
+
     dlog(`TODO: handle ${s.constructor.name}`)
     return r.nilValue()
+  }
+
+
+  conv(s :ast.TypeConvExpr) :Value {
+    const r = this
+    let t = s.type as BasicType
+    assert(t instanceof BasicType)
+    let x = r.expr(s.expr)
+    let op = opselectConv(x.type, t)
+    return r.b.newValue1(op, t, x)
   }
 
 
@@ -1014,7 +1034,8 @@ export class IRBuilder {
     rightb = s.endBlock()
     rightb.succs = [contb] // rightb -> contb
 
-    assert(t.equals(right.type), "operands have different types")
+    assert(t.equals(right.type),
+      `operands have different types: ${t} <> ${right.type}`)
 
     // start continuation block
     contb.preds = [ifb, rightb] // contb <- ifb, rightb

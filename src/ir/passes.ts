@@ -67,8 +67,8 @@ const passes :Pass[] = [
   // optional("elim unread autos", elimUnreadAutos),
   required("lowered deadcode", deadcode),
   // required("checkLower", checkLower),
-  optional("early phielim", phielim),
-  optional("early copyelim", copyelim),
+  optional("late phielim", phielim),
+  optional("late copyelim", copyelim),
   // optional("tighten", tighten), // move values closer to their uses
   // optional("phi tighten", phiTighten),
   optional("late deadcode", deadcode),
