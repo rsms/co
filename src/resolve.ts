@@ -348,12 +348,14 @@ export class TypeResolver extends ErrorReporter {
 
       if (n.op > token.cmpop_beg && n.op < token.cmpop_end) {
         // Comparison operations always yield boolean values.
-        // Make sure operands are booleans -- convert as needed.
-        if (xt !== t_bool) {
-          n.x = new TypeConvExpr(n.x.pos, n.x.scope, n.x, t_bool)
-        }
-        if (yt !== t_bool) {
-          n.y = new TypeConvExpr(n.y.pos, n.y.scope, n.y, t_bool)
+        if (n.op == token.ANDAND || n.op == token.OROR) {
+          // Make sure operands are booleans -- convert as needed.
+          if (xt !== t_bool) {
+            n.x = new TypeConvExpr(n.x.pos, n.x.scope, n.x, t_bool)
+          }
+          if (yt !== t_bool) {
+            n.y = new TypeConvExpr(n.y.pos, n.y.scope, n.y, t_bool)
+          }
         }
         return t_bool
       }

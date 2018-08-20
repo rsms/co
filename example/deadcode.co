@@ -30,7 +30,7 @@
 fun shortcircuit1(a int) bool {
   x = 1
   y = 3
-  x && a && y
+  x && a && y > 0
 }
 
 // fun foo(x int) int {

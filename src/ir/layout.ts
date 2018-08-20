@@ -1,9 +1,16 @@
 import { Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
 
+// layout orders basic blocks in f with the goal of minimizing control flow instructions.
+// After this phase returns, the order of f.Blocks matters and is the order
+// in which those blocks will appear in the assembly output.
+export function layout(f :Fun) {
+  f.blocks = layoutOrder(f)
+}
+
 // layout orders basic blocks in f with the goal of minimizing control flow
 // instructions.
 //
-export function layoutRegallocOrder(f :Fun) :Block[] {
+export function layoutOrder(f :Fun) :Block[] {
   const maxblocks = f.numBlocks()
 
   let order = new Array<Block>(maxblocks)

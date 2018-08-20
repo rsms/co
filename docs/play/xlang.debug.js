@@ -5588,7 +5588,8 @@ class Parser extends Scanner {
             const tprec = p.prec;
             const op = p.tok;
             p.next();
-            x = new Operation(pos, p.scope, op, x, p.binaryExpr(tprec, ctx));
+            let y = p.binaryExpr(tprec, ctx);
+            x = new Operation(pos, p.scope, op, x, y);
             p.types.resolve(x);
         }
         return x;
@@ -6711,6 +6712,7 @@ const typeCompatMap = new Map([
     [t_u64, new Map([
             [t_uint, TypeCompat.LOSSLESS],
             [t_int, TypeCompat.LOSSLESS],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSLESS],
@@ -6724,6 +6726,7 @@ const typeCompatMap = new Map([
     [t_i64, new Map([
             [t_uint, uintz <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
             [t_int, TypeCompat.LOSSLESS],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSLESS],
@@ -6737,6 +6740,7 @@ const typeCompatMap = new Map([
     [t_u32, new Map([
             [t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
             [t_int, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSLESS],
@@ -6750,6 +6754,7 @@ const typeCompatMap = new Map([
     [t_i32, new Map([
             [t_uint, TypeCompat.LOSSY],
             [t_int, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i64, TypeCompat.LOSSY],
@@ -6762,6 +6767,7 @@ const typeCompatMap = new Map([
         ])],
     [t_uint, new Map([
             [t_int, TypeCompat.LOSSLESS],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSLESS],
@@ -6775,6 +6781,7 @@ const typeCompatMap = new Map([
         ])],
     [t_int, new Map([
             [t_uint, TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSLESS],
@@ -6789,6 +6796,7 @@ const typeCompatMap = new Map([
     [t_u16, new Map([
             [t_uint, TypeCompat.LOSSY],
             [t_int, TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSY],
@@ -6802,6 +6810,7 @@ const typeCompatMap = new Map([
     [t_i16, new Map([
             [t_uint, TypeCompat.LOSSY],
             [t_int, TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSY],
             [t_i64, TypeCompat.LOSSY],
@@ -6815,6 +6824,7 @@ const typeCompatMap = new Map([
     [t_u8, new Map([
             [t_uint, TypeCompat.LOSSY],
             [t_int, TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSY],
             [t_i32, TypeCompat.LOSSY],
@@ -6828,6 +6838,7 @@ const typeCompatMap = new Map([
     [t_i8, new Map([
             [t_uint, TypeCompat.LOSSY],
             [t_int, TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSY],
             [t_i32, TypeCompat.LOSSY],
             [t_i64, TypeCompat.LOSSY],
@@ -6838,9 +6849,24 @@ const typeCompatMap = new Map([
             [t_f32, TypeCompat.LOSSY],
             [t_f64, TypeCompat.LOSSY],
         ])],
+    [t_bool, new Map([
+            [t_uint, TypeCompat.LOSSLESS],
+            [t_int, TypeCompat.LOSSLESS],
+            [t_i8, TypeCompat.LOSSLESS],
+            [t_i16, TypeCompat.LOSSLESS],
+            [t_i32, TypeCompat.LOSSLESS],
+            [t_i64, TypeCompat.LOSSLESS],
+            [t_u8, TypeCompat.LOSSLESS],
+            [t_u16, TypeCompat.LOSSLESS],
+            [t_u32, TypeCompat.LOSSLESS],
+            [t_u64, TypeCompat.LOSSLESS],
+            [t_f32, TypeCompat.LOSSLESS],
+            [t_f64, TypeCompat.LOSSLESS],
+        ])],
     [t_f32, new Map([
             [t_uint, TypeCompat.LOSSY],
             [t_int, TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSY],
@@ -6854,6 +6880,7 @@ const typeCompatMap = new Map([
     [t_f64, new Map([
             [t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
             [t_int, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
+            [t_bool, TypeCompat.LOSSLESS],
             [t_i8, TypeCompat.LOSSLESS],
             [t_i16, TypeCompat.LOSSLESS],
             [t_i32, TypeCompat.LOSSLESS],
@@ -7104,6 +7131,14 @@ class TypeResolver extends ErrorReporter {
             else {
                 const yt = r.resolve(n.y);
                 if (n.op > token.cmpop_beg && n.op < token.cmpop_end) {
+                    if (n.op == token.ANDAND || n.op == token.OROR) {
+                        if (xt !== t_bool) {
+                            n.x = new TypeConvExpr(n.x.pos, n.x.scope, n.x, t_bool);
+                        }
+                        if (yt !== t_bool) {
+                            n.y = new TypeConvExpr(n.y.pos, n.y.scope, n.y, t_bool);
+                        }
+                    }
                     return t_bool;
                 }
                 if (xt instanceof UnresolvedType || yt instanceof UnresolvedType) {
@@ -7495,7 +7530,6 @@ class TypeResolver extends ErrorReporter {
         return null;
     }
 }
-//# sourceMappingURL=resolve.js.map
 
 const emptyRegSet = UInt64.ZERO;
 const noReg = 255;
@@ -7803,6 +7837,12 @@ const ops = {
     ZeroExtI16to32: op("ZeroExtU16to32", 1, { type: t_u32 }),
     ZeroExtI16to64: op("ZeroExtU16to64", 1, { type: t_u64 }),
     ZeroExtI32to64: op("ZeroExtU32to64", 1, { type: t_u64 }),
+    TruncI8toBool: op("TruncI8toBool", 1, { type: t_bool }),
+    TruncI16toBool: op("TruncI16toBool", 1, { type: t_bool }),
+    TruncI32toBool: op("TruncI32toBool", 1, { type: t_bool }),
+    TruncI64toBool: op("TruncI64toBool", 1, { type: t_bool }),
+    TruncF32toBool: op("TruncF32toBool", 1, { type: t_bool }),
+    TruncF64toBool: op("TruncF64toBool", 1, { type: t_bool }),
     TruncI16to8: op("TruncI16to8", 1),
     TruncI32to8: op("TruncI32to8", 1),
     TruncI32to16: op("TruncI32to16", 1),
@@ -8365,6 +8405,9 @@ class Fun {
         }
         return v;
     }
+    constBool(c) {
+        return this.constVal(t_bool, c ? 1 : 0);
+    }
     removeBlock(b) {
         let i = this.blocks.indexOf(b);
         assert(i != -1, `block ${b} not part of function`);
@@ -8710,7 +8753,114 @@ function opselect2(tok, x, y) {
     assert(false, `invalid token.${token[tok]} with types ${x}, ${y}`);
     return ops.Invalid;
 }
-
+function opselectConv(src, dst) {
+    switch (src) {
+        case t_i8:
+            switch (dst) {
+                case t_bool: return ops.TruncI8toBool;
+                case t_i16: return ops.SignExtI8to16;
+                case t_i32: return ops.SignExtI8to32;
+                case t_i64: return ops.SignExtI8to64;
+            }
+            ;
+            break;
+        case t_u8:
+            switch (dst) {
+                case t_bool: return ops.TruncI8toBool;
+                case t_u16: return ops.ZeroExtI8to16;
+                case t_u32: return ops.ZeroExtI8to32;
+                case t_u64: return ops.ZeroExtI8to64;
+            }
+            ;
+            break;
+        case t_i16:
+            switch (dst) {
+                case t_bool: return ops.TruncI16toBool;
+                case t_i8: return ops.TruncI16to8;
+                case t_i32: return ops.SignExtI16to32;
+                case t_i64: return ops.SignExtI16to64;
+            }
+            ;
+            break;
+        case t_u16:
+            switch (dst) {
+                case t_bool: return ops.TruncI16toBool;
+                case t_u8: return ops.TruncI16to8;
+                case t_u32: return ops.ZeroExtI16to32;
+                case t_u64: return ops.ZeroExtI16to64;
+            }
+            ;
+            break;
+        case t_i32:
+            switch (dst) {
+                case t_bool: return ops.TruncI32toBool;
+                case t_i8: return ops.TruncI32to8;
+                case t_i16: return ops.TruncI32to16;
+                case t_i64: return ops.SignExtI32to64;
+                case t_f32: return ops.ConvI32toF32;
+                case t_f64: return ops.ConvI32toF64;
+            }
+            ;
+            break;
+        case t_u32:
+            switch (dst) {
+                case t_bool: return ops.TruncI32toBool;
+                case t_u8: return ops.TruncI32to8;
+                case t_u16: return ops.TruncI32to16;
+                case t_u64: return ops.ZeroExtI32to64;
+                case t_f32: return ops.ConvU32toF32;
+                case t_f64: return ops.ConvU32toF64;
+            }
+            ;
+            break;
+        case t_i64:
+            switch (dst) {
+                case t_bool: return ops.TruncI64toBool;
+                case t_i8: return ops.TruncI64to8;
+                case t_i16: return ops.TruncI64to16;
+                case t_i32: return ops.TruncI64to32;
+                case t_f32: return ops.ConvI64toF32;
+                case t_f64: return ops.ConvI64toF64;
+            }
+            ;
+            break;
+        case t_u64:
+            switch (dst) {
+                case t_bool: return ops.TruncI64toBool;
+                case t_u8: return ops.TruncI64to8;
+                case t_u16: return ops.TruncI64to16;
+                case t_u32: return ops.TruncI64to32;
+                case t_f32: return ops.ConvU64toF32;
+                case t_f64: return ops.ConvU64toF64;
+            }
+            ;
+            break;
+        case t_f32:
+            switch (dst) {
+                case t_bool: return ops.TruncF32toBool;
+                case t_i32: return ops.ConvF32toI32;
+                case t_u32: return ops.ConvF32toU32;
+                case t_i64: return ops.ConvF32toI64;
+                case t_u64: return ops.ConvF32toU64;
+                case t_f64: return ops.ConvF32toF64;
+            }
+            ;
+            break;
+        case t_f64:
+            switch (dst) {
+                case t_bool: return ops.TruncF64toBool;
+                case t_i32: return ops.ConvF64toI32;
+                case t_u32: return ops.ConvF64toU32;
+                case t_i64: return ops.ConvF64toI64;
+                case t_u64: return ops.ConvF64toU64;
+                case t_f32: return ops.ConvF64toF32;
+            }
+            ;
+            break;
+    }
+    assert(false, `invalid conversion ${src} -> ${dst}`);
+    return ops.Invalid;
+}
 //# sourceMappingURL=opselect.js.map
 
 class IRFmt {
@@ -8738,6 +8888,7 @@ function fmtval(f, v) {
     if (v.reg) {
         s += ` {${style.orange(v.reg.name)}}`;
     }
+    s += ` : ${style.pink(v.uses.toString())}`;
     if (v.comment) {
         s += f.style.grey('  // ' + v.comment);
     }
@@ -8851,6 +9002,7 @@ function fmtir(v, options) {
     printir(v, w, options);
     return str.replace(/\r?\n$/, '');
 }
+//# sourceMappingURL=repr.js.map
 
 class LocalSlot {
     constructor(n, type, offs) {
@@ -9331,8 +9483,19 @@ class IRBuilder {
         if (s instanceof CallExpr) {
             return r.funcall(s);
         }
+        if (s instanceof TypeConvExpr) {
+            return r.conv(s);
+        }
         dlog(`TODO: handle ${s.constructor.name}`);
         return r.nilValue();
+    }
+    conv(s) {
+        const r = this;
+        let t = s.type;
+        assert(t instanceof BasicType);
+        let x = r.expr(s.expr);
+        let op = opselectConv(x.type, t);
+        return r.b.newValue1(op, t, x);
     }
     copy(v) {
         return this.b.newValue1(ops.Copy, v.type, v);
@@ -9379,7 +9542,7 @@ class IRBuilder {
         s.writeVariable(tmpname, right);
         rightb = s.endBlock();
         rightb.succs = [contb];
-        assert(t.equals(right.type), "operands have different types");
+        assert(t.equals(right.type), `operands have different types: ${t} <> ${right.type}`);
         contb.preds = [ifb, rightb];
         s.startSealedBlock(contb);
         let v = s.readVariable(tmpname, t_bool, null);
@@ -10017,6 +10180,8 @@ function removeEdge(b, i) {
 //# sourceMappingURL=deadcode.js.map
 
 function shortcircuit(f) {
+    let ct = null;
+    let cf = null;
     for (let b of f.blocks) {
         for (let v of b.values) {
             if (v.op !== ops.Phi) {
@@ -10034,7 +10199,86 @@ function shortcircuit(f) {
                 if (p.control !== a) {
                     continue;
                 }
+                let ei = p.succs.indexOf(b);
+                if (ei == 0) {
+                    if (!ct) {
+                        ct = f.constBool(true);
+                    }
+                    v.setArg(i, ct);
+                }
+                else {
+                    if (!cf) {
+                        cf = f.constBool(false);
+                    }
+                    v.setArg(i, cf);
+                }
             }
+        }
+    }
+    let live;
+    const computeLive = () => {
+        let live = new Array(f.numValues());
+        for (let b of f.blocks) {
+            for (let v of b.values) {
+                for (let a of v.args) {
+                    if (a.b !== v.b) {
+                        live[a.id] = true;
+                    }
+                }
+            }
+            if (b.control && b.control.b !== b) {
+                live[b.control.id] = true;
+            }
+        }
+        return live;
+    };
+    for (let b of f.blocks) {
+        if (b.kind != BlockKind.If) {
+            continue;
+        }
+        if (b.values.length != 1) {
+            continue;
+        }
+        let v = b.values[0];
+        if (v.op !== ops.Phi) {
+            continue;
+        }
+        if (b.control !== v) {
+            continue;
+        }
+        if (!live) {
+            live = computeLive();
+        }
+        if (live[v.id]) {
+            continue;
+        }
+        for (let i = 0; i < v.args.length; i++) {
+            let a = v.args[i];
+            if (a.op !== ops.ConstBool) {
+                continue;
+            }
+            let p = b.preds[i];
+            let pi = p.succs.indexOf(b);
+            let t = b.succs[1 - a.aux];
+            let ti = t.preds.indexOf(b);
+            b.removeNthPred(i);
+            let n = b.preds.length;
+            v.args[i].uses--;
+            v.args[i] = v.args[n];
+            v.args.length = n;
+            p.succs[pi] = t;
+            t.preds.push(p);
+            for (let w of t.values) {
+                if (w.op !== ops.Phi) {
+                    continue;
+                }
+                w.addArg(w.args[ti]);
+            }
+            if (b.preds.length == 1) {
+                v.op = ops.Copy;
+                break;
+            }
+            i--;
         }
     }
 }
@@ -10677,6 +10921,111 @@ class RegAllocator {
 }
 //# sourceMappingURL=regalloc.js.map
 
+function layout(f) {
+    f.blocks = layoutOrder(f);
+}
+function layoutOrder(f) {
+    const maxblocks = f.numBlocks();
+    let order = new Array(maxblocks);
+    let scheduled = new Array(maxblocks);
+    let idToBlock = new Array(maxblocks);
+    let indegree = new Array(maxblocks);
+    let posdegree = new Set();
+    let zerodegree = new Set();
+    let exit = new Set();
+    for (let b of f.blocks) {
+        idToBlock[b.id] = b;
+        if (b.kind == BlockKind.Ret) {
+            exit.add(b.id);
+            continue;
+        }
+        let npreds = b.preds.length;
+        indegree[b.id] = npreds;
+        if (npreds == 0) {
+            zerodegree.add(b.id);
+        }
+        else {
+            posdegree.add(b.id);
+        }
+    }
+    let bid = f.entry.id;
+    let orderi = 0;
+    blockloop: while (true) {
+        let b = idToBlock[bid];
+        order[orderi++] = b;
+        scheduled[bid] = true;
+        if (orderi == f.blocks.length) {
+            break;
+        }
+        for (let c of b.succs) {
+            indegree[c.id]--;
+            if (indegree[c.id] == 0) {
+                posdegree.delete(c.id);
+                zerodegree.add(c.id);
+            }
+        }
+        let likely;
+        switch (b.likely) {
+            case BranchPrediction.Likely:
+                likely = b.succs[0];
+                break;
+            case BranchPrediction.Unlikely:
+                likely = b.succs[1];
+                break;
+        }
+        if (likely && !scheduled[likely.id]) {
+            bid = likely.id;
+            continue;
+        }
+        bid = 0;
+        let mindegree = maxblocks;
+        let lastb = order[orderi - 1];
+        for (let c of lastb.succs) {
+            if (scheduled[c.id] || c.kind == BlockKind.Ret) {
+                continue;
+            }
+            if (indegree[c.id] < mindegree) {
+                mindegree = indegree[c.id];
+                bid = c.id;
+            }
+        }
+        if (bid != 0) {
+            continue;
+        }
+        while (zerodegree.size > 0) {
+            let cid = setpop(zerodegree);
+            if (!scheduled[cid]) {
+                bid = cid;
+                continue blockloop;
+            }
+        }
+        while (posdegree.size > 0) {
+            let cid = setpop(posdegree);
+            if (!scheduled[cid]) {
+                bid = cid;
+                continue blockloop;
+            }
+        }
+        while (true) {
+            let cid = setpop(exit);
+            if (!scheduled[cid]) {
+                bid = cid;
+                continue blockloop;
+            }
+        }
+    }
+    assert(order[0] === f.entry, 'moved entry block');
+    order.length = orderi;
+    return order;
+}
+function setpop(s) {
+    assert(s.size > 0, 'setpop with empty set');
+    let v = s[Symbol.iterator]().next().value;
+    s.delete(v);
+    return v;
+}
+//# sourceMappingURL=layout.js.map
+
 function optional(name, fn) {
     return { name, fn, required: false };
 }
@@ -10691,9 +11040,10 @@ const passes = [
     required("generic deadcode", deadcode),
     required("lower", lower),
     required("lowered deadcode", deadcode),
-    optional("early phielim", phielim),
-    optional("early copyelim", copyelim),
+    optional("late phielim", phielim),
+    optional("late copyelim", copyelim),
     optional("late deadcode", deadcode),
+    required("layout", layout),
     required("regalloc", regalloc),
 ];
 

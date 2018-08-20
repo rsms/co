@@ -216,7 +216,7 @@ export class RegAllocator {
     // blocks appear.
     // Decouple the register allocation order from the generated block order.
     // This also creates an opportunity for experiments to find a better order.
-    // a.visitOrder = layoutRegallocOrder(f)
+    // a.visitOrder = layoutOrder(f)
     // if (a.config.optimize) {
     //   // update function block order with new layout
     //   f.blocks = a.visitOrder

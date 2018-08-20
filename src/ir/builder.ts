@@ -25,8 +25,8 @@ import { Config } from './config'
 import { printir } from './repr'
 import { LocalSlot } from './localslot'
 
-import { debuglog as dlog } from '../util'
-// const dlog = function(..._ :any[]){} // silence dlog
+// import { debuglog as dlog } from '../util'
+const dlog = function(..._ :any[]){} // silence dlog
 
 
 const bitypes = ast.builtInTypes

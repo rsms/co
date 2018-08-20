@@ -9,6 +9,7 @@ import { lower } from './lower'
 import { deadcode } from './deadcode'
 import { shortcircuit } from './shortcircuit'
 import { regalloc } from './regalloc'
+import { layout } from './layout'
 
 
 type PassFun = (f :Fun, c :Config) => void
@@ -28,6 +29,17 @@ function required(name :string, fn :PassFun) : Pass {
 }
 
 
+// good next candidates for writing:
+// - loopRotate
+// - zcse (common-subexpression elimination, zero-arg values; pre-full-cse)
+//
+// bigger challenges:
+// - opt (step 1: generic rewrites)
+// - opt (step 2: generic optimizations)
+//   - implies writing a "rule" code generator utility
+// - decompose (phi compound builtin types -> phi simple types)
+//
+
 // All IR passes run over functions
 //
 const passes :Pass[] = [
@@ -40,8 +52,7 @@ const passes :Pass[] = [
   // required("decompose user", decomposeUser),
   // required("opt", opt), // TODO: split required rules and optimizing rules
   // required("zero arg cse", zcse), // required to merge OpSB values
-  // required("opt deadcode", deadcode),
-  //   // remove any blocks orphaned during opt
+  // required("opt deadcode", deadcode), // remove blocks orphaned during opt
   // optional("generic cse", cse),
   // optional("phiopt", phiopt),
   // optional("nilcheckelim", nilcheckelim),
@@ -56,7 +67,7 @@ const passes :Pass[] = [
   // optional("check bce", checkbce),
   // optional("branchelim", branchelim),
   // optional("fuse", fuse),
-  // optional("dse", dse),
+  // optional("dse", dse), // deadstore
   // required("writebarrier", writebarrier), // expand write barrier ops
 
   // optional("insert resched checks", insertLoopReschedChecks),
@@ -75,7 +86,7 @@ const passes :Pass[] = [
   // required("critical", critical), // remove critical edges
   // optional("likelyadjust", likelyadjust),
 
-  // required("layout", layout),     // schedule blocks
+  required("layout", layout),     // schedule blocks
   // required("schedule", schedule), // schedule values
   // optional("late nilcheck", nilcheckelim2),
   // required("flagalloc", flagalloc), // allocate flags register
