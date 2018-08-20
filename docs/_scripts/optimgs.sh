@@ -3,7 +3,7 @@ set -o errexit -o pipefail -e
 cd "$(dirname "$0")/.."
 
 # svg
-for f in _includes/icons/*.svg r/*.svg; do
+for f in _includes/icons/*.svg r/*.svg doc/r/*.svg; do
   echo "svgo $f"
   svgo --config='{"plugins":[{"transformsWithOnePath":{}},{"removeViewBox":{}},{"removeAttrs":{"attrs":["figma.+"]}},{"removeTitle":{}},{"removeDesc":{"removeAny":true}}]}' \
        --multipass \

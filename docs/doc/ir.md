@@ -105,27 +105,10 @@ The `.control` property of the block controls the path taken from a block.
 | `Plain`    | *(nil)*        | next           | e.g. cont/goto
 | `If`       | boolean        | then, else
 | `Ret`      | memory         | *(none)*
+| `First`    |                | next           | used by lowering pass
 
 **Fun** represents a function and contains a list of all blocks that comprises
 the function. `Fun` also maintains a constant cache and handles value and block
 ID allocation.
 
 **IRBuilder** builds IR for a package on a per-function basis
-
-
-**Internal dependencies:**
-
-- `ast.Type` and friends are used in IR nodes and any IR code thus references
-  Type instances.
-  Note: types should eventually be separated from AST)
-
-
-## Limitations
-
-- Constant numbers larger than 9007199254740991 (`0x1fffffffffffff`)
-  can't be reliably represented
-  internally because of the Number.MAX_SAFE_INTEGER limitation in JavaScript.
-  This is only an issue with literals that are that large. At some point the
-  IR should be changed to represent large integer constants in some alternate
-  way (e.g. ArrayBuffer) to work around this limitation without any effect on
-  the API.
