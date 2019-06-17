@@ -271,7 +271,7 @@ export function numEval(x :Expr) :Num|null {
 export function numEvalOp(x :Operation) :Num|null {
   let t = x.type as NumType
   assert(t, 'unresolved type')
-  
+
   if (!(t instanceof NumType)) {
     // not a numeric operation
     return null

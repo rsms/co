@@ -43,44 +43,45 @@ declare function repr(obj :any) :string
 declare function TEST(name :string, testFn :()=>any) :void
 declare function TEST(testFn :()=>any) :void
 
-declare namespace WebAssembly {
-  interface Export {
-    kind: string
-    name: string
-  }
-  interface Import {
-    module: string
-    kind: string
-    name: string
-  }
-  class Module {
-    constructor (bufferSource: ArrayBuffer|Uint8Array)
-    static customSections(module: Module, sectionName: string): ArrayBuffer[]
-    static exports(module: Module): Export[]
-    static imports(module: Module): Import[]
-  }
-  class Instance {
-    readonly exports: { [name:string]: Function }
-    constructor (module: Module, importObject?: Object)
-  }
-  interface MemoryDescriptor {
-    initial :number
-      // The initial size of the WebAssembly Memory, in units of
-      // WebAssembly pages
-    maximum :number
-      // The maximum size the WebAssembly Memory is allowed to grow to,
-      // in units of WebAssembly pages.
-      // When present, the maximum parameter acts as a hint to the engine
-      // to reserve memory up front.  However, the engine may ignore or clamp
-      // this reservation request.  In general, most WebAssembly modules
-      // shouldn't need to set a maximum.
-  }
-  class Memory {
-    readonly buffer :ArrayBuffer
-    constructor(descriptor :MemoryDescriptor)
+// needed for older typescript
+// declare namespace WebAssembly {
+//   interface Export {
+//     kind: string
+//     name: string
+//   }
+//   interface Import {
+//     module: string
+//     kind: string
+//     name: string
+//   }
+//   class Module {
+//     constructor (bufferSource: ArrayBuffer|Uint8Array)
+//     static customSections(module: Module, sectionName: string): ArrayBuffer[]
+//     static exports(module: Module): Export[]
+//     static imports(module: Module): Import[]
+//   }
+//   class Instance {
+//     readonly exports: { [name:string]: Function }
+//     constructor (module: Module, importObject?: Object)
+//   }
+//   interface MemoryDescriptor {
+//     initial :number
+//       // The initial size of the WebAssembly Memory, in units of
+//       // WebAssembly pages
+//     maximum :number
+//       // The maximum size the WebAssembly Memory is allowed to grow to,
+//       // in units of WebAssembly pages.
+//       // When present, the maximum parameter acts as a hint to the engine
+//       // to reserve memory up front.  However, the engine may ignore or clamp
+//       // this reservation request.  In general, most WebAssembly modules
+//       // shouldn't need to set a maximum.
+//   }
+//   class Memory {
+//     readonly buffer :ArrayBuffer
+//     constructor(descriptor :MemoryDescriptor)
 
-    // grow increases the size of the memory instance by a specified number
-    // of WebAssembly pages.
-    grow(pages :number)
-  }
-}
+//     // grow increases the size of the memory instance by a specified number
+//     // of WebAssembly pages.
+//     grow(pages :number)
+//   }
+// }

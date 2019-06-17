@@ -240,7 +240,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
       // run IP passes separately for debugging (normally run online)
       let stopAtPass = options.genericIR ? "lower" : ""
       // stopAtPass = "generic deadcode"
-      for (let [_, f] of irb.pkg.funs) {
+      for (let [ , f] of irb.pkg.funs) {
         runPassesDev(f, config, stopAtPass, pass => {
           if (isNodeJsLikeEnv) {
             console.log(
@@ -307,16 +307,9 @@ if (typeof global.runAllTests == 'function') {
 }
 
 if (isNodeJsLikeEnv) {
-  if (process.argv.includes('-test-only')) {
+  if (DEBUG) { if (process.argv.includes('-test-only')) {
     console.log('only running unit tests')
-  } else {
-    // if (!sources && isNodeJsLikeEnv) {
-    //   return p.catch(err => {
-    //     console.error(err.stack || ''+err)
-    //     process.exit(1)
-    //     return { success: false, diagnostics }
-    //   })
-    // }
+  }} else {
     main({
       sources: process.argv.slice(2).filter(v => !v.startsWith('-')),
       noOptimize: process.argv.includes('-no-optimize'),

@@ -10,11 +10,11 @@ import {
   FunType,
 
   t_nil, t_bool,
-  t_u8, t_i8, t_u16, t_i16,
-  t_u32, t_i32, t_u64, t_i64,
+  // t_u8, t_i8, t_u16, t_i16,
+  // t_u32, t_i32, t_u64, t_i64,
   // t_uint, t_int, t_usize, t_isize,
-  t_f32,
-  t_f64,
+  // t_f32,
+  // t_f64,
   // t_str0,
 } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
@@ -57,7 +57,7 @@ export class IRBuilder {
   b        :Block       // current block
   f        :Fun         // current function
   flags    :IRBuilderFlags = IRBuilderFlags.Default
-  
+
   vars :Map<ByteStr,Value>
     // variable assignments in the current block (map from variable symbol
     // to ssa value)
@@ -447,7 +447,7 @@ export class IRBuilder {
   //   cont -> b1
   //   b3:  // end while
   //   ret
-  // 
+  //
   //
   while_(n: ast.WhileStmt) {
     const s = this
@@ -605,7 +605,7 @@ export class IRBuilder {
     //   goto b3
     //   b3:
     //     <continuation-block>
-    // 
+    //
     const r = this
 
     // generate control condition
@@ -820,7 +820,7 @@ export class IRBuilder {
 
   expr(s :ast.Expr) :Value {
     const r = this
-    
+
     assert(s.type, `type not resolved for ${s}`)
 
     if (s instanceof ast.NumLit) {
@@ -982,7 +982,7 @@ export class IRBuilder {
     // Idea 1: Include target information when generating IR and only
     //         unroll into "if" branches if the target doesn't support
     //         something like WASM's "select".
-    // Idea 2: Perform this step later 
+    // Idea 2: Perform this step later
     //
     // However, for now, since it's a possibly-small RoI optimization
     // opportunity, we're ignoring this.

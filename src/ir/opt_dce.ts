@@ -15,7 +15,7 @@ import { ops } from './op'
 
 export function optdce(fn :Fun) {
   let live = new Set<Value>()  // set of live variables
-  
+
   // visit blocks in reverse order
   let i = fn.blocks.length
   while (i > 0) {
@@ -25,8 +25,8 @@ export function optdce(fn :Fun) {
       // variable used as branching condition is live at end of block
       live.add(b.control)
     }
-    let v = b.vtail
-    while (v) {
+
+    for (let x = b.values.length, v :Value; v = b.values[--x];) {
       // attempt to remove receiver var from live (except for calls)
       //
       // TODO: when encountering a call, check if the call has
@@ -43,11 +43,10 @@ export function optdce(fn :Fun) {
         for (let operand of v.args) {
           live.add(operand)
         }
-        v = v.prevv
       } else {
         // dead (the var is not in `live`)
         // dlog(`${v} is dead  ${fmtir(v)}`)
-        v = b.removeValue(v)  // returns previous sibling of v
+        i += b.removeValue(v)  // returns number of instances removed
       }
       // dumplive(live)
     }

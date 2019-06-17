@@ -5,7 +5,8 @@
 /*.sublime-*
 src/*.wast.wasm
 _local
-out
+/.build-cache
+/dist
 .DS_Store
 node_modules
 misc/UnicodeData.txt

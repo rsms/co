@@ -84,7 +84,7 @@ class QCGenBase<T> {
     this.size = size >>> 0
   }
 
-  gen(i? :int) :T {
+  gen(/*i? :int*/) :T {
     return undefined as any as T
   }
 }

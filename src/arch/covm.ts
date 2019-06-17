@@ -166,7 +166,7 @@ export default new ArchInfo("covm", {
 })
 
 
-function lowerBlockCovm(b :Block) :bool {
+function lowerBlockCovm(_ :Block) :bool {
   return false
 }
 

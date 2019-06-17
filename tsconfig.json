@@ -1,26 +1,11 @@
 {
   "compilerOptions": {
-    // strict:
-    // "noUnusedLocals": true,
-    // "noUnusedParameters": true,
-
-    "allowUnreachableCode": false,
-    // "isolatedModules": true,
-    "noFallthroughCasesInSwitch": true,
-    "noImplicitAny": true,
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
+    "strictNullChecks": true,
     "noImplicitReturns": true,
     "noImplicitThis": true,
-    "preserveConstEnums": true,
-    // "removeComments": true,
-    "strictNullChecks": true,
-    "forceConsistentCasingInFileNames": true,
-    "alwaysStrict": true,
-    "allowSyntheticDefaultImports": true,
-    "noEmitOnError": true,
-
-    "module": "commonjs",
-    // "module": "esnext",
-    "moduleResolution": "node",
+    "module": "esnext",
     "newLine": "LF",
     "target": "es2017",
     "sourceMap": true,
@@ -29,11 +14,10 @@
       "es2017"
     ],
     "baseUrl": "src",
-    "outDir": "out",
-    "pretty": true
+    "outDir": "dist"
   },
   "include": [
     "src/global.d.ts",
-    "src/**/*.ts"
+    "src/main.ts"
   ]
 }

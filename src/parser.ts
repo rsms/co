@@ -21,7 +21,7 @@ import {
   Stmt,
   ReturnStmt,
   WhileStmt,
-  
+
   Decl,
   ImportDecl,
   VarDecl,
@@ -139,7 +139,7 @@ export class Parser extends scanner.Scanner {
     p.scope = new Scope(pkgscope)
     p.filescope = p.scope
     p.pkgscope = pkgscope || p.filescope
-    
+
     p.fnest = 0
     p.universe = universe
     p.strSet = universe.strSet
@@ -182,7 +182,7 @@ export class Parser extends scanner.Scanner {
     }
     return false
   }
-  
+
   want(tok :token) {
     const p = this
     if (!p.got(tok)) {
@@ -222,7 +222,7 @@ export class Parser extends scanner.Scanner {
   popScope() :Scope { // returns old ("popped") scope
     const p = this
     const s = p.scope
-    
+
     assert(s !== p.filescope, "pop file scope")
     assert(s !== p.pkgscope, "pop file scope")
     assert(p.scope.outer != null, 'pop scope at base scope')
@@ -396,7 +396,7 @@ export class Parser extends scanner.Scanner {
     const p = this
     let localIdent :Ident|null = null
     let hasLocalIdent = false
-  
+
     switch (p.tok) {
       case token.NAME:
         localIdent = p.ident()
@@ -424,7 +424,7 @@ export class Parser extends scanner.Scanner {
     if (hasLocalIdent && localIdent) {
       p.declare(p.filescope, localIdent, d, null)
     }
-    
+
     return d
   }
 
@@ -780,7 +780,7 @@ export class Parser extends scanner.Scanner {
     while (p.tok != token.RPAREN) {
       let pos = p.pos
       // let f = new Field(p.pos, scope, t_nil, p.ident())
-      
+
       let typ :Expr|null = null
       let name :Ident|null = null
 
@@ -1074,7 +1074,7 @@ export class Parser extends scanner.Scanner {
         if (!convx) {
           if (rval.type instanceof UnresolvedType) {
             // unresolved
-            return 
+            return
           }
           p.error(
             (rval.type instanceof UnresolvedType ?
@@ -1136,7 +1136,7 @@ export class Parser extends scanner.Scanner {
       }
 
       id.ent = null
-      
+
       // new declaration
       //
       // since we are about to redeclare, clear any "unresolved" mark for
@@ -1153,7 +1153,7 @@ export class Parser extends scanner.Scanner {
         assert(rval, "processAssign called with no reqt and no rvals")
         id.type = p.types.resolve(rval as Expr)
       }
-      
+
       if (p.unresolved) { p.unresolved.delete(id) } // may be noop
       p.declare(id.scope, id, decl, rval)
 
@@ -1906,7 +1906,7 @@ export class Parser extends scanner.Scanner {
     if (p.got(token.COLON)) {
       // slice, e.g. "x[1:3]", "x[:3]", "x[1:]", "x[:]"
       let endx :Expr|null = null
-      
+
       if (!p.got(token.RBRACKET)) {
         // explicit end, e.g. "x[1:3]", "x[:3]
         endx = p.expr(ctx)
@@ -1928,7 +1928,7 @@ export class Parser extends scanner.Scanner {
 
     // index
     p.want(token.RBRACKET)
-    
+
     assert(x1 != null)
     assert(x1 instanceof Expr)
 
@@ -1959,7 +1959,7 @@ export class Parser extends scanner.Scanner {
     const pos = p.pos
     p.want(token.LPAREN)
 
-    const l = []
+    const l :Expr[] = []
     while (true) {
       l.push(p.expr(ctx))
       if (p.tok == token.ASSIGN) {
@@ -2127,13 +2127,13 @@ export class Parser extends scanner.Scanner {
       case token.SEMICOLON:
         p.next()
         return true
-    
+
       case token.RPAREN:
       case token.RBRACE:
         // semicolon is optional before ) or }
         return true
     }
-  
+
     p.syntaxError("expecting semicolon, newline, or " + tokstr(follow))
     p.advanceUntil(follow)
     return false

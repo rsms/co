@@ -64,11 +64,11 @@ export var asciistrn :(b :Uint8Array, start :int, end :int)=>string = (
   typeof Buffer == 'function' ?
   function asciistrn(b :Uint8Array, start :int, end :int) :string {
     // make use of faster nodejs Buffer implementation
-    return (new (Buffer as any)(
+    return Buffer.from(
       b.buffer,
       b.byteOffset + start,
       end - start,
-    )).toString('ascii')
+    ).toString('ascii')
   } :
   function asciistrn(b :Uint8Array, start :int, end :int) :string {
     // fallback implementation
@@ -106,7 +106,7 @@ export function bufcmp(
 
 
 // asbuf returns a byte buffer for a
-// 
+//
 export let asbuf :(a :ArrayLike<byte>) => Uint8Array
 
 

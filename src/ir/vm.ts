@@ -45,7 +45,7 @@ class IntervalStepper implements Debugger {
     this.vm = vm
     this.vm.break()
   }
-  
+
   detach() :void {
     this.vm = null
     clearTimeout(this.timer)

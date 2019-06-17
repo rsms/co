@@ -256,40 +256,61 @@ export class Block {
     this.values.unshift(v)
   }
 
-  // replaceValue replaces all uses of existingv value with newv
+  // removeValue removes all uses of v
   //
-  replaceValue(existingv :Value, newv :Value) {
-    assert(existingv !== newv, 'trying to replace V with V')
-
-    // TODO: there must be a better way to replace values and retain their
-    // edges with users.
-
-    // for (let user of existingv.users) {
-    //   assert(user !== newv,
-    //     `TODO user==newv (newv=${newv} existingv=${existingv}) -- CYCLIC USE!`)
-
-    //   for (let i = 0; i < user.args.length; i++) {
-    //     if (user.args[i] === existingv) {
-    //       dlog(`replace ${existingv} in user ${user} with ${newv}`)
-    //       user.args[i] = newv
-    //       newv.users.add(user)
-    //       newv.uses++
-    //       existingv.uses--
-    //     }
-    //   }
-    // }
-    // existingv.users.clear()
-
-    // Remove self.
-    // Note that we don't decrement this.uses since the definition
-    // site doesn't count toward "uses".
-    this.f.freeValue(existingv)
-
-    // clear block pointer.
-    // Note: "uses" does not count for the value's ref to its block, so
-    // we don't decrement this.uses here.
-    ;(existingv as any).b = null
+  removeValue(v :Value) :int {
+    let count = 0
+    for (let i = 0; i < this.values.length; ) {
+      if (this.values[i] === v) {
+        this.values.splice(i, 1)
+        assert(v.prevv !== v)
+        assert(v.nextv !== v)
+        if (v.prevv) { v.prevv.nextv = v.nextv }
+        if (v.nextv) { v.nextv.prevv = v.prevv }
+      } else {
+        i++
+      }
+    }
+    if (count) {
+      this.f.freeValue(v)
+    }
+    return count
   }
+
+  // // replaceValue replaces all uses of existingv value with newv
+  // //
+  // replaceValue(existingv :Value, newv :Value) {
+  //   assert(existingv !== newv, 'trying to replace V with V')
+
+  //   // TODO: there must be a better way to replace values and retain their
+  //   // edges with users.
+
+  //   // for (let user of existingv.users) {
+  //   //   assert(user !== newv,
+  //   //     `TODO user==newv (newv=${newv} existingv=${existingv}) -- CYCLIC USE!`)
+
+  //   //   for (let i = 0; i < user.args.length; i++) {
+  //   //     if (user.args[i] === existingv) {
+  //   //       dlog(`replace ${existingv} in user ${user} with ${newv}`)
+  //   //       user.args[i] = newv
+  //   //       newv.users.add(user)
+  //   //       newv.uses++
+  //   //       existingv.uses--
+  //   //     }
+  //   //   }
+  //   // }
+  //   // existingv.users.clear()
+
+  //   // Remove self.
+  //   // Note that we don't decrement this.uses since the definition
+  //   // site doesn't count toward "uses".
+  //   this.f.freeValue(existingv)
+
+  //   // clear block pointer.
+  //   // Note: "uses" does not count for the value's ref to its block, so
+  //   // we don't decrement this.uses here.
+  //   ;(existingv as any).b = null
+  // }
 
   setControl(v :Value|null) {
     let existing = this.control

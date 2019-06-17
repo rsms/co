@@ -26,16 +26,24 @@ This is a project about:
 ## Using
 
 Building:
-- Setup: `yarn` (or `npm install` if you are using NPM)
+- Setup: `yarn` or `npm install`
 - Build incrementally: `./build.js -w`
-- Run: `node out/xlang.debug.js`
+- Run: `./dist/co.g`
 
 Building debug version: `./build.js`
 
 Building optimized/production version: `./build.js -O`
 
 Running unit tests:
-- `node out/xlang.debug.js -test-only` runs unit tests and exit
-- `node out/xlang.debug.js -test` runs unit tests first and then the program
+- `./dist/co.g -test-only` runs unit tests and exit
+- `./dist/co.g -test` runs unit tests first and then the program
 
 Dependencies: [nodejs](https://nodejs.org/)
+
+
+### Exploratory live-coding setup
+
+- Terminal 1: `./build.js -w`
+- Terminal 2: `autorun dist/co.g`
+
+You can get autorun here: https://github.com/rsms/autorun

@@ -124,7 +124,7 @@ TEST('char', () => {
   let s = sourceScanner(src)
   // dumpTokens(sourceScanner(src))
 
-  for (let [_, value] of samples) {
+  for (let [, value] of samples) {
     assertGotTok(s, token.CHAR)
     assertEq(s.int32val, value)
     assertGotTok(s, SEMIC)
