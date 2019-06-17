@@ -609,7 +609,7 @@ function startDiagnostics() {  // :CancellableProcess<void>
       println(style.green(`no errors`))
     }
 
-    if (!isDedicated) {
+    if (!isDedicated && !watchForChanges) {
       println(hline())
     }
     flushReportBuf()
@@ -640,11 +640,11 @@ function startDiagnostics() {  // :CancellableProcess<void>
   function reportDiagnostics() {
     clearTimeout(endTimer)
 
-    if (!isDedicated) {
-      println(banner("Diagnostics report"))
-    }
-
     if (diagQueue.length > 0) {
+
+      if (!isDedicated) {
+        println(banner("Diagnostics report"))
+      }
 
       // sort
       diagQueue = ts.sortAndDeduplicateDiagnostics(diagQueue)
@@ -807,10 +807,10 @@ function startDiagnostics() {  // :CancellableProcess<void>
       // File change detected. Starting incremental compilation
       if (isDedicated) {
         screen.clear()
+        console.log(style.grey(
+          `source change detected at ${new Date().toLocaleTimeString()}`
+        ))
       }
-      console.log(style.grey(
-        `source change detected at ${new Date().toLocaleTimeString()}`
-      ))
       return // ignore
     }
     if (rules[d.code] == IGNORE) { return }
