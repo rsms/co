@@ -667,6 +667,7 @@ export class StringLit extends LiteralExpr {
 
   constructor(pos :Pos, scope :Scope, value :Uint8Array, type :StrType) {
     super(pos, scope)
+    this.value = value
     this.type = type
   }
 

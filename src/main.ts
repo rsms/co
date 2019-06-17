@@ -307,9 +307,9 @@ if (typeof global.runAllTests == 'function') {
 }
 
 if (isNodeJsLikeEnv) {
-  if (DEBUG) { if (process.argv.includes('-test-only')) {
+  if (DEBUG && process.argv.includes('-test-only')) {
     console.log('only running unit tests')
-  }} else {
+  } else {
     main({
       sources: process.argv.slice(2).filter(v => !v.startsWith('-')),
       noOptimize: process.argv.includes('-no-optimize'),
