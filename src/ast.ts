@@ -2,7 +2,8 @@ import { Pos, SrcFile } from './pos'
 import { ByteStr } from './bytestr'
 import { token, tokstr } from './token'
 import * as utf8 from './utf8'
-import { Num, numconv } from './num'
+import { Num } from './num'
+import { numconv } from './numconv'
 import { Int64 } from './int64'
 import {
   Type,

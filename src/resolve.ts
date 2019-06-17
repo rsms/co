@@ -4,7 +4,8 @@ import { TypeCompat, basicTypeCompat } from './typecompat'
 import { ErrorCode, ErrorReporter, ErrorHandler } from './error'
 import { debuglog as dlog } from './util'
 import { token } from './token'
-import { Num, numEvalU32 } from './num'
+import { Num } from './num'
+import { numEvalU32 } from './numeval'
 import * as ast from './ast'
 import {
   ReturnStmt,
@@ -426,7 +427,7 @@ export class TypeResolver extends ErrorReporter {
 
     // resolve "else" branch type
     let eltyp = r.resolve(n.els_)
-    
+
     if (eltyp.equals(thentyp)) {
       // e.g. `if x A else A => A`
       // e.g. `if x A? else A? => A?`
