@@ -1,4 +1,4 @@
-import { Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
+import { Fun, Block, BlockKind, BranchPrediction } from './ssa'
 
 // layout orders basic blocks in f with the goal of minimizing control flow instructions.
 // After this phase returns, the order of f.Blocks matters and is the order

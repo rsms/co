@@ -163,7 +163,7 @@ function reprv(nv :Node[], newline :string, c :ReprCtx, delims :string='()') :st
 // }
 
 
-function reprid(id :Ident, c :ReprCtx) :string {
+function reprid(id :Ident, _ :ReprCtx) :string {
   return (
     utf8.decodeToString(id.value.bytes)
     // + c.style.pink(subscriptnum(id.ver))

@@ -253,8 +253,8 @@ export class IRBuilder {
   // concreteType normalizes abstract types to concrete types.
   // E.g. concreteType(int) -> i32  (if int->i32 exists in typemap)
   //
-  concreteType(t :Type) :BasicType {
-    // Note: This functin is replaced by the constructor
+  concreteType(_ :Type) :BasicType {
+    // Note: This function is replaced by the constructor
     return t_nil
   }
 

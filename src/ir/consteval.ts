@@ -262,9 +262,10 @@ export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
 }
 
 
-// consteval2 evaluates the operation op with x of result type t
+// consteval1 evaluates the operation op with x of result type t
 //
-export function consteval1(op :Op, t :BasicType, x :Num) :Num|null {
+export function consteval1(_op :Op, _t :BasicType, _x :Num) :Num|null {
+  // TODO: implementation
   return null
 }
 
