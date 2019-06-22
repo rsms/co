@@ -1,6 +1,7 @@
 import { debuglog as dlog } from '../util'
-import { RegInfo, Op, ops } from '../ir/op'
-import { regBuilder } from '../ir/reg'
+import { Op } from '../ir/op'
+import { ops } from "../arch/ops"
+import { RegInfo, regBuilder } from '../ir/reg'
 import { Value, Block } from '../ir/ssa'
 import { ValueRewriter } from '../ir/config'
 import { ArchInfo } from './arch'
@@ -80,66 +81,64 @@ const gp10 = new RegInfo([gp], [])
 const gp21 = new RegInfo([gpsp, gpsp], [gp])
 const gp11 = new RegInfo([gpsp], [gp])
 
-// --------------------------------------------------
-// HERE BE DRAGONS
-//
-// Setup Op.reg on all ops in op.ops for covm.
-// FIXME: remove this when we have a complete set of aops for covm.
-//
-for (let name in ops as {[name:string]:Op}) {
-  let op = (ops as {[name:string]:Op})[name]
-  if (!op.zeroWidth && !op.call) {
-    // assign allowed input and output registers
-    let regs = gp // gpRegMask  // XXX FIXME this is specific to the covm arch
-    // TODO: add reg info to ops above. For instance, ConvI64toF32 accepts
-    // inputs in gp regs, and outputs in fp regs.
-    if (op.argLen > 0) {
-      op.reg.inputs = []
-      for (let i = 0; i < op.argLen; i++) {
-        op.reg.inputs[i] = { idx: i, regs }
-      }
-    }
-    op.reg.outputs = [ { idx: 0, regs } ]
+// // --------------------------------------------------
+// // HERE BE DRAGONS
+// //
+// // Setup Op.reg on all ops in op.ops for covm.
+// // FIXME: remove this when we have a complete set of aops for covm.
+// //
+// for (let name in ops as {[name:string]:Op}) {
+//   let op = (ops as {[name:string]:Op})[name]
+//   if (!op.zeroWidth && !op.call) {
+//     // assign allowed input and output registers
+//     let regs = gp // gpRegMask  // XXX FIXME this is specific to the covm arch
+//     // TODO: add reg info to ops above. For instance, ConvI64toF32 accepts
+//     // inputs in gp regs, and outputs in fp regs.
+//     if (op.argLen > 0) {
+//       op.reg.inputs = []
+//       for (let i = 0; i < op.argLen; i++) {
+//         op.reg.inputs[i] = { idx: i, regs }
+//       }
+//     }
+//     op.reg.outputs = [ { idx: 0, regs } ]
 
-    // if (name == "AddI32") {
-    //   op.reg.inputs = [ { idx: 0, regs: covm_buildReg("R4") } ]
-    // }
-  }
-}
-// --------------------------------------------------
+//     // if (name == "AddI32") {
+//     //   op.reg.inputs = [ { idx: 0, regs: covm_buildReg("R4") } ]
+//     // }
+//   }
+// }
+// // --------------------------------------------------
 
 
 // operators
-function op(name :string, argLen :int, props? :Partial<Op>) :Op {
-  return new Op(name, argLen, props)
-}
-const aops :{ [name:string] : Op } = {
+// function op(name :string, argLen :int, props? :Partial<Op>) :Op {
+//   return new Op(name, argLen, props)
+// }
+const aops = {
+  // MOVWconst: op("MOVWconst", 0, {
+  //   reg: gp01,
+  //   aux: T.t_u32,
+  //   type: T.t_u32,
+  //   rematerializeable: true,
+  // }),
 
-  MOVWconst: op("MOVWconst", 0, {
-    reg: gp01,
-    aux: T.t_u32,
-    type: T.t_u32,
-    rematerializeable: true,
-  }),
+  // // arg0 + arg1
+  // ADDW: op("ADDW", 2, { reg: gp21, type: T.t_u32, commutative: true }),
 
-  // arg0 + arg1
-  ADDW: op("ADDW", 2, { reg: gp21, type: T.t_u32, commutative: true }),
+  // // arg0 + aux
+  // ADDWconst: op("ADDWconst", 1, {
+  //   reg: gp11,
+  //   type: T.t_u32,
+  //   aux: T.t_u32,
+  //   commutative: true,
+  // }),
 
-  // arg0 + aux
-  ADDWconst: op("ADDWconst", 1, {
-    reg: gp11,
-    type: T.t_u32,
-    aux: T.t_u32,
-    commutative: true,
-  }),
-
-  // panic if arg0 is nil.  arg1=mem.
-  LowNilCheck: op("LowNilCheck", 2, {
-    reg: gp10,
-    nilCheck: true,
-    faultOnNilArg0: true,
-  }),
-
+  // // panic if arg0 is nil.  arg1=mem.
+  // LowNilCheck: op("LowNilCheck", 2, {
+  //   reg: gp10,
+  //   nilCheck: true,
+  //   faultOnNilArg0: true,
+  // }),
 }
 
 // value-lowering functions
@@ -148,61 +147,59 @@ const aops :{ [name:string] : Op } = {
 //
 const valueLoweringFuns = new Map<Op,ValueRewriter>([
 
-  [ ops.NilCheck, (v :Value) :bool => {
-    // match: (NilCheck ptr mem)
-    // cond:
-    // result: (LowNilCheck ptr mem)
-    v.op = aops.LowNilCheck
-    // let [ptr, mem] = v.args
-    // v.reset(aops.LowNilCheck)
-    // v.addArg(ptr)
-    // v.addArg(mem)
-    return true
-  } ],
+  // [ ops.NilCheck, (v :Value) :bool => {
+  //   // match: (NilCheck ptr mem)
+  //   // cond:
+  //   // result: (LowNilCheck ptr mem)
+  //   v.op = aops.LowNilCheck
+  //   // let [ptr, mem] = v.args
+  //   // v.reset(aops.LowNilCheck)
+  //   // v.addArg(ptr)
+  //   // v.addArg(mem)
+  //   return true
+  // } ],
 
-  [ ops.ConstI32, (v :Value) :bool => {
-    // match: (ConstI32 [val])
-    // cond:
-    // result: (MOVWconst [val])
-    let val = v.aux
-    v.reset(aops.MOVWconst)
-    v.aux = val
-    return true
-  } ],
+  // [ ops.ConstI32, (v :Value) :bool => {
+  //   // match: (ConstI32 [val])
+  //   // cond:
+  //   // result: (MOVWconst [val])
+  //   let val = v.aux
+  //   v.reset(aops.MOVWconst)
+  //   v.aux = val
+  //   return true
+  // } ],
 
-  [ ops.AddI32, (v :Value) :bool => {
-    // match: (AddI32 x y)
-    // cond:
-    // result: (ADDW x y)
-    let [x, y] = v.args
-    v.reset(aops.ADDW)
-    v.addArg(x)
-    v.addArg(y)
-    return true
-  } ],
+  // [ ops.AddI32, (v :Value) :bool => {
+  //   // match: (AddI32 x y)
+  //   // cond:
+  //   // result: (ADDW x y)
+  //   let [x, y] = v.args
+  //   v.reset(aops.ADDW)
+  //   v.addArg(x)
+  //   v.addArg(y)
+  //   return true
+  // } ],
 
+//   [ aops.ADDW, (v :Value) :bool => {
+//     // Based on rewriteValueMIPS_OpMIPSADD_0
 
+//     // match: (ADD x (MOVWconst [c]))
+//     // cond:
+//     // result: (ADDWconst [c] x)
+//     while (true) {
+//       let x = v.args[0]
+//       let v_1 = v.args[1]
+//       if (v_1.op !== aops.MOVWconst) { break } // nomatch
+//       let c = v_1.aux
+//       v.reset(aops.ADDWconst)
+//       v.aux = c
+//       v.addArg(x)
+//       dlog(`rewrite ${v} (ADD x (MOVWconst [c])) -> (ADDWconst [c] x)`)
+//       return true
+//     }
 
-  [ aops.ADDW, (v :Value) :bool => {
-    // Based on rewriteValueMIPS_OpMIPSADD_0
-
-    // match: (ADD x (MOVWconst [c]))
-    // cond:
-    // result: (ADDWconst [c] x)
-    while (true) {
-      let x = v.args[0]
-      let v_1 = v.args[1]
-      if (v_1.op !== aops.MOVWconst) { break } // nomatch
-      let c = v_1.aux
-      v.reset(aops.ADDWconst)
-      v.aux = c
-      v.addArg(x)
-      dlog(`rewrite ${v} (ADD x (MOVWconst [c])) -> (ADDWconst [c] x)`)
-      return true
-    }
-
-    return false
-  } ],
+//     return false
+//   } ],
 
 ])
 

@@ -377,20 +377,20 @@ export const ops :OpDescription[] = [
   // Conversions
   //
   // signed extensions
-  ["SignExtS8to16",  1, {type: t.i16}], // i8  -> i16
-  ["SignExtS8to32",  1, {type: t.i32}], // i8  -> i32
-  ["SignExtS8to64",  1, {type: t.i64}], // i8  -> i64
-  ["SignExtS16to32", 1, {type: t.i32}], // i16 -> i32
-  ["SignExtS16to64", 1, {type: t.i64}], // i16 -> i64
-  ["SignExtS32to64", 1, {type: t.i64}], // i32 -> i64
+  ["SignExtI8to16",  1, {type: t.i16}], // i8  -> i16
+  ["SignExtI8to32",  1, {type: t.i32}], // i8  -> i32
+  ["SignExtI8to64",  1, {type: t.i64}], // i8  -> i64
+  ["SignExtI16to32", 1, {type: t.i32}], // i16 -> i32
+  ["SignExtI16to64", 1, {type: t.i64}], // i16 -> i64
+  ["SignExtI32to64", 1, {type: t.i64}], // i32 -> i64
   //
   // zero (unsigned) extensions
-  ["ZeroExtU8to16",  1, {type: t.u16}], // u8  -> u16
-  ["ZeroExtU8to32",  1, {type: t.u32}], // u8  -> u32
-  ["ZeroExtU8to64",  1, {type: t.u64}], // u8  -> u64
-  ["ZeroExtU16to32", 1, {type: t.u32}], // u16 -> u32
-  ["ZeroExtU16to64", 1, {type: t.u64}], // u16 -> u64
-  ["ZeroExtU32to64", 1, {type: t.u64}], // u32 -> u64
+  ["ZeroExtI8to16",  1, {type: t.u16}], // u8  -> u16
+  ["ZeroExtI8to32",  1, {type: t.u32}], // u8  -> u32
+  ["ZeroExtI8to64",  1, {type: t.u64}], // u8  -> u64
+  ["ZeroExtI16to32", 1, {type: t.u32}], // u16 -> u32
+  ["ZeroExtI16to64", 1, {type: t.u64}], // u16 -> u64
+  ["ZeroExtI32to64", 1, {type: t.u64}], // u32 -> u64
   //
   // truncations to bool
   ["TruncI8toBool",  1, {type: t.bool}],

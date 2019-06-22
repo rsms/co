@@ -1,7 +1,7 @@
 import { Value, Block, BlockKind, Fun, BranchPrediction } from './ssa'
 import { phielimValue } from './phielim'
 import { copyelim } from './copyelim'
-import { ops } from './op'
+import { ops, opinfo } from "../arch/ops"
 
 // import { debuglog as dlog } from '../util'
 const dlog = function(..._ :any[]){} // silence dlog
@@ -200,11 +200,12 @@ function liveValues(f :Fun, reachable :bool[]) :bool[] {
       q.push(v)
     }
     for (let v of b.values) {
-      if ((v.op.call || v.op.hasSideEffects) && !live[v.id]) {
+      let info = opinfo[v.op]
+      if ((info.call || info.hasSideEffects) && !live[v.id]) {
         live[v.id] = true
         q.push(v)
       }
-      if (v.op.nilCheck && !live[v.id]) {
+      if (info.nilCheck && !live[v.id]) {
         // nil checks must be kept
         live[v.id] = true
         q.push(v)

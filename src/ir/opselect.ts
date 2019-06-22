@@ -14,7 +14,8 @@ import {
   t_f32,
   t_f64,
 } from '../types'
-import { ops, Op } from './op'
+import { Op } from './op'
+import { ops } from "../arch/ops"
 
 
 // opselect1 returns the IR operation for the corresponding token operator

@@ -4,12 +4,13 @@
 import { Num, isNum } from '../num'
 import { numconv } from '../numconv'
 import { Op } from './op'
+import { opinfo } from "../arch/ops"
 import { Value, Block } from './ssa'
 import { consteval1, consteval2 } from './consteval'
 
 
 export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
-  if (x.op.constant) {
+  if (opinfo[x.op].constant) {
     assert(isNum(x.aux))
     let val = consteval1(op, x.type, x.aux as Num)
     if (val !== null) {
@@ -21,7 +22,7 @@ export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
 
 
 export function optcf_op2(b :Block, op :Op, x :Value, y :Value) :Value|null {
-  if (!x.op.constant || !y.op.constant) {
+  if (!opinfo[x.op].constant || !opinfo[y.op].constant) {
     // one or both operands not constant
     return null
   }

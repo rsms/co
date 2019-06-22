@@ -1,5 +1,5 @@
 import { Fun, Value } from './ssa'
-import { ops } from './op'
+import { opinfo } from "../arch/ops"
 
 // import { fmtir } from './repr'
 // import { debuglog as dlog } from '../util'
@@ -36,7 +36,7 @@ export function optdce(fn :Fun) {
       // have to assume all calls have side effects, thus we never elminiate
       // calls.
       //
-      if (v.op.call || live.delete(v)) {
+      if (opinfo[v.op].call || live.delete(v)) {
         // register operands as being live (since they are read)
         // dlog(`${v} is live  ${fmtir(v)}`)
         // TODO: don't eliminate ops with hasSideEffects==true

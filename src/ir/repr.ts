@@ -1,5 +1,6 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
 import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
+import { fmtop } from "../arch/ops"
 
 export type LineWriter = (s :string) => any
 
@@ -18,9 +19,9 @@ class IRFmt {
 }
 
 function fmtval(f :IRFmt, v :Value) :string {
-  assert(v.op, `value ${v} without .op`)
   let s = `v${v.id} = `
-  s += v.op.name
+  assert(v.op !== undefined, `value ${v} missing operator v=${repr(v)}`)
+  s += fmtop(v.op)
   if (f.types) {
     s += ' ' + f.style.grey(`<${v.type}>`)
   }
@@ -55,7 +56,7 @@ function printblock(f :IRFmt, b :Block, indent :string) {
   let meta = ''
 
   if (b.preds.length) {
-    preds = f.larr + b.preds.map(b => 
+    preds = f.larr + b.preds.map(b =>
       f.style.lightyellow(b.toString())
     ).join(', ')
 

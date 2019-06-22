@@ -1,5 +1,5 @@
 import { Value, Fun } from './ssa'
-import { ops } from './op'
+import { ops } from "../arch/ops"
 import { BlockRewriter, ValueRewriter } from './config'
 import { phielimValue } from './phielim'
 import { copySource } from './copyelim'

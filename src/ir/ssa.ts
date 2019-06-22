@@ -1,8 +1,9 @@
+// import { debuglog as dlog } from '../util'
 import { ByteStr, asciiByteStr } from '../bytestr'
 import { Num, numIsZero, isNum } from '../num'
 import { Pos, NoPos } from '../pos'
-// import { debuglog as dlog } from '../util'
-import { Op, ops } from './op'
+import { Op } from './op'
+import { ops, opinfo } from "../arch/ops"
 import {
   BasicType,
   NumType,
@@ -82,7 +83,6 @@ export class Value {
   }
 
   reset(op :Op) {
-    assert(op, `null op`)
     const v = this
     v.op = op
     // if (op != ops.Copy && notStmtBoundary(op)) {
@@ -129,7 +129,7 @@ export class Value {
   // rematerializeable reports whether a register allocator should recompute
   // a value instead of spilling/restoring it.
   rematerializeable() :bool {
-    if (!this.op.rematerializeable) {
+    if (!opinfo[this.op].rematerializeable) {
       return false
     }
     for (let a of this.args) {
@@ -463,10 +463,16 @@ export class Fun {
     assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
     // TODO we could use a free list and return values when they die
 
-    assert(!t || !op.type || op.type.mem == 0 || t === op.type,
-      `op ${op} with different concrete type (op.type=${op.type}, t=${t})`)
+    assert(
+      !t ||
+      !opinfo[op].type ||
+      opinfo[op].type!.mem == 0 ||
+      t === opinfo[op].type,
+      `op ${op} with different concrete type ` +
+      `(op.type=${opinfo[op].type}, t=${t})`
+    )
 
-    return new Value(this.vid++, b, op, t || op.type || t_nil, aux)
+    return new Value(this.vid++, b, op, t || opinfo[op].type || t_nil, aux)
   }
 
   freeValue(v :Value) {

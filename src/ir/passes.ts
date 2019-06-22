@@ -1,4 +1,3 @@
-// import { debuglog as dlog } from '../util'
 import { monotime, fmtduration2 } from '../time'
 import { Fun } from './ssa'
 import { Config } from './config'

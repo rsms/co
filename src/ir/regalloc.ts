@@ -2,11 +2,20 @@ import { UInt64 } from '../int64'
 import { Pos } from '../pos'
 import { Mem, t_u32, intTypes } from '../types'
 import { ID, Fun, Block, Value, BranchPrediction, Location } from './ssa'
-import { RegInfo, Op, ops } from './op'
-import { Register, Reg, RegSet, fmtRegSet, emptyRegSet } from './reg'
 import { Config } from './config'
 import { DesiredState } from './reg_desiredstate'
 import { IntGraph } from '../intgraph'
+import { Op } from './op'
+import { ops, opinfo } from "../arch/ops"
+import {
+  Register,
+  Reg,
+  RegSet,
+  RegInfo,
+  fmtRegSet,
+  emptyRegSet,
+  nilRegInfo,
+} from './reg'
 
 // import { debuglog as dlog } from '../util'
 const dlog = function(..._ :any[]){} // silence dlog
@@ -505,7 +514,7 @@ export class RegAllocator {
     //   return regInfo{inputs: []inputInfo{{regs: m}},
     //     outputs: []outputInfo{{regs: m}}}
     // }
-    return op.reg
+    return opinfo[op].reg || nilRegInfo
   }
 
 
@@ -595,7 +604,7 @@ export class RegAllocator {
             phis.push(v)
             continue
           }
-          if (v.op.call) {
+          if (opinfo[v.op].call) {
             for (let v of live.values()) {
               v.val += unlikelyDistance
             }
@@ -636,8 +645,8 @@ export class RegAllocator {
             desired.add(v.args[j.idx].id, pickReg(j.regs))
           }
           // Set desired register of input 0 if this is a 2-operand instruction.
-          if (v.op.resultInArg0) {
-            if (v.op.commutative) {
+          if (opinfo[v.op].resultInArg0) {
+            if (opinfo[v.op].commutative) {
               desired.addList(v.args[1].id, prefs)
             }
             desired.addList(v.args[0].id, prefs)

@@ -10,7 +10,7 @@ const Path = require("path")
 const progfile = __dirname + "/.gen-compiled.js"
 
 const header = `
-const DEBUG = false;
+const DEBUG = true;
 
 ` + fs.readFileSync(__dirname + "/../global.js", "utf8") + `
 

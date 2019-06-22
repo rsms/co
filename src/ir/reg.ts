@@ -16,6 +16,32 @@ export const emptyRegSet = UInt64.ZERO
 export const noReg :Reg = 255
 
 
+export interface RegInfoEntry {
+  idx  :int    // index in Args array
+  regs :RegSet // allowed input registers
+}
+
+export class RegInfo {
+  readonly inputs   :RegInfoEntry[]  // allowed input registers
+  readonly outputs  :RegInfoEntry[]  // allowed output registers
+  readonly clobbers :RegSet
+
+  constructor(
+    inputs   :RegSet[] = [],
+    outputs  :RegSet[] = [],
+    clobbers :RegSet = emptyRegSet
+  ) {
+    this.inputs = inputs.map((regs, idx) => ({ idx, regs }))
+    this.outputs = outputs.map((regs, idx) => ({ idx, regs }))
+    this.clobbers = clobbers
+  }
+
+  // inputs and outputs are ordered in register allocation order
+}
+
+export const nilRegInfo = new RegInfo()
+
+
 export function fmtRegSet(m :RegSet) :string {
   let s = '{'
   for (let r :Reg = 0 >>> 0; !m.isZero(); r++) {

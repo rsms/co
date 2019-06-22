@@ -1,8 +1,8 @@
 import { Num } from '../num'
 import { Int64 } from '../int64'
 import { BasicType } from '../types'
-import { Op, ops } from './op'
-// import { ops } from "../arch/ops"
+import { Op } from './op'
+import { ops, fmtop } from "../arch/ops"
 
 
 // consteval2 evaluates the operation op with x and y of result type t
@@ -258,7 +258,7 @@ export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
   //   x & ~y
   //   xo.and(yo.not())
   //
-  assert(false, `unexpected ${op}`)
+  assert(false, `unexpected ${fmtop(op)}`)
   return null
 }
 

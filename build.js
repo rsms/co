@@ -712,7 +712,11 @@ function startDiagnostics() {  // :CancellableProcess<void>
     }
     let {line, character} =
       ts.getLineAndCharacterOfPosition(d.file, d.start)
-    return `${prefix}${file}:${line+1}:${character+1}: `
+    if (level == ERR) {
+      return prefix + style.red(`${file}:${line+1}:${character+1}`) + ": "
+    } else {
+      return `${prefix}${file}:${line+1}:${character+1}: `
+    }
   }
 
 

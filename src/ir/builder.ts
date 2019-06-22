@@ -4,22 +4,9 @@ import { token } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
 import * as ast from '../ast'
 import * as types from '../types'
-import {
-  Type,
-  BasicType,
-  FunType,
-
-  t_nil, t_bool,
-  // t_u8, t_i8, t_u16, t_i16,
-  // t_u32, t_i32, t_u64, t_i64,
-  // t_uint, t_int, t_usize, t_isize,
-  // t_f32,
-  // t_f64,
-  // t_str0,
-} from '../types'
+import { Type, BasicType, FunType, t_nil, t_bool } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
-import { ops } from './op'
-// import { ops } from "../arch/ops"
+import { ops, opinfo } from "../arch/ops"
 import { Value, Block, BlockKind, Fun, Pkg } from './ssa'
 import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'
@@ -464,7 +451,7 @@ export class IRBuilder {
     let control = s.expr(n.cond) // condition for looping
 
     // potentially inline or eliminate branches when control is constant
-    if (s.config.optimize && control.op.constant) {
+    if (s.config.optimize && opinfo[control.op].constant) {
       if (control.auxIsZero()) {
         // while loop never taken
 
@@ -508,7 +495,7 @@ export class IRBuilder {
     //   incomplete Phi, then jump to the partial phi.arg and temporarily
     //   replace the control.arg[N] with the phi.arg and attempt to run
     //   the constant-evaluator. If the result is constant, we can perform
-    //   the steps above in the `if (control.op.constant) {...}` block.
+    //   the steps above in the `if (opinfo[control.op].constant) {...}` block.
     //
 
     // end "if" block and assign condition
@@ -538,7 +525,7 @@ export class IRBuilder {
 
     // possibly eliminate dead while loop.
     // (See notes earlier in this function.)
-    // if (s.config.optimize && !control.op.constant && control.op.argLen > 0) {
+    // if (s.config.optimize && !opinfo[control.op].constant && opinfo[control.op].argLen > 0) {
     //   let args :Value[]|undefined
     //   for (let i = 0; i < control.args.length; i++) {
     //     let arg = control.args[i]
@@ -612,7 +599,7 @@ export class IRBuilder {
     let control = r.expr(s.cond)
 
     // potentially inline or eliminate branches when control is constant
-    if (r.config.optimize && control.op.constant) {
+    if (r.config.optimize && opinfo[control.op].constant) {
       if (control.auxIsZero()) {
         // "else" branch always taken
         if (s.els_) {
