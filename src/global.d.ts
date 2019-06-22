@@ -11,9 +11,13 @@ interface WArrayLike<T> {
 declare var AssertionError :ErrorConstructor
 declare const DEBUG :boolean
 declare const VERSION :string
-declare const global :{[k:string]:any}
+declare const GlobalContext :{[k:string]:any}
 
-// panic prints a message, stack trace and exits the process
+// panic prints a message to stderr, equivalent to console.log
+//
+declare function print(msg :any, ...v :any[]) :void
+
+// panic prints a message to stderr, stack trace and exits the process
 //
 declare function panic(msg :any, ...v :any[]) :void
 

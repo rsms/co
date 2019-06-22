@@ -152,6 +152,7 @@ export const
   // aliases
 , t_byte = t_u8
 , t_char = t_u32
+, t_addr = t_usize
 
 
 // intTypes returns a pair of [signed, unsigned] integer types

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "forceConsistentCasingInFileNames": true,
+    "allowSyntheticDefaultImports": true,
+    "strictNullChecks": true,
+    "noImplicitReturns": true,
+    "noImplicitThis": true,
+    "module": "amd",
+    "newLine": "LF",
+    "target": "es2017",
+    "sourceMap": true,
+    "removeComments": true,
+    "lib": [
+      "dom",
+      "es2017"
+    ],
+    "outFile": ".gen-compiled.js"
+  },
+  "include": [
+    "../global.d.ts",
+    "gen.ts"
+  ]
+}

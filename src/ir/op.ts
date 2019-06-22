@@ -1,27 +1,20 @@
+import { NativeType, BasicType } from '../types'
+import { RegSet, emptyRegSet } from './reg'
 import {
-  NativeType,
-  BasicType,
-
   t_bool,
   t_u8,
-  // t_i8,
   t_u16,
   t_i16,
   t_u32,
   t_i32,
   t_u64,
   t_i64,
-  // t_uint,
-  // t_int,
   t_usize,
-  // t_isize,
-  
+  t_addr,
   t_f32,
   t_f64,
-
-  // t_str,
-} from '../types'
-import { RegSet, emptyRegSet } from './reg'
+} from "../types"
+// export * from "../arch/ops"
 
 
 // Strategy borrowed from
@@ -66,6 +59,35 @@ export enum SymEffect {
   Addr = 4,
 
   ReadWrite = 1 | 2,  // Read | Write
+}
+
+
+export interface OpInfo {
+  name: string // printed name
+  argLen: int // number of arguments, if -1, then this operation has a variable number of arguments
+
+  type? :BasicType // default result type
+  aux?  :NativeType // type of aux field
+
+  constant? :bool // true if the value is a constant. Value in aux
+  commutative? :bool // this operation is commutative on its first 2 arguments (e.g. addition)
+  resultInArg0? :bool // (first, if a tuple) output of v and v.Args[0] must be allocated to the same register
+  resultNotInArgs? :bool // outputs must not be allocated to the same registers as inputs
+  rematerializeable? :bool // whether a register allocator can recompute a value instead of spilling/restoring it.
+  clobberFlags? :bool // this op clobbers flags register
+  call? :bool         // is a function call
+  nilCheck? :bool     // this op is a nil check on arg0
+  faultOnNilArg0? :bool // this op will fault if arg0 is nil (and aux encodes a small offset)
+  faultOnNilArg1? :bool // this op will fault if arg1 is nil (and aux encodes a small offset)
+  usesScratch? :bool  // this op requires scratch memory space
+  hasSideEffects? :bool // for "reasons", not to be eliminated.  E.g., atomic store.
+  zeroWidth? :bool // op never translates into any machine code.
+                   // example: copy, which may sometimes translate to machine code, is not zero-width.
+  generic? :bool   // true if generic op
+
+  symEffect? :SymEffect // effect this op has on symbol in aux
+  reg? :RegInfo
+  // asm? :string // Asm
 }
 
 
@@ -118,8 +140,6 @@ export class Op {
   }
 }
 
-
-const t_addr = t_usize
 
 function op(name :string, argLen :int, props? :Partial<Op>) :Op {
   return new Op(name, argLen, props)
@@ -456,7 +476,7 @@ export const ops = {
   // op("Bswap64", 1) // Swap bytes
   //
   // Reverse the bits in arg0
-  // op("BitRev8", 1)  
+  // op("BitRev8", 1)
   // op("BitRev16", 1) // Reverse the bits in arg0
   // op("BitRev32", 1) // Reverse the bits in arg0
   // op("BitRev64", 1) // Reverse the bits in arg0
@@ -605,6 +625,3 @@ export const ops = {
   // *arg0 |= arg1.  arg2=memory.  Returns memory.
 
 } // end `const op`
-
-
-

@@ -206,10 +206,10 @@ export class Value {
 //
 export enum BlockKind {
   Invalid = 0,
-  Plain,
-  If,
-  Ret,
-  First,
+  Plain,    // a single successor
+  If,       // 2 successors, if control goto succs[0] else goto succs[1]
+  Ret,      // no successors, control value is memory result
+  First,    // 2 successors, always takes the first one (second is dead)
 }
 
 export enum BranchPrediction {
@@ -267,6 +267,7 @@ export class Block {
         assert(v.nextv !== v)
         if (v.prevv) { v.prevv.nextv = v.nextv }
         if (v.nextv) { v.nextv.prevv = v.prevv }
+        v.uses--
       } else {
         i++
       }
@@ -418,6 +419,7 @@ export class Fun {
   blocks :Block[]
   type   :FunType
   name   :ByteStr
+  pos    :Pos = NoPos  // source position (start)
   nargs  :int      // number of arguments
 
   bid    :ID = 0  // block ID allocator

@@ -193,7 +193,7 @@ export class RegAllocator {
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SPReg).not())
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.SBReg).not())
     this.allocatable = this.allocatable.and(UInt64.ONE.shl(a.GReg).not())
-    
+
     // dlog(`allocatable:`, fmtRegSet(a.allocatable))
   }
 
@@ -216,6 +216,7 @@ export class RegAllocator {
     // blocks appear.
     // Decouple the register allocation order from the generated block order.
     // This also creates an opportunity for experiments to find a better order.
+    // DISABLED
     // a.visitOrder = layoutOrder(f)
     // if (a.config.optimize) {
     //   // update function block order with new layout
@@ -225,6 +226,7 @@ export class RegAllocator {
 
     // Compute block order. This array allows us to distinguish forward edges
     // from backward edges and compute how far they go.
+    // DISABLED
     // let blockOrder = new Array<int>(f.numBlocks())
     // for (let i = 0; i < a.visitOrder.length; i++) {
     //   blockOrder[a.visitOrder[i].id] = i >>> 0
@@ -239,7 +241,7 @@ export class RegAllocator {
         let t = v.type
         let val = new ValState(v)
         a.values[v.id] = val
-        // if (!t.isMemory() && !t.IsVoid() && !t.IsFlags() && !t.IsTuple())
+        // if (!t.isMemory() && !t.isVoid() && !t.isFlags() && !t.isTuple())
         if (t.mem > 0 && !t.isTuple() && v !== SP) {
           val.needReg = true
           val.rematerializeable = v.rematerializeable()
@@ -248,7 +250,7 @@ export class RegAllocator {
       }
     }
     // dlog('a.values:', a.values)
-    
+
 
     // we start by computing live ranges, mapping each value definition
     // to a set of values alive at the point of the definition.
@@ -683,7 +685,7 @@ export class RegAllocator {
           if (plive) for (let e of plive) {
             t.set(e.id, { val: e.dist, pos: e.pos })
           }
-          
+
           let update = false
 
           // Add new live values from scanning this block.

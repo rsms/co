@@ -15,6 +15,7 @@ import { IRBuilder, IRBuilderFlags } from './ir/builder'
 import { printir, fmtir } from './ir/repr'
 // import { IRVirtualMachine } from './ir/vm'
 import { runPassesDev } from './ir/passes'
+import { Program } from './asm/prog'
 
 import { archs } from './arch/all'
 import './all_tests'
@@ -31,7 +32,7 @@ try {
 } catch(_) {
   // Hack to support the playground.
   // TODO: export a nice API instead of this mess.
-  let global_readFileSync = global['readFileSync']
+  let global_readFileSync = GlobalContext['readFileSync']
   if (global_readFileSync && typeof global_readFileSync == 'function') {
     readFileSync = global_readFileSync as SyncFileReader
   } else {
@@ -182,7 +183,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
 
   const _sources = (
     options.sources && options.sources.length ? options.sources :
-    ['example/ssa1.xl']
+    ['example/ssa1.co']
   )
 
   // clear diagnostics from past run (this is a global var)
@@ -240,18 +241,21 @@ async function main(options? :MainOptions) :Promise<MainResult> {
       // run IP passes separately for debugging (normally run online)
       let stopAtPass = options.genericIR ? "lower" : ""
       // stopAtPass = "generic deadcode"
+
       for (let [ , f] of irb.pkg.funs) {
         runPassesDev(f, config, stopAtPass, pass => {
           if (isNodeJsLikeEnv) {
-            console.log(
-              `------------------------------------------------\n` +
-              `after ${pass.name}\n`
-            )
+            console.log(`after ${pass.name}\n`)
             printir(f)
             console.log(
-              `------------------------------------------------`)
+              `━━━━━━━━━━━━━━━━━━━━━━━━` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━`
+            )
           }
         })
+
+        let prog = new Program(f, config)
+        prog.gen()
       }
 
     }
@@ -302,8 +306,8 @@ function banner(message :string) {
   }
 }
 
-if (typeof global.runAllTests == 'function') {
-  global.runAllTests()
+if (typeof GlobalContext.runAllTests == 'function') {
+  GlobalContext.runAllTests()
 }
 
 if (isNodeJsLikeEnv) {
@@ -320,7 +324,7 @@ if (isNodeJsLikeEnv) {
     })
   }
 } else {
-  global['colang'] = {
+  GlobalContext['colang'] = {
     main,
     fmtast: astRepr,
     fmtir,

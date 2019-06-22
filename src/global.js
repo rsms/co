@@ -1,7 +1,7 @@
-var global = (
+var GlobalContext = (
   typeof global != 'undefined' ? global :
   typeof window != 'undefined' ? window :
-  this
+  this || {}
 )
 
 try {
@@ -47,6 +47,8 @@ function exit(status) {
   }
   throw 'EXIT#' + status
 }
+
+const print = console.log.bind(console)
 
 function panic(msg) {
   console.error.apply(console,
@@ -113,7 +115,7 @@ if (
     process.argv.indexOf('-test-only') != -1
   )
 ) {
-  var allTests = global.allTests = global.allTests || []
+  var allTests = GlobalContext.allTests = GlobalContext.allTests || []
   TEST = (name, f) => {
     if (f === undefined) {
       f = name
@@ -170,7 +172,7 @@ if (
       }
     }
   }
-  global.runAllTests = runAllTests
+  GlobalContext.runAllTests = runAllTests
   if (typeof process != 'undefined' && process.nextTick) {
     process.nextTick(runAllTests)
   } else {

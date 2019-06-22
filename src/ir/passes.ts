@@ -136,5 +136,7 @@ export function runPassesDev(
       }
     }
   }
-  console.log(`passes over ${f.name} finished in ${fmtduration2(totaltime)}`)
+  console.log(
+    `passes over ${f.name} finished in a total ${fmtduration2(totaltime)}`
+  )
 }

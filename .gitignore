@@ -11,3 +11,5 @@ _local
 node_modules
 misc/UnicodeData.txt
 misc/emoji-data.txt
+.gen*
+* copy

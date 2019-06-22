@@ -19,6 +19,7 @@ import {
 } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops } from './op'
+// import { ops } from "../arch/ops"
 import { Value, Block, BlockKind, Fun, Pkg } from './ssa'
 import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'
@@ -27,7 +28,6 @@ import { LocalSlot } from './localslot'
 
 // import { debuglog as dlog } from '../util'
 const dlog = function(..._ :any[]){} // silence dlog
-
 
 const bitypes = ast.builtInTypes
 
