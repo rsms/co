@@ -3,7 +3,7 @@ import { ByteStr, asciiByteStr } from '../bytestr'
 import { Num, numIsZero, isNum } from '../num'
 import { Pos, NoPos } from '../pos'
 import { Op } from './op'
-import { ops, opinfo } from "../arch/ops"
+import { ops, opinfo, fmtop } from "./ops"
 import {
   BasicType,
   NumType,
@@ -53,6 +53,7 @@ export class Value {
   type    :BasicType
   b       :Block // containing block
   aux     :Aux|null // auxiliary info for this value. Type depends on op & type
+  auxint  :Num // auxiliary integer info for this value [TODO]
   args    :Value[] = [] // arguments of this value
   comment :string = '' // human readable short comment for IR formatting
   prevv   :Value|null = null // previous value (list link)
@@ -377,7 +378,7 @@ export class Block {
   }
 
   // newValue1 returns a new value in the block with one argument
-  newValue1(op :Op, t :BasicType, arg0 :Value, aux :Aux|null = null) :Value {
+  newValue1(op :Op, t :BasicType|null, arg0 :Value, aux :Aux|null = null) :Value {
     let v = this.f.newValue(this, op, t, aux)
     v.args = [arg0]
     arg0.uses++ //; arg0.users.add(v)
@@ -389,7 +390,7 @@ export class Block {
   // aux values.
   newValue2(
     op :Op,
-    t :BasicType,
+    t :BasicType|null,
     arg0 :Value,
     arg1 :Value,
     aux :Aux|null = null,
@@ -468,7 +469,7 @@ export class Fun {
       !opinfo[op].type ||
       opinfo[op].type!.mem == 0 ||
       t === opinfo[op].type,
-      `op ${op} with different concrete type ` +
+      `op ${fmtop(op)} with different concrete type ` +
       `(op.type=${opinfo[op].type}, t=${t})`
     )
 

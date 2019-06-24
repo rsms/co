@@ -7,6 +7,7 @@ src/*.wast.wasm
 _local
 /.build-cache
 /dist
+/report.*
 .DS_Store
 node_modules
 misc/UnicodeData.txt

@@ -2,7 +2,7 @@ import { Num } from '../num'
 import { Int64 } from '../int64'
 import { BasicType } from '../types'
 import { Op } from './op'
-import { ops, fmtop } from "../arch/ops"
+import { ops, fmtop } from "./ops"
 
 
 // consteval2 evaluates the operation op with x and y of result type t

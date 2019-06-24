@@ -17,7 +17,8 @@ import { printir, fmtir } from './ir/repr'
 import { runPassesDev } from './ir/passes'
 import { Program } from './asm/prog'
 
-import { archs } from './arch/all'
+import { archs } from './ir/arch'
+import { Config } from "./ir/config"
 import './all_tests'
 
 
@@ -200,9 +201,8 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   }
 
   // select target arch and build configuration
-  console.log('available target archs:', Object.keys(archs).join(', '))
-  const arch = archs['covm']
-  const config = arch.config({
+  console.log('available target archs:', Array.from(archs.keys()).join(', '))
+  const config = new Config("covm", {
     optimize: !options.noOptimize,
   })
   console.log(`selected target config: ${config}`)

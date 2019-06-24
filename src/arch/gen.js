@@ -8,6 +8,11 @@ const vm = require("vm")
 const Path = require("path")
 
 const progfile = __dirname + "/.gen-compiled.js"
+const generatedFiles = [
+  __dirname + "/../ir/ops.ts",
+  __dirname + "/../ir/arch.ts",
+  __dirname + "/../ir/rewrite_*",
+].map(s => Path.resolve(s))
 
 const header = `
 const DEBUG = true;
@@ -46,7 +51,7 @@ function amd_require(id) {
 }`
 
 const footer = `
-amd_require("arch/gen");
+amd_require("src/arch/gen");
 `
 
 
@@ -64,6 +69,22 @@ function rpath(filename) {
 }
 
 
+function isGeneratedFile(filename) {
+  filename = Path.resolve(filename)
+  for (let fn of generatedFiles) {
+    if (fn == filename) {
+      return true
+    }
+    if (fn.endsWith("*") &&
+        filename.substr(0, fn.length - 1) == fn.substr(0, fn.length - 1)
+    ) {
+      return true
+    }
+  }
+  return false
+}
+
+
 function sourceIsNewerThanFile(reffile) {
   let st
   try {
@@ -74,11 +95,18 @@ function sourceIsNewerThanFile(reffile) {
   }
   let srcfiles = fs.readdirSync(__dirname, { withFileTypes: true })
   for (let ent of srcfiles) {
-    if (ent.name[0] != "." && ent.isFile()) {
+    if (ent.name[0] != "." &&
+        ent.isFile() &&
+        (ent.name.endsWith(".ts") || ent.name.endsWith(".js"))
+    ) {
       let filename = __dirname + "/" + ent.name
+      if (isGeneratedFile(filename)) {
+        // ignore the file the program generates
+        continue
+      }
       let srcst = fs.statSync(filename)
       if (srcst.mtimeMs > st.mtimeMs) {
-        console.log(rpath(filename), "is newer than", rpath(reffile))
+        // console.log(rpath(filename), "is newer than", rpath(reffile))
         return true
       }
     }
@@ -87,8 +115,11 @@ function sourceIsNewerThanFile(reffile) {
 }
 
 
+let didRetryCompile = false
+
+
 function compile() {
-  console.log("compiling . ->", rpath(progfile))
+  console.log("compiling gen.ts ->", rpath(progfile))
   try {
     proc.execFileSync(
       __dirname + "/../../node_modules/typescript/bin/tsc",
@@ -101,11 +132,25 @@ function compile() {
       }
     )
   } catch (err) {
+    if (!didRetryCompile) {
+      console.error("retrying with clean ops.ts file")
+      didRetryCompile = true
+      fs.copyFileSync(__dirname + "/ops_template.ts", __dirname + "/ops.ts")
+      return compile()
+    }
     console.error(err.message || ""+err)
     process.exit(1)
   }
   let js = fs.readFileSync(progfile, "utf8")
-  js = header + js + footer
+  let sourceMapDirectiveIdx = js.lastIndexOf("//# sourceMappingURL=")
+  let footerJs = footer
+  if (sourceMapDirectiveIdx != -1) {
+    // move sourceMappingURL from js to footer
+    footerJs += js.substr(sourceMapDirectiveIdx)
+    js = js.substr(0, sourceMapDirectiveIdx)
+  }
+  js = header + "\n" + js + "\n" + footerJs
+  // console.log(`write ${Path.relative(".", progfile)}`)
   fs.writeFileSync(progfile, js, "utf8")
   return js
 }
@@ -118,7 +163,7 @@ function run(js) {
     lineOffset: header.split("\n").length,
   });
   global.require = require
-  global.__dirname = __dirname
+  global.__dirname = __dirname;
   script.runInThisContext()
 }
 

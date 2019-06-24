@@ -1,7 +1,7 @@
 import { Value, Block, BlockKind, Fun, BranchPrediction } from './ssa'
 import { phielimValue } from './phielim'
 import { copyelim } from './copyelim'
-import { ops, opinfo } from "../arch/ops"
+import { ops, opinfo } from "./ops"
 
 // import { debuglog as dlog } from '../util'
 const dlog = function(..._ :any[]){} // silence dlog

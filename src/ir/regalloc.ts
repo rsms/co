@@ -6,7 +6,7 @@ import { Config } from './config'
 import { DesiredState } from './reg_desiredstate'
 import { IntGraph } from '../intgraph'
 import { Op } from './op'
-import { ops, opinfo } from "../arch/ops"
+import { ops, opinfo } from "./ops"
 import {
   Register,
   Reg,

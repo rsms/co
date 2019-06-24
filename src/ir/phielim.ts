@@ -1,6 +1,6 @@
 import { debuglog as dlog } from '../util'
 import { Value, Fun } from './ssa'
-import { ops } from "../arch/ops"
+import { ops } from "./ops"
 import { copyelimValue } from './copyelim'
 
 

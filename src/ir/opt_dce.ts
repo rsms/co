@@ -1,5 +1,5 @@
 import { Fun, Value } from './ssa'
-import { opinfo } from "../arch/ops"
+import { opinfo } from "./ops"
 
 // import { fmtir } from './repr'
 // import { debuglog as dlog } from '../util'

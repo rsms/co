@@ -6,7 +6,7 @@ import * as ast from '../ast'
 import * as types from '../types'
 import { Type, BasicType, FunType, t_nil, t_bool } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
-import { ops, opinfo } from "../arch/ops"
+import { ops, opinfo } from "./ops"
 import { Value, Block, BlockKind, Fun, Pkg } from './ssa'
 import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'

@@ -1,6 +1,6 @@
 import { Value, Fun } from './ssa'
-import { ops } from "../arch/ops"
-import { BlockRewriter, ValueRewriter } from './config'
+import { ops } from "./ops"
+import { BlockRewriter, ValueRewriter } from './arch_info'
 import { phielimValue } from './phielim'
 import { copySource } from './copyelim'
 

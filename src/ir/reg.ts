@@ -21,25 +21,26 @@ export interface RegInfoEntry {
   regs :RegSet // allowed input registers
 }
 
-export class RegInfo {
+export interface RegInfo {
+  // inputs and outputs are ordered in register allocation order
   readonly inputs   :RegInfoEntry[]  // allowed input registers
   readonly outputs  :RegInfoEntry[]  // allowed output registers
   readonly clobbers :RegSet
-
-  constructor(
-    inputs   :RegSet[] = [],
-    outputs  :RegSet[] = [],
-    clobbers :RegSet = emptyRegSet
-  ) {
-    this.inputs = inputs.map((regs, idx) => ({ idx, regs }))
-    this.outputs = outputs.map((regs, idx) => ({ idx, regs }))
-    this.clobbers = clobbers
-  }
-
-  // inputs and outputs are ordered in register allocation order
 }
 
-export const nilRegInfo = new RegInfo()
+export function regInfo(
+  inputs   :RegSet[],
+  outputs  :RegSet[],
+  clobbers :RegSet = emptyRegSet
+) :RegInfo {
+  return {
+    inputs: inputs.map((regs, idx) => ({ idx, regs })),
+    outputs: outputs.map((regs, idx) => ({ idx, regs })),
+    clobbers: clobbers,
+  }
+}
+
+export const nilRegInfo = regInfo([], [], emptyRegSet)
 
 
 export function fmtRegSet(m :RegSet) :string {

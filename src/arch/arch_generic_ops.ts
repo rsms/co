@@ -2,7 +2,8 @@
 // describes generic operations
 //
 import {
-  t,
+  ArchDescr,
+  t, // types
   OpDescription,
   ZeroWidth,
   Constant,
@@ -18,9 +19,10 @@ import {
   UsesScratch,
   HasSideEffects,
   Generic,
-} from './describe'
+} from "./describe"
+import { emptyRegSet } from "../ir/reg"
 
-export const ops :OpDescription[] = [
+const ops :OpDescription[] = [
 
   // special
   ["Invalid"],
@@ -59,7 +61,7 @@ export const ops :OpDescription[] = [
     // function calls. It points to the top of the local stack frame,
     // so references should use negative offsets in the range
     // [−framesize, 0): x-8(SP), y-4(SP), and so on.
-  ["SB", ZeroWidth, {type: t.usize}],
+  ["SB", ZeroWidth, t.usize],
     // static base pointer (a.k.a. globals pointer)
     // SB is a pseudo-register that holds the "static base" pointer,
     // i.e. the address of the beginning of the program address space.
@@ -67,9 +69,9 @@ export const ops :OpDescription[] = [
 
   // memory
   ["Load", 2],                  // Load from arg0. arg1=addr
-  ["Store", 3, {type: t.addr}], // Store arg1 to arg0.  arg2=addr, aux=type
-  ["Move", 3, {type: t.addr}],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
-  ["Zero", 2, {type: t.addr}],  // arg0=destptr, arg1=addr, auxint=size, aux=type
+  ["Store", 3, t.addr], // Store arg1 to arg0.  arg2=addr, aux=type
+  ["Move", 3, t.addr],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
+  ["Zero", 2, t.addr],  // arg0=destptr, arg1=addr, auxint=size, aux=type
 
 
   // 2-input arithmetic
@@ -207,75 +209,75 @@ export const ops :OpDescription[] = [
   // 2-input comparisons
   //
   // arg0 == arg1 ; sign-agnostic compare equal
-  ["EqI8",  2, Commutative, {type: t.bool}],
-  ["EqI16", 2, Commutative, {type: t.bool}],
-  ["EqI32", 2, Commutative, {type: t.bool}],
-  ["EqI64", 2, Commutative, {type: t.bool}],
-  ["EqF32", 2, Commutative, {type: t.bool}],
-  ["EqF64", 2, Commutative, {type: t.bool}],
+  ["EqI8",  2, Commutative, t.bool],
+  ["EqI16", 2, Commutative, t.bool],
+  ["EqI32", 2, Commutative, t.bool],
+  ["EqI64", 2, Commutative, t.bool],
+  ["EqF32", 2, Commutative, t.bool],
+  ["EqF64", 2, Commutative, t.bool],
   //
   // arg0 != arg1 ; sign-agnostic compare unequal
-  ["NeqI8",  2, Commutative, {type: t.bool}],
-  ["NeqI16", 2, Commutative, {type: t.bool}],
-  ["NeqI32", 2, Commutative, {type: t.bool}],
-  ["NeqI64", 2, Commutative, {type: t.bool}],
-  ["NeqF32", 2, Commutative, {type: t.bool}],
-  ["NeqF64", 2, Commutative, {type: t.bool}],
+  ["NeqI8",  2, Commutative, t.bool],
+  ["NeqI16", 2, Commutative, t.bool],
+  ["NeqI32", 2, Commutative, t.bool],
+  ["NeqI64", 2, Commutative, t.bool],
+  ["NeqF32", 2, Commutative, t.bool],
+  ["NeqF64", 2, Commutative, t.bool],
   //
   // arg0 < arg1 ; less than
-  ["LessS8",  2, {type: t.bool}], // signed
-  ["LessU8",  2, {type: t.bool}], // unsigned
-  ["LessS16", 2, {type: t.bool}],
-  ["LessU16", 2, {type: t.bool}],
-  ["LessS32", 2, {type: t.bool}],
-  ["LessU32", 2, {type: t.bool}],
-  ["LessS64", 2, {type: t.bool}],
-  ["LessU64", 2, {type: t.bool}],
-  ["LessF32", 2, {type: t.bool}],
-  ["LessF64", 2, {type: t.bool}],
+  ["LessS8",  2, t.bool], // signed
+  ["LessU8",  2, t.bool], // unsigned
+  ["LessS16", 2, t.bool],
+  ["LessU16", 2, t.bool],
+  ["LessS32", 2, t.bool],
+  ["LessU32", 2, t.bool],
+  ["LessS64", 2, t.bool],
+  ["LessU64", 2, t.bool],
+  ["LessF32", 2, t.bool],
+  ["LessF64", 2, t.bool],
   //
   // arg0 <= arg1 ; less than or equal
-  ["LeqS8",  2, {type: t.bool}], // signed
-  ["LeqU8",  2, {type: t.bool}], // unsigned
-  ["LeqS16", 2, {type: t.bool}],
-  ["LeqU16", 2, {type: t.bool}],
-  ["LeqS32", 2, {type: t.bool}],
-  ["LeqU32", 2, {type: t.bool}],
-  ["LeqS64", 2, {type: t.bool}],
-  ["LeqU64", 2, {type: t.bool}],
-  ["LeqF32", 2, {type: t.bool}],
-  ["LeqF64", 2, {type: t.bool}],
+  ["LeqS8",  2, t.bool], // signed
+  ["LeqU8",  2, t.bool], // unsigned
+  ["LeqS16", 2, t.bool],
+  ["LeqU16", 2, t.bool],
+  ["LeqS32", 2, t.bool],
+  ["LeqU32", 2, t.bool],
+  ["LeqS64", 2, t.bool],
+  ["LeqU64", 2, t.bool],
+  ["LeqF32", 2, t.bool],
+  ["LeqF64", 2, t.bool],
   //
   // arg0 > arg1 ; greater than
-  ["GreaterS8",  2, {type: t.bool}], // signed
-  ["GreaterU8",  2, {type: t.bool}], // unsigned
-  ["GreaterS16", 2, {type: t.bool}],
-  ["GreaterU16", 2, {type: t.bool}],
-  ["GreaterS32", 2, {type: t.bool}],
-  ["GreaterU32", 2, {type: t.bool}],
-  ["GreaterS64", 2, {type: t.bool}],
-  ["GreaterU64", 2, {type: t.bool}],
-  ["GreaterF32", 2, {type: t.bool}],
-  ["GreaterF64", 2, {type: t.bool}],
+  ["GreaterS8",  2, t.bool], // signed
+  ["GreaterU8",  2, t.bool], // unsigned
+  ["GreaterS16", 2, t.bool],
+  ["GreaterU16", 2, t.bool],
+  ["GreaterS32", 2, t.bool],
+  ["GreaterU32", 2, t.bool],
+  ["GreaterS64", 2, t.bool],
+  ["GreaterU64", 2, t.bool],
+  ["GreaterF32", 2, t.bool],
+  ["GreaterF64", 2, t.bool],
   //
   // arg0 <= arg1 ; greater than or equal
-  ["GeqS8",  2, {type: t.bool}], // signed
-  ["GeqU8",  2, {type: t.bool}], // unsigned
-  ["GeqS16", 2, {type: t.bool}],
-  ["GeqU16", 2, {type: t.bool}],
-  ["GeqS32", 2, {type: t.bool}],
-  ["GeqU32", 2, {type: t.bool}],
-  ["GeqS64", 2, {type: t.bool}],
-  ["GeqU64", 2, {type: t.bool}],
-  ["GeqF32", 2, {type: t.bool}],
-  ["GeqF64", 2, {type: t.bool}],
+  ["GeqS8",  2, t.bool], // signed
+  ["GeqU8",  2, t.bool], // unsigned
+  ["GeqS16", 2, t.bool],
+  ["GeqU16", 2, t.bool],
+  ["GeqS32", 2, t.bool],
+  ["GeqU32", 2, t.bool],
+  ["GeqS64", 2, t.bool],
+  ["GeqU64", 2, t.bool],
+  ["GeqF32", 2, t.bool],
+  ["GeqF64", 2, t.bool],
   //
   // boolean ops (AndB and OrB are not shortcircuited)
-  // ["AndB", 2, Commutative, {type: t.bool}], // arg0 && arg1
-  // ["OrB",  2, Commutative, {type: t.bool}], // arg0 || arg1
-  // ["EqB",  2, Commutative, {type: t.bool}], // arg0 == arg1
-  // ["NeqB", 2, Commutative, {type: t.bool}], // arg0 != arg1
-  ["Not", 1, {type: t.bool}],                    // !arg0, boolean
+  // ["AndB", 2, Commutative, t.bool], // arg0 && arg1
+  // ["OrB",  2, Commutative, t.bool], // arg0 || arg1
+  // ["EqB",  2, Commutative, t.bool], // arg0 == arg1
+  // ["NeqB", 2, Commutative, t.bool], // arg0 != arg1
+  ["Not", 1, t.bool],                    // !arg0, boolean
 
 
   // min(arg0, arg1) ; max(arg0, arg1)
@@ -377,28 +379,28 @@ export const ops :OpDescription[] = [
   // Conversions
   //
   // signed extensions
-  ["SignExtI8to16",  1, {type: t.i16}], // i8  -> i16
-  ["SignExtI8to32",  1, {type: t.i32}], // i8  -> i32
-  ["SignExtI8to64",  1, {type: t.i64}], // i8  -> i64
-  ["SignExtI16to32", 1, {type: t.i32}], // i16 -> i32
-  ["SignExtI16to64", 1, {type: t.i64}], // i16 -> i64
-  ["SignExtI32to64", 1, {type: t.i64}], // i32 -> i64
+  ["SignExtI8to16",  1, t.i16], // i8  -> i16
+  ["SignExtI8to32",  1, t.i32], // i8  -> i32
+  ["SignExtI8to64",  1, t.i64], // i8  -> i64
+  ["SignExtI16to32", 1, t.i32], // i16 -> i32
+  ["SignExtI16to64", 1, t.i64], // i16 -> i64
+  ["SignExtI32to64", 1, t.i64], // i32 -> i64
   //
   // zero (unsigned) extensions
-  ["ZeroExtI8to16",  1, {type: t.u16}], // u8  -> u16
-  ["ZeroExtI8to32",  1, {type: t.u32}], // u8  -> u32
-  ["ZeroExtI8to64",  1, {type: t.u64}], // u8  -> u64
-  ["ZeroExtI16to32", 1, {type: t.u32}], // u16 -> u32
-  ["ZeroExtI16to64", 1, {type: t.u64}], // u16 -> u64
-  ["ZeroExtI32to64", 1, {type: t.u64}], // u32 -> u64
+  ["ZeroExtI8to16",  1, t.u16], // u8  -> u16
+  ["ZeroExtI8to32",  1, t.u32], // u8  -> u32
+  ["ZeroExtI8to64",  1, t.u64], // u8  -> u64
+  ["ZeroExtI16to32", 1, t.u32], // u16 -> u32
+  ["ZeroExtI16to64", 1, t.u64], // u16 -> u64
+  ["ZeroExtI32to64", 1, t.u64], // u32 -> u64
   //
   // truncations to bool
-  ["TruncI8toBool",  1, {type: t.bool}],
-  ["TruncI16toBool", 1, {type: t.bool}],
-  ["TruncI32toBool", 1, {type: t.bool}],
-  ["TruncI64toBool", 1, {type: t.bool}],
-  ["TruncF32toBool", 1, {type: t.bool}],
-  ["TruncF64toBool", 1, {type: t.bool}],
+  ["TruncI8toBool",  1, t.bool],
+  ["TruncI16toBool", 1, t.bool],
+  ["TruncI32toBool", 1, t.bool],
+  ["TruncI64toBool", 1, t.bool],
+  ["TruncF32toBool", 1, t.bool],
+  ["TruncF64toBool", 1, t.bool],
   //
   // truncations
   ["TruncI16to8",  1], // i16 -> i8  ; u16 -> u8
@@ -409,28 +411,28 @@ export const ops :OpDescription[] = [
   ["TruncI64to32", 1], // i64 -> i32 ; u64 -> u32
   //
   // conversions
-  ["ConvI32toF32", 1, {type: t.f32}], // i32 -> f32
-  ["ConvI32toF64", 1, {type: t.f64}], // i32 -> f64
-  ["ConvI64toF32", 1, {type: t.f32}], // i64 -> f32
-  ["ConvI64toF64", 1, {type: t.f64}], // i64 -> f64
-  ["ConvF32toI32", 1, {type: t.i32}], // f32 -> i32
-  ["ConvF32toI64", 1, {type: t.i64}], // f32 -> i64
-  ["ConvF64toI32", 1, {type: t.i32}], // f64 -> i32
-  ["ConvF64toI64", 1, {type: t.i64}], // f64 -> i64
-  ["ConvF32toF64", 1, {type: t.f64}], // f32 -> f64
-  ["ConvF64toF32", 1, {type: t.f32}], // f64 -> f32
+  ["ConvI32toF32", 1, t.f32], // i32 -> f32
+  ["ConvI32toF64", 1, t.f64], // i32 -> f64
+  ["ConvI64toF32", 1, t.f32], // i64 -> f32
+  ["ConvI64toF64", 1, t.f64], // i64 -> f64
+  ["ConvF32toI32", 1, t.i32], // f32 -> i32
+  ["ConvF32toI64", 1, t.i64], // f32 -> i64
+  ["ConvF64toI32", 1, t.i32], // f64 -> i32
+  ["ConvF64toI64", 1, t.i64], // f64 -> i64
+  ["ConvF32toF64", 1, t.f64], // f32 -> f64
+  ["ConvF64toF32", 1, t.f32], // f64 -> f32
   //
   // conversions only used on 32-bit arch
-  ["ConvU32toF32", 1, {type: t.f32}], // u32 -> f32
-  ["ConvU32toF64", 1, {type: t.f64}], // u32 -> f64
-  ["ConvF32toU32", 1, {type: t.u32}], // f32 -> u32
-  ["ConvF64toU32", 1, {type: t.u32}], // f64 -> u32
+  ["ConvU32toF32", 1, t.f32], // u32 -> f32
+  ["ConvU32toF64", 1, t.f64], // u32 -> f64
+  ["ConvF32toU32", 1, t.u32], // f32 -> u32
+  ["ConvF64toU32", 1, t.u32], // f64 -> u32
   //
   // conversions only used on archs that has the instruction
-  ["ConvU64toF32", 1, {type: t.f32}], // u64 -> f32
-  ["ConvU64toF64", 1, {type: t.f64}], // u64 -> f64
-  ["ConvF32toU64", 1, {type: t.u64}], // f32 -> u64
-  ["ConvF64toU64", 1, {type: t.u64}], // f64 -> u64
+  ["ConvU64toF32", 1, t.f32], // u64 -> f32
+  ["ConvU64toF64", 1, t.f64], // u64 -> f64
+  ["ConvF32toU64", 1, t.u64], // f32 -> u64
+  ["ConvF64toU64", 1, t.u64], // f64 -> u64
 
 
   // Atomic operations used for semantically inlining runtime/internal/atomic.
@@ -442,18 +444,31 @@ export const ops :OpDescription[] = [
   ["AtomicLoadPtr", 2, /*{type: "(BytePtr,Mem)"}*/], // Load from arg0.  arg1=memory.  Returns loaded value and new memory.
   ["AtomicStore32", 3, HasSideEffects /*{type: "Mem"}*/], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
   ["AtomicStore64", 3, HasSideEffects /*{type: "Mem"}*/], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
-  ["AtomicStorePtrNoWB", 3, HasSideEffects, {type: t.addr}], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
+  ["AtomicStorePtrNoWB", 3, HasSideEffects, t.addr], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
   ["AtomicExchange32", 3, HasSideEffects /*{type: "(UInt32,Mem)"}*/], // Store arg1 to *arg0.  arg2=memory. Returns old contents of *arg0 and new memory.
   ["AtomicExchange64", 3, HasSideEffects /*{type: "(UInt64,Mem)"}*/], // Store arg1 to *arg0.  arg2=memory. Returns old contents of *arg0 and new memory.
   ["AtomicAdd32", 3, HasSideEffects /*{type: "(UInt32,Mem)"}*/], // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
   ["AtomicAdd64", 3, HasSideEffects /*{type: "(UInt64,Mem)"}*/], // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
   ["AtomicCompareAndSwap32", 4, HasSideEffects /*{type: "(Bool,Mem)"}*/], // if *arg0==arg1, then set *arg0=arg2. Returns true if store happens and new memory.
   ["AtomicCompareAndSwap64", 4, HasSideEffects /*{type: "(Bool,Mem)"}*/], // if *arg0==arg1, then set *arg0=arg2. Returns true if store happens and new memory.
-  ["AtomicAnd8", 3, HasSideEffects, {type: t.addr}], // *arg0 &= arg1.  arg2=memory.  Returns memory.
-  ["AtomicOr8", 3, HasSideEffects, {type: t.addr}], // *arg0 |= arg1.  arg2=memory.  Returns memory.
+  ["AtomicAnd8", 3, HasSideEffects, t.addr], // *arg0 &= arg1.  arg2=memory.  Returns memory.
+  ["AtomicOr8", 3, HasSideEffects, t.addr], // *arg0 |= arg1.  arg2=memory.  Returns memory.
 
 ].map(d => {
   // add generic flag to all generic ops
   ;(d as any as any[]).push(Generic)
   return d
 })
+
+
+export default {
+  arch:      "generic",
+  ops,
+  addrSize:  4,
+  regSize:   4,
+  intSize:   4,
+  registers: [],
+  hasGReg:   false,
+  gpRegMask: emptyRegSet,
+  fpRegMask: emptyRegSet,
+} as ArchDescr

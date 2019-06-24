@@ -8,12 +8,14 @@
     "module": "amd",
     "newLine": "LF",
     "target": "es2017",
-    "sourceMap": true,
+    // "sourceMap": false,
+    "inlineSourceMap": true,
     "removeComments": true,
     "lib": [
       "dom",
       "es2017"
     ],
+    "rootDir": "../../",
     "outFile": ".gen-compiled.js"
   },
   "include": [

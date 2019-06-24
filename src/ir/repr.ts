@@ -1,6 +1,6 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
 import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
-import { fmtop } from "../arch/ops"
+import { fmtop } from "./ops"
 
 export type LineWriter = (s :string) => any
 

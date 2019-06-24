@@ -1,5 +1,20 @@
+import { ArchInfo } from "../ir/arch_info"
 import { OpInfo } from "../ir/op"
 import * as types from '../types'
+
+// export type Typename = "bool"
+//                      | "u8"
+//                      | "u16"
+//                      | "i16"
+//                      | "u32"
+//                      | "i32"
+//                      | "u64"
+//                      | "i64"
+//                      | "usize"
+//                      | "addr"
+//                      | "f32"
+//                      | "f64"
+//                      | "str"
 
 export const t = {
   "bool":  types.t_bool,
@@ -33,14 +48,21 @@ export const
 , HasSideEffects = Symbol("HasSideEffects") // for "reasons", not to be eliminated.  E.g., atomic store.
 , Generic = Symbol("Generic") // generic op
 
-export type OpDescription = (string|ArgLen|Flag|Partial<OpInfo>)[]
+
+export interface ArchDescr extends ArchInfo {
+  ops: OpDescription[]
+}
+
+export type OpDescription = (string|ArgLen|Flag|types.BasicType|OpInfoProps)[]
 
 type ArgLen = int
 type Flag = symbol
+type TypeSpec = string
+type OpInfoProps = Partial<OpInfo>
 
 export function parseOpDescr(d :OpDescription) :OpInfo {
   // interpret d which is a list of:
-  //   name :string [ArgLen | Flag | Props]*
+  //   name :string [ArgLen | Flag | Type | Props]*
   let props = {
     name: d[0] as string,
     argLen: 0,
@@ -75,8 +97,16 @@ export function parseOpDescr(d :OpDescription) :OpInfo {
         break
 
       case "object":
-        Object.assign(props, v)
+        if (v instanceof types.BasicType) {
+          props.type = v
+        } else {
+          Object.assign(props, v)
+        }
         break
+
+      // case "string":
+      //   Object.assign(props, v)
+      //   break
 
       default:
         panic("unexpected value", v, "in op descriptor", d)

@@ -128,6 +128,9 @@ export class UIntType extends IntType {
 }
 
 // basic type constants
+// Their names MUST BE THE SAME as their exported variable names sans "t_".
+// i.e. a type exported as t_foo should be named "foo".
+// This because generated code depends on the names.
 //
 export const
   // special types

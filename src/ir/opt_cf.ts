@@ -4,7 +4,7 @@
 import { Num, isNum } from '../num'
 import { numconv } from '../numconv'
 import { Op } from './op'
-import { opinfo } from "../arch/ops"
+import { opinfo } from "./ops"
 import { Value, Block } from './ssa'
 import { consteval1, consteval2 } from './consteval'
 

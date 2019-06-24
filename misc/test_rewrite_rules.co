@@ -1,0 +1,24 @@
+// useful for testing src/arch rule engine
+
+MulI32 'v.uses > 0' -> MUL32
+(MulI32) -> MUL32
+
+// (TruncI16to8 x) -> x
+
+// (AddI64 x y) 'v.commutative' -> (ADD64 y x) // xxx
+// // (AddI64 _ y) 'v.aux > y' -> (ADD64 y)
+// // (AddI64 x y) 'v.aux > x' -> (ADD64 x y)
+// (AddI64 x y) -> (ADD64 x y)
+
+(AddI(32|16|8) x y) -> (ADD32 x y)
+
+// // (NilCheck ptr mem) -> (LowNilCheck ptr mem)
+// // (ConstI32 [val]) -> (MOV32const [val])
+// // // comment1cl
+// // (AddI32 x y) -> (ADD32 x y) // comment2
+// // (ADD32 x (MOV32const [c])) -> (ADD32const [c] x)
+
+// // Large zeroing uses helper.
+// (Zero [s] destptr mem)
+//   's % 8 == 0 && s > 32' ->
+//   (ZeroLarge [s / 8] destptr mem)

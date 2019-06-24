@@ -1,6 +1,6 @@
 // import { debuglog as dlog } from '../util'
 import { Value, Fun, BlockKind } from './ssa'
-import { ops } from "../arch/ops"
+import { ops } from "./ops"
 import { t_bool } from '../types'
 
 // Shortcircuit finds situations where branch directions

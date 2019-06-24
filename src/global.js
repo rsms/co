@@ -4,8 +4,12 @@ var GlobalContext = (
   this || {}
 )
 
+var __utillib = null;
 try {
-  typeof require != 'undefined' && require("source-map-support").install()
+  if (typeof require != 'undefined') {
+    __utillib = require("util");
+    require("source-map-support").install();
+  }
 } catch(_) {}
 
 function _stackTrace(cons) {
@@ -98,7 +102,10 @@ function assert() {
   }
 }
 
-function repr(obj) {
+var repr = __utillib && __utillib.inspect ? function repr(obj) {
+  let color = typeof process != "undefined" && process.stdout && process.stdout.isTTY;
+  return __utillib.inspect(obj, /*showHidden*/false, /*depth*/4, !!color)
+} : function repr(obj) {
   // TODO: something better
   try {
     return JSON.stringify(obj)

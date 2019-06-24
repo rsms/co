@@ -1,5 +1,5 @@
 import { Value, Fun } from './ssa'
-import { ops } from "../arch/ops"
+import { ops } from "./ops"
 
 // copyelim removes all uses of ops.Copy values from f.
 // A subsequent deadcode pass is needed to actually remove the copies.

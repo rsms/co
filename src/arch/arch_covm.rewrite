@@ -1,0 +1,31 @@
+
+NilCheck -> LowNilCheck
+
+MulI32 -> MUL32
+
+// (ConstI32 [_]) -> (
+//   MOV32const [4] (ADD32 (ConstI32 [3]) (ConstI32 [1])) )
+
+// (TruncI16to8 x) -> x
+
+// (AddI64 x y) 'v.aux' -> (ADD64 y x) // xxx
+// (AddI64 _ y) 'v.aux != y' -> (ADD64 y)
+// // (AddI64 x y) 'v.aux > x' -> (ADD64 x y)
+// (AddI64 x y) -> (ADD64 x y)
+
+(AddI(32|16|8) x y) -> (ADD32 x y)
+AddI64 -> ADD64
+
+// // (NilCheck ptr mem) -> (LowNilCheck ptr mem)
+// // (ConstI32 [val]) -> (MOV32const [val])
+// // // comment1cl
+// // (AddI32 x y) -> (ADD32 x y) // comment2
+// // (ADD32 x (MOV32const [c])) -> (ADD32const [c] x)
+
+// // Large zeroing uses helper.
+// (Zero [s] destptr mem)
+//   's % 8 == 0 && s > 32' ->
+//   (ZeroLarge [s / 8] destptr mem)
+
+// // optimizations
+// (ADD64 (ConstI64 [x]) (ConstI64 [y])) -> (ConstI64 [x + y])
