@@ -13,6 +13,8 @@ const generatedFiles = [
   __dirname + "/../ir/arch.ts",
   __dirname + "/../ir/rewrite_*",
 ].map(s => Path.resolve(s))
+const opsTemplateFile = __dirname + "/ops_template.ts"
+const opsOutFile = __dirname + "/../ir/ops.ts"
 
 const header = `
 const DEBUG = true;
@@ -135,7 +137,7 @@ function compile() {
     if (!didRetryCompile) {
       console.error("retrying with clean ops.ts file")
       didRetryCompile = true
-      fs.copyFileSync(__dirname + "/ops_template.ts", __dirname + "/ops.ts")
+      fs.copyFileSync(opsTemplateFile, opsOutFile)
       return compile()
     }
     console.error(err.message || ""+err)
