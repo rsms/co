@@ -98,15 +98,15 @@ const gp11 = regInfo([gpsp], [gp])
 // operators
 const ops :OpDescription[] = [
 
-  ["MOV32const", Rematerializeable, t.u32, { reg: gp01, aux: t.u32 }],
+  ["MOV32const", Rematerializeable, t.u32, { reg: gp01, aux: "Int32" }],
 
   ["ADD32", 2, Commutative, t.u32, { reg: gp21 }], // arg0 + arg1
-  ["ADD32const", 1, Commutative, t.u32, { reg: gp11, aux: t.u32 }], // arg0 + aux
+  ["ADD32const", 1, Commutative, t.u32, { reg: gp11, aux: "Int32" }], // arg0 + aux
   ["ADD64", 2, Commutative, t.u64, { reg: gp21 }], // arg0 + arg1
 
   ["MUL32", 2, Commutative, t.u32, { reg: gp21 }], // arg0 + arg1
 
-  ["ZeroLarge", 2, { reg: gp10, aux: t.u64 }],  // large zeroing. arg0=start, arg1=mem, auxint=len/8, returns mem
+  ["ZeroLarge", 2, { reg: gp10, aux: "Int64" }],  // large zeroing. arg0=start, arg1=mem, auxInt=len/8, returns mem
 
   ["LowNilCheck", 2, NilCheck, FaultOnNilArg0, { reg: gp10 }], // panic if arg0 is nil. arg1=mem.
 

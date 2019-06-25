@@ -1,7 +1,6 @@
 //
 // constant-folding optimizations
 //
-import { Num, isNum } from '../num'
 import { numconv } from '../numconv'
 import { Op } from './op'
 import { opinfo } from "./ops"
@@ -11,8 +10,7 @@ import { consteval1, consteval2 } from './consteval'
 
 export function optcf_op1(b :Block, op :Op, x :Value) :Value|null {
   if (opinfo[x.op].constant) {
-    assert(isNum(x.aux))
-    let val = consteval1(op, x.type, x.aux as Num)
+    let val = consteval1(op, x.type, x.auxInt)
     if (val !== null) {
       return b.f.constVal(x.type, val)
     }
@@ -27,11 +25,8 @@ export function optcf_op2(b :Block, op :Op, x :Value, y :Value) :Value|null {
     return null
   }
 
-  assert(isNum(x.aux))
-  assert(isNum(y.aux))
-
-  let xval = x.aux as Num
-  let yval = y.aux as Num
+  let xval = x.auxInt
+  let yval = y.auxInt
 
   if (x.type !== y.type) {
     // different types

@@ -1,5 +1,5 @@
 // generated from arch/*_ops.ts -- do not edit.
-import { Op, OpInfo, SymEffect } from "../ir/op"
+import { Op, OpInfo, AuxType, SymEffect } from "../ir/op"
 import { UInt64 } from "../int64"
 //$IMPORTS
 

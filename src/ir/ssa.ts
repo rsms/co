@@ -41,7 +41,7 @@ export type Location = Register | LocalSlot
 
 // Aux is an auxiliary value of Value
 //
-export type Aux = ByteStr | Uint8Array | Num
+export type Aux = ByteStr | Uint8Array
 
 
 // Value is a three-address-code operation
@@ -52,10 +52,10 @@ export class Value {
   op      :Op    // operation that computes this value
   type    :BasicType
   b       :Block // containing block
-  aux     :Aux|null // auxiliary info for this value. Type depends on op & type
-  auxint  :Num // auxiliary integer info for this value [TODO]
+  aux     :Aux|null // auxiliary info for this value
+  auxInt  :Num      // auxiliary integer info for this value
   args    :Value[] = [] // arguments of this value
-  comment :string = '' // human readable short comment for IR formatting
+  comment :string = ''  // human readable short comment for IR formatting
   prevv   :Value|null = null // previous value (list link)
   nextv   :Value|null = null // next value (list link)
   reg     :Register|null = null  // allocated register
@@ -64,11 +64,12 @@ export class Value {
   // users = new Set<Value|Block>()
 
 
-  constructor(id :ID, b :Block, op :Op, type :BasicType, aux :Aux|null) {
+  constructor(id :ID, b :Block, op :Op, type :BasicType, auxInt :Num, aux :Aux|null) {
     this.id = id
     this.op = op
     this.type = type
     this.b = b
+    this.auxInt = auxInt
     this.aux = aux
     assert(type instanceof BasicType)
     assert(type.mem > 0, `ir.Value assigned abstract type ${type}`)
@@ -79,8 +80,7 @@ export class Value {
   }
 
   auxIsZero() :bool {
-    assert(isNum(this.aux), `aux is not a number`)
-    return numIsZero(this.aux as Num)
+    return numIsZero(this.auxInt)
   }
 
   reset(op :Op) {
@@ -91,6 +91,7 @@ export class Value {
     //   v.pos = posWithNotStmt(v.pos)
     // }
     v.resetArgs()
+    v.auxInt = 0
     v.aux = null
   }
 
@@ -365,21 +366,21 @@ export class Block {
   }
 
   newPhi(t :BasicType) :Value {
-    let v = this.f.newValue(this, ops.Phi, t, null)
+    let v = this.f.newValue(this, ops.Phi, t, 0, null)
     this.values.push(v)
     return v
   }
 
   // newValue0 return a value with no args
-  newValue0(op :Op, t :BasicType|null = null, aux :Aux|null = null) :Value {
-    let v = this.f.newValue(this, op, t, aux)
+  newValue0(op :Op, t :BasicType|null = null, auxInt :Num = 0, aux :Aux|null = null) :Value {
+    let v = this.f.newValue(this, op, t, auxInt, aux)
     this.values.push(v)
     return v
   }
 
   // newValue1 returns a new value in the block with one argument
-  newValue1(op :Op, t :BasicType|null, arg0 :Value, aux :Aux|null = null) :Value {
-    let v = this.f.newValue(this, op, t, aux)
+  newValue1(op :Op, t :BasicType|null, arg0 :Value, auxInt :Num = 0, aux :Aux|null = null) :Value {
+    let v = this.f.newValue(this, op, t, auxInt, aux)
     v.args = [arg0]
     arg0.uses++ //; arg0.users.add(v)
     this.values.push(v)
@@ -393,9 +394,10 @@ export class Block {
     t :BasicType|null,
     arg0 :Value,
     arg1 :Value,
+    auxInt :Num = 0,
     aux :Aux|null = null,
   ) :Value {
-    let v = this.f.newValue(this, op, t, aux)
+    let v = this.f.newValue(this, op, t, auxInt, aux)
     v.args = [arg0, arg1]
     arg0.uses++ //; arg0.users.add(v)
     arg1.uses++ //; arg1.users.add(v)
@@ -460,7 +462,7 @@ export class Fun {
     // TODO: put into free list
   }
 
-  newValue(b :Block, op :Op, t :BasicType|null, aux :Aux|null) :Value {
+  newValue(b :Block, op :Op, t :BasicType|null, auxInt :Num, aux :Aux|null) :Value {
     assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
     // TODO we could use a free list and return values when they die
 
@@ -473,7 +475,14 @@ export class Fun {
       `(op.type=${opinfo[op].type}, t=${t})`
     )
 
-    return new Value(this.vid++, b, op, t || opinfo[op].type || t_nil, aux)
+    return new Value(
+      this.vid++,
+      b,
+      op,
+      t || opinfo[op].type || t_nil,
+      auxInt,
+      aux
+    )
   }
 
   freeValue(v :Value) {

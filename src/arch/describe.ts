@@ -1,5 +1,5 @@
 import { ArchInfo } from "../ir/arch_info"
-import { OpInfo } from "../ir/op"
+import { OpInfo, AuxType } from "../ir/op"
 import * as types from '../types'
 
 // export type Typename = "bool"
@@ -58,7 +58,9 @@ export type OpDescription = (string|ArgLen|Flag|types.BasicType|OpInfoProps)[]
 type ArgLen = int
 type Flag = symbol
 type TypeSpec = string
-type OpInfoProps = Partial<OpInfo>
+interface OpInfoProps extends Omit<Partial<OpInfo>,"aux"> {
+  aux? :string
+}
 
 export function parseOpDescr(d :OpDescription) :OpInfo {
   // interpret d which is a list of:

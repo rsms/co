@@ -36,22 +36,22 @@ const ops :OpDescription[] = [
   // function calls
   // Arguments to the call have already been written to the stack.
   // Return values appear on the stack.
-  ["Call", 1, Call, {aux: t.usize}], // call function
-  ["TailCall", 1, Call, {aux: t.usize}], // call function
-  // ["ClosureCall", 3, Call, {aux: t.usize}] // arg0=code pointer, arg1=context ptr, arg2=memory.  aux=arg size.
-  // ["ICall", 2, Call, {aux: t.usize}] // interface call.  arg0=code pointer, arg1=memory, aux=arg size.
+  ["Call", 1, Call, {aux: "Int64"}], // call function
+  ["TailCall", 1, Call, {aux: "Int64"}], // call function
+  // ["ClosureCall", 3, Call, {aux: "Int64"}] // arg0=code pointer, arg1=context ptr, arg2=memory.  aux=arg size.
+  // ["ICall", 2, Call, {aux: "Int64"}] // interface call.  arg0=code pointer, arg1=memory, aux=arg size.
 
 
   // constants
   // Constant values are stored in the aux field.
-  ["ConstBool", Constant, {aux: t.bool}], // aux is 0=false, 1=true
-  ["ConstI8",   0, Constant, {aux: t.u8}], // aux is sign-extended 8 bits
-  ["ConstI16",  0, Constant, {aux: t.u16}], // aux is sign-extended 16 bits
-  ["ConstI32",  0, Constant, {aux: t.u32}], // aux is sign-extended 32 bits
-  ["ConstI64", Constant, {aux: t.u64}], // aux is Int64
-  ["ConstF32", Constant, {aux: t.u32}],
-  ["ConstF64", Constant, {aux: t.u64}],
-  ["ConstString", {aux: t.str}], // value is aux (string)
+  ["ConstBool", Constant, {aux: "Bool"}], // aux is 0=false, 1=true
+  ["ConstI8",   0, Constant, {aux: "Int8"}], // aux is sign-extended 8 bits
+  ["ConstI16",  0, Constant, {aux: "Int16"}], // aux is sign-extended 16 bits
+  ["ConstI32",  0, Constant, {aux: "Int32"}], // aux is sign-extended 32 bits
+  ["ConstI64", Constant, {aux: "Int64"}], // aux is Int64
+  ["ConstF32", Constant, {aux: "Int32"}],
+  ["ConstF64", Constant, {aux: "Int64"}],
+  ["ConstString", {aux: "String"}], // value is aux (string)
 
 
   // stack
@@ -71,7 +71,7 @@ const ops :OpDescription[] = [
   ["Load", 2],                  // Load from arg0. arg1=addr
   ["Store", 3, t.addr], // Store arg1 to arg0.  arg2=addr, aux=type
   ["Move", 3, t.addr],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
-  ["Zero", 2, t.addr],  // arg0=destptr, arg1=addr, auxint=size, aux=type
+  ["Zero", 2, t.addr],  // arg0=destptr, arg1=addr, auxInt=size, aux=type
 
 
   // 2-input arithmetic
@@ -152,58 +152,58 @@ const ops :OpDescription[] = [
   // on some platforms.
   //
   // arg0 << arg1 ; sign-agnostic shift left
-  ["ShLI8x8",   2, {aux: t.bool}],
-  ["ShLI8x16",  2, {aux: t.bool}],
-  ["ShLI8x32",  2, {aux: t.bool}],
-  ["ShLI8x64",  2, {aux: t.bool}],
-  ["ShLI16x8",  2, {aux: t.bool}],
-  ["ShLI16x16", 2, {aux: t.bool}],
-  ["ShLI16x32", 2, {aux: t.bool}],
-  ["ShLI16x64", 2, {aux: t.bool}],
-  ["ShLI32x8",  2, {aux: t.bool}],
-  ["ShLI32x16", 2, {aux: t.bool}],
-  ["ShLI32x32", 2, {aux: t.bool}],
-  ["ShLI32x64", 2, {aux: t.bool}],
-  ["ShLI64x8",  2, {aux: t.bool}],
-  ["ShLI64x16", 2, {aux: t.bool}],
-  ["ShLI64x32", 2, {aux: t.bool}],
-  ["ShLI64x64", 2, {aux: t.bool}],
+  ["ShLI8x8",   2, {aux: "Bool"}],
+  ["ShLI8x16",  2, {aux: "Bool"}],
+  ["ShLI8x32",  2, {aux: "Bool"}],
+  ["ShLI8x64",  2, {aux: "Bool"}],
+  ["ShLI16x8",  2, {aux: "Bool"}],
+  ["ShLI16x16", 2, {aux: "Bool"}],
+  ["ShLI16x32", 2, {aux: "Bool"}],
+  ["ShLI16x64", 2, {aux: "Bool"}],
+  ["ShLI32x8",  2, {aux: "Bool"}],
+  ["ShLI32x16", 2, {aux: "Bool"}],
+  ["ShLI32x32", 2, {aux: "Bool"}],
+  ["ShLI32x64", 2, {aux: "Bool"}],
+  ["ShLI64x8",  2, {aux: "Bool"}],
+  ["ShLI64x16", 2, {aux: "Bool"}],
+  ["ShLI64x32", 2, {aux: "Bool"}],
+  ["ShLI64x64", 2, {aux: "Bool"}],
   //
   // arg0 >> arg1 ; sign-replicating (arithmetic) shift right
-  ["ShRS8x8",   2, {aux: t.bool}],
-  ["ShRS8x16",  2, {aux: t.bool}],
-  ["ShRS8x32",  2, {aux: t.bool}],
-  ["ShRS8x64",  2, {aux: t.bool}],
-  ["ShRS16x8",  2, {aux: t.bool}],
-  ["ShRS16x16", 2, {aux: t.bool}],
-  ["ShRS16x32", 2, {aux: t.bool}],
-  ["ShRS16x64", 2, {aux: t.bool}],
-  ["ShRS32x8",  2, {aux: t.bool}],
-  ["ShRS32x16", 2, {aux: t.bool}],
-  ["ShRS32x32", 2, {aux: t.bool}],
-  ["ShRS32x64", 2, {aux: t.bool}],
-  ["ShRS64x8",  2, {aux: t.bool}],
-  ["ShRS64x16", 2, {aux: t.bool}],
-  ["ShRS64x32", 2, {aux: t.bool}],
-  ["ShRS64x64", 2, {aux: t.bool}],
+  ["ShRS8x8",   2, {aux: "Bool"}],
+  ["ShRS8x16",  2, {aux: "Bool"}],
+  ["ShRS8x32",  2, {aux: "Bool"}],
+  ["ShRS8x64",  2, {aux: "Bool"}],
+  ["ShRS16x8",  2, {aux: "Bool"}],
+  ["ShRS16x16", 2, {aux: "Bool"}],
+  ["ShRS16x32", 2, {aux: "Bool"}],
+  ["ShRS16x64", 2, {aux: "Bool"}],
+  ["ShRS32x8",  2, {aux: "Bool"}],
+  ["ShRS32x16", 2, {aux: "Bool"}],
+  ["ShRS32x32", 2, {aux: "Bool"}],
+  ["ShRS32x64", 2, {aux: "Bool"}],
+  ["ShRS64x8",  2, {aux: "Bool"}],
+  ["ShRS64x16", 2, {aux: "Bool"}],
+  ["ShRS64x32", 2, {aux: "Bool"}],
+  ["ShRS64x64", 2, {aux: "Bool"}],
   //
   // arg0 >> arg1 (aka >>>) ; zero-replicating (logical) shift right
-  ["ShRU8x8",   2, {aux: t.bool}],
-  ["ShRU8x16",  2, {aux: t.bool}],
-  ["ShRU8x32",  2, {aux: t.bool}],
-  ["ShRU8x64",  2, {aux: t.bool}],
-  ["ShRU16x8",  2, {aux: t.bool}],
-  ["ShRU16x16", 2, {aux: t.bool}],
-  ["ShRU16x32", 2, {aux: t.bool}],
-  ["ShRU16x64", 2, {aux: t.bool}],
-  ["ShRU32x8",  2, {aux: t.bool}],
-  ["ShRU32x16", 2, {aux: t.bool}],
-  ["ShRU32x32", 2, {aux: t.bool}],
-  ["ShRU32x64", 2, {aux: t.bool}],
-  ["ShRU64x8",  2, {aux: t.bool}],
-  ["ShRU64x16", 2, {aux: t.bool}],
-  ["ShRU64x32", 2, {aux: t.bool}],
-  ["ShRU64x64", 2, {aux: t.bool}],
+  ["ShRU8x8",   2, {aux: "Bool"}],
+  ["ShRU8x16",  2, {aux: "Bool"}],
+  ["ShRU8x32",  2, {aux: "Bool"}],
+  ["ShRU8x64",  2, {aux: "Bool"}],
+  ["ShRU16x8",  2, {aux: "Bool"}],
+  ["ShRU16x16", 2, {aux: "Bool"}],
+  ["ShRU16x32", 2, {aux: "Bool"}],
+  ["ShRU16x64", 2, {aux: "Bool"}],
+  ["ShRU32x8",  2, {aux: "Bool"}],
+  ["ShRU32x16", 2, {aux: "Bool"}],
+  ["ShRU32x32", 2, {aux: "Bool"}],
+  ["ShRU32x64", 2, {aux: "Bool"}],
+  ["ShRU64x8",  2, {aux: "Bool"}],
+  ["ShRU64x16", 2, {aux: "Bool"}],
+  ["ShRU64x32", 2, {aux: "Bool"}],
+  ["ShRU64x64", 2, {aux: "Bool"}],
 
 
   // 2-input comparisons

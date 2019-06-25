@@ -123,8 +123,9 @@ export function shortcircuit(f :Fun) {
       // pi := e1.i
 
       // The successor we always go to when coming in from that predecessor.
-      // Note: a.aux = true|false = 1|0
-      let t = b.succs[1 - (a.aux as number)]
+      // Note: a.auxInt = true|false = 1|0
+      assert(typeof a.auxInt == "number")
+      let t = b.succs[1 - (a.auxInt as int)]
       let ti = t.preds.indexOf(b)
 
       // Remove b's incoming edge from p.

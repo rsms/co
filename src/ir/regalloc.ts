@@ -217,7 +217,7 @@ export class RegAllocator {
     // TODO: track the need for this when generating the initial IR.
     // Some functions do not need SP.
     // Also consider always adding this during IR construction.
-    const SP = f.newValue(f.entry, ops.SP, a.addrtype, null)
+    const SP = f.newValue(f.entry, ops.SP, a.addrtype, 0, null)
     SP.reg = a.registers[this.SPReg]
     f.entry.pushValueFront(SP)
 

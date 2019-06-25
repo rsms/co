@@ -10,7 +10,7 @@ MulI32 -> MUL32
 
 // (AddI64 x y) 'v.aux' -> (ADD64 y x) // xxx
 // (AddI64 _ y) 'v.aux != y' -> (ADD64 y)
-// // (AddI64 x y) 'v.aux > x' -> (ADD64 x y)
+// (AddI64 x y) 'v.auxInt > x' -> (ADD64 x y)
 // (AddI64 x y) -> (ADD64 x y)
 
 (AddI(32|16|8) x y) -> (ADD32 x y)
@@ -27,5 +27,6 @@ AddI64 -> ADD64
 //   's % 8 == 0 && s > 32' ->
 //   (ZeroLarge [s / 8] destptr mem)
 
-// // optimizations
-// (ADD64 (ConstI64 [x]) (ConstI64 [y])) -> (ConstI64 [x + y])
+// optimizations
+(ADD64 (ConstI64 [x]) (ConstI64 [y])) -> (ConstI64 [x + y])
+(ADD32 (ConstI32 [x]) (ConstI32 [y])) -> (ConstI32 [x + y])

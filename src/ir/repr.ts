@@ -1,6 +1,7 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
 import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
-import { fmtop } from "./ops"
+import { fmtop, opinfo } from "./ops"
+import { OpInfo, AuxType } from "./op"
 
 export type LineWriter = (s :string) => any
 
@@ -18,29 +19,71 @@ class IRFmt {
   }
 }
 
+function fmtaux(f :IRFmt, v :Value, opi :OpInfo) :string {
+  let auxInt = false
+  let aux = false
+  switch (opi.aux) {
+
+  case AuxType.Bool:          // auxInt is 0/1 for false/true
+  case AuxType.Int8:          // auxInt is an 8-bit integer
+  case AuxType.Int16:         // auxInt is a 16-bit integer
+  case AuxType.Int32:         // auxInt is a 32-bit integer
+  case AuxType.Int64:         // auxInt is a 64-bit integer
+  case AuxType.Float32:       // auxInt is a float32 (encoded with math.Float64bits)
+  case AuxType.Float64:       // auxInt is a float64 (encoded with math.Float64bits)
+    auxInt = true
+    break
+
+  case AuxType.String:        // aux is a string
+  case AuxType.Sym:           // aux is a symbol (a *gc.Node for locals or an *obj.LSym for globals)
+  case AuxType.Typ:           // aux is a type
+  case AuxType.CCop:          // aux is a ssa.Op that represents a flags-to-bool conversion (e.g. LessThan)
+    aux = true
+    break
+
+  case AuxType.SymOff:        // aux is a symbol, auxInt is an offset
+  case AuxType.SymValAndOff:  // aux is a symbol, auxInt is a ValAndOff
+  case AuxType.SymInt32:      // aux is a symbol, auxInt is a 32-bit integer
+  case AuxType.TypSize:       // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
+    auxInt = true
+    aux = true
+    break
+
+  }
+  let s = ""
+  if (auxInt) {
+    s += ` [${v.auxInt}]`
+  }
+  if (aux) {
+    s += ` {${v.aux}}`
+  }
+  return s
+}
+
 function fmtval(f :IRFmt, v :Value) :string {
   let s = `v${v.id} = `
   assert(v.op !== undefined, `value ${v} missing operator v=${repr(v)}`)
+  let opi = opinfo[v.op]
   s += fmtop(v.op)
   if (f.types) {
-    s += ' ' + f.style.grey(`<${v.type}>`)
+    s += ' ' + f.style.purple(`<${v.type}>`)
   }
-  for (let arg of v.args) {
-    s += ' ' + arg
+  for (let i = 0; i < opi.argLen; i++) {
+    s += ' ' + v.args[i]
   }
-  if (v.aux !== null) {
-    s += ` [${v.aux}]`
+  if (opi.aux != AuxType.None) {
+    s += fmtaux(f, v, opi)
   }
   // if (v.reg != noReg) {
   //   s += ` {${style.orange(v.reg.toString())}}`
   // }
   if (v.reg) {
-    s += ` {${style.orange(v.reg.name)}}`
+    s += ` ${style.orange(v.reg.name)}`
   }
-  s += ` : ${style.pink(v.uses.toString())}`
-  if (v.comment) {
-    s += f.style.grey('  // ' + v.comment)
-  }
+  s += f.style.grey(
+    v.comment ? `  // ${v.comment}. use ${v.uses}` :
+    `  // use ${v.uses}`
+  )
   return s
 }
 

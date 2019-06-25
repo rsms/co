@@ -1091,7 +1091,7 @@ export class IRBuilder {
     let rt = ft.result as BasicType
     assert(ft.result instanceof BasicType,
       `non-basic type ${ft.result.constructor.name} not yet supported`)
-    return s.b.newValue0(ops.Call, rt, funid.value)
+    return s.b.newValue0(ops.Call, rt, 0, funid.value)
   }
 
 

@@ -14,7 +14,7 @@ import {
 } from "../ir/reg"
 import { ArchInfo } from "../ir/arch_info"
 import { BasicType, NativeType, t_str } from '../types'
-import { Op } from '../ir/op'
+import { Op, AuxType } from '../ir/op'
 import { ArchDescr, OpDescription, parseOpDescr, t as dtypes } from './describe'
 import * as sexpr from "../sexpr"
 import arch_generic from "./arch_generic_ops"
@@ -145,6 +145,9 @@ function ruleGen(a :ArchDescr) {
   }
   let ruleFuns = new Map<RewriteRule,RuleFunInfo>()
 
+  // helper libs
+  let helperlibs = {} as {[k:string]:string}
+
   // generate code for each ruleset
   let maxOpcode = 0
   for (let [opname, rules] of matchmap) {
@@ -152,7 +155,7 @@ function ruleGen(a :ArchDescr) {
     if (e) {
       e.opnames.push(opname)
     } else {
-      let code = genRewriteCode(opname, rules, syntaxError)
+      let code = genRewriteCode(opname, rules, syntaxError, helperlibs)
       ruleFuns.set(rules[0], { code, opnames: [ opname ] })
     }
     let opcode = opcodeMap.get(opname)!
@@ -178,6 +181,9 @@ function ruleGen(a :ArchDescr) {
     `import { ValueRewriter } from "./arch_info"\n` +
     `import { ops } from "./ops"\n` +
     `import * as types from "../types"\n` +
+    Object.keys(helperlibs).sort().map(
+      name => `import ${name} from "${helperlibs[name]}"\n`
+    ).join("") +
     `\n` +
     funCode.join("\n") +
     `\n` +
@@ -191,36 +197,7 @@ function ruleGen(a :ArchDescr) {
     `}\n`
   )
 
-  // // generate rule function code
-  // // generate opcode => fun dispatch code
-  // let switchCode = [] as string[]
-  // let funCode = [] as string[]
-  // for (let e of ruleFuns.values()) {
-  //   let funname = "rw_" + e.opnames[0]
-  //   if (e.opnames.length > 1) {
-  //     funname += "_" + (e.opnames.length - 1)
-  //   }
-  //   funCode.push(`function ${funname}${e.code}\n`)
-  //   for (let opname of e.opnames) {
-  //     switchCode.push(`  case ops.${opname}:`)
-  //   }
-  //   switchCode.push(`    return ${funname}(v)`)
-  // }
-
-  // let tscode = (
-  //   `import { Value } from "../ir/ssa"\n` +
-  //   `import { ops } from "./ops"\n` +
-  //   `\n` +
-  //   funCode.join("\n") +
-  //   `\n` +
-  //   `export function rewriteValue(v :Value) {\n` +
-  //   `  switch(v.op) {\n` +
-  //   switchCode.join("\n") + "\n" +
-  //   `  }\n` +
-  //   `}\n`
-  // )
-
-  // print("---------------------\n" + tscode)
+  print("---------------------\n" + tscode)
 
   print(`write ${rpath(outFile)}`)
   writeFileSync(outFile, tscode, "utf8")
@@ -233,6 +210,7 @@ function genRewriteCode(
   opname :string,
   rules :RewriteRule[],
   syntaxError: (msg:string,v?:sexpr.Value)=>void,
+  helperlibs: {[k:string]:string},
 ) :string {
   let lines = [] as string[]
   const ln = (s :any) => lines.push(String(s))
@@ -244,6 +222,7 @@ function genRewriteCode(
       opname,
       rules[i],
       syntaxError,
+      helperlibs,
       i == lasti
     )
     lines = lines.concat(ruleLines)
@@ -263,6 +242,7 @@ function genRuleRewriteCode(
   opname :string,
   r :RewriteRule,
   syntaxError: (msg:string,v?:sexpr.Value)=>void,
+  helperlibs: {[k:string]:string},
   isLastRule :bool,
 ) :[string[]/*lines*/, bool/*isBranch*/] {
   let lines = [] as string[]
@@ -310,6 +290,7 @@ function genRuleRewriteCode(
       let opinfo = opinfoMap.get(opname) as OpInfo
       assert(opinfo !== undefined)
       let aux = ""
+      let auxInt = ""
       let typ = opinfo.type ? `types.t_${opinfo.type.name}` : fallbackType
       let args = [] as string[]
       for (let i = 1; i < l.length; i++) {
@@ -317,10 +298,14 @@ function genRuleRewriteCode(
         if (v instanceof sexpr.List) {
           args.push(visitsub(v, __ + "  ", typ))
         } else if (v instanceof sexpr.Pre) {
-          if (v.type == "[" || v.type == "{") { // aux value e.g. [x]
+          if (v.type == "[") { // aux value e.g. [x]
+            auxInt = transpileCode(v.value, helperlibs)
+          } else if (v.type == "{") { // aux value e.g. [x]
             aux = v.value
           } else if (v.type == "<") { // type value e.g. <x>
             typ = v.value
+          } else {
+            panic(`unexpected ${v}`)
           }
         } else {
           args.push(v.toString())
@@ -333,7 +318,7 @@ function genRuleRewriteCode(
       return (
         `\n${__}b.newValue${args.length}(ops.${opname}, ${typ}` +
         (args.length > 0 ? ", " + args.join(", ") : "") +
-        (aux ? `, ${aux})` : ")")
+        `, ${auxInt}, ${aux})`
       )
     }
 
@@ -344,8 +329,8 @@ function genRuleRewriteCode(
         let argVarname = visitsub(v, __ + "    ", "null")
         ln(`${__}v.addArg(${argVarname})`)
       } else if (v instanceof sexpr.Pre) {
-        if (v.type == "[") { // auxint value e.g. [x]
-          ln(`${__}v.auxint = ${v.value}`)
+        if (v.type == "[") { // auxInt value e.g. [x]
+          ln(`${__}v.auxInt = ${transpileCode(v.value, helperlibs)}`)
         } else if (v.type == "{") { // aux value e.g. {x}
           ln(`${__}v.aux = ${v.value}`)
         } else if (v.type == "<") { // type value e.g. <x>
@@ -362,7 +347,7 @@ function genRuleRewriteCode(
   // simple match on just the op -- return early
   if (r.match instanceof sexpr.Sym) {
     if (r.cond) {
-      ln(`if (${r.cond}) {`)
+      ln(`if (${transpileCode(r.cond, helperlibs)}) {`)
       genSub("  ")
       ln(`}`)
       return [lines, true]
@@ -393,7 +378,7 @@ function genRuleRewriteCode(
   if (hasComplexCond || r.cond || !isLastRule) {
     if (r.cond && !r.condRefVars && !hasComplexCond) {
       // simplified test up front, avoiding loading of vars
-      ln(`if (${r.cond}) {`)
+      ln(`if (${transpileCode(r.cond, helperlibs)}) {`)
     } else {
       ln(`while (true) {`)
       isWhileLoop = true
@@ -415,8 +400,8 @@ function genRuleRewriteCode(
         ln(`${__}let ${vname2} = ${vname}.args[${argidx++}]!;`)
         visitm(v, vname2)
       } else if (v instanceof sexpr.Pre) {
-        if (v.type == "[") { // auxint value e.g. [x]
-          ln(`${__}let ${v.value} = ${vname}.auxint`)
+        if (v.type == "[") { // auxInt value e.g. [x]
+          ln(`${__}let ${v.value} = ${vname}.auxInt`)
         } else if (v.type == "{") { // aux value e.g. {x}
           ln(`${__}let ${v.value} = ${vname}.aux`)
         } else if (v.type == "<") { // type value e.g. <x>
@@ -441,8 +426,8 @@ function genRuleRewriteCode(
       ln(`${__}let ${vname} = v.args[${argidx++}]!;`)
       visitm(v, vname)
     } else if (v instanceof sexpr.Pre) {
-      if (v.type == "[") { // auxint value e.g. [x]
-        ln(`${__}let ${v.value} = v.aux`)
+      if (v.type == "[") { // auxInt value e.g. [x]
+        ln(`${__}let ${v.value} = v.auxInt`)
       } else if (v.type == "{") { // aux value e.g. {x}
         ln(`${__}let ${v.value} = v.aux`)
       } else if (v.type == "<") { // type value e.g. <x>
@@ -461,7 +446,7 @@ function genRuleRewriteCode(
 
   // condition
   if (isWhileLoop && r.cond) {
-    ln(`${__}if (!(${r.cond})) { break }`)
+    ln(`${__}if (!(${transpileCode(r.cond, helperlibs)})) { break }`)
   }
   genSub(__)
 
@@ -484,7 +469,7 @@ interface RewriteRule {
   //             | symbol
   //             | quoted
   //             | "<" type ">"
-  //             | "[" auxint "]"
+  //             | "[" auxInt "]"
   //             | "{" aux "}"
   //   type      = symbol
   //   quoted    = "'" <quoted-string> "'"
@@ -509,9 +494,118 @@ interface RewriteRule {
   condRefVars :bool  // true if cond _probably_ refers to vars
   sub         :sexpr.List|sexpr.Sym
   vars        :string[]  // ordered list of uniquely-named variables (also "_")
-  // auxintvar?  :string  // [x]
+  // auxIntvar?  :string  // [x]
   // auxvar?     :string  // {x}
   // typevar?    :string  // <x>
+}
+
+
+// returns [transpiled code, helpers]
+function transpileCode(code :string, helpers :{[k:string]:string}) :string {
+  let f :ts.SourceFile = ts.createSourceFile(
+    "input.ts",
+    code,
+    ts.ScriptTarget.ESNext,
+    /*setParentNodes*/ false, // add "parent" property to nodes
+    ts.ScriptKind.TS
+  )
+  if (f.statements.length > 1) {
+    panic(`multiple statements in code ${repr(code)}`)
+  }
+
+  let needsNumMath = false
+
+  let transformers :ts.TransformerFactory<ts.Node>[] = [
+    (context: ts.TransformationContext) :ts.Transformer<ts.Node> => {
+      const visit: ts.Visitor = n => {
+        print(`visit ${ts.SyntaxKind[n.kind]}`)
+        if (ts.isBinaryExpression(n)) {
+          let fname = ""
+          switch (n.operatorToken.kind) {
+            case ts.SyntaxKind.PlusToken:      fname = "nmath.add";  break // +
+            case ts.SyntaxKind.MinusToken:     fname = "nmath.sub";  break // -
+            case ts.SyntaxKind.AsteriskToken:  fname = "nmath.mul";  break // *
+            case ts.SyntaxKind.SlashToken:     fname = "nmath.div";  break // /
+            case ts.SyntaxKind.PercentToken:   fname = "nmath.mod";  break // %
+            case ts.SyntaxKind.AmpersandToken: fname = "nmath.band"; break // &
+            case ts.SyntaxKind.BarToken:       fname = "nmath.bor";  break // |
+            case ts.SyntaxKind.CaretToken:     fname = "nmath.xor";  break // ^
+            case ts.SyntaxKind.AsteriskAsteriskToken:
+              // fname = "nmath.exp";  break // **
+              panic(`unsupported arithmetic operator ** in ${repr(code)}`)
+              break
+            case ts.SyntaxKind.LessThanToken:
+              fname = "nmath.lt";   break // <
+            case ts.SyntaxKind.GreaterThanToken:
+              fname = "nmath.gt";   break // >
+            case ts.SyntaxKind.LessThanEqualsToken:
+              fname = "nmath.lte";  break // <=
+            case ts.SyntaxKind.GreaterThanEqualsToken:
+              fname = "nmath.gte";  break // >=
+            case ts.SyntaxKind.ExclamationEqualsToken:
+            case ts.SyntaxKind.ExclamationEqualsEqualsToken:
+              fname = "nmath.neq";  break // !=, !==
+            case ts.SyntaxKind.EqualsEqualsToken:
+            case ts.SyntaxKind.EqualsEqualsEqualsToken:
+              fname = "nmath.eq";  break // ==, ===
+            case ts.SyntaxKind.LessThanLessThanToken:
+              fname = "nmath.lshift";  break // <<
+            case ts.SyntaxKind.GreaterThanGreaterThanToken:
+              fname = "nmath.rshift";  break // >>
+            case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
+              fname = "nmath.rshiftz";  break // >>>
+            default: print("BinaryExpression", n.operatorToken)
+          }
+          if (fname != "") {
+            needsNumMath = true
+            let left = ts.visitNode(n.left, visit)
+            let right = ts.visitNode(n.right, visit)
+            return ts.createCall(ts.createIdentifier(fname), undefined, [left, right])
+          }
+        } else if (ts.isPrefixUnaryExpression(n)) {
+          let fname = ""
+          switch (n.operator) {
+            case ts.SyntaxKind.PlusPlusToken:    fname = "nmath.incr"; break // ++
+            case ts.SyntaxKind.MinusMinusToken:  fname = "nmath.decr"; break // --
+            case ts.SyntaxKind.MinusToken:       fname = "nmath.neg";  break // -
+            case ts.SyntaxKind.TildeToken:       fname = "nmath.bnot"; break // ~
+            case ts.SyntaxKind.ExclamationToken: fname = "nmath.not";  break // !
+          }
+          if (fname != "") {
+            needsNumMath = true
+            let operand = ts.visitNode(n.operand, visit)
+            return ts.createCall(ts.createIdentifier(fname), undefined, [operand])
+          }
+        }
+        return ts.visitEachChild(n, visit, context)
+      }
+      return node => ts.visitNode(node, visit);
+    }
+  ]
+
+  let compilerOptions :ts.CompilerOptions = {
+    module: ts.ModuleKind.ESNext,
+    target: ts.ScriptTarget.ESNext,
+  }
+
+  let r = ts.transform(f.statements[0]!, transformers, compilerOptions)
+
+  let printer = ts.createPrinter({
+    removeComments: false,
+    newLine: ts.NewLineKind.LineFeed,
+    omitTrailingSemicolon: true,
+    noEmitHelpers: true,
+  })
+  let outcode = [] as string[]
+  for (let n of r.transformed) {
+    outcode.push(printer.printNode(ts.EmitHint.Unspecified, n, f))
+  }
+
+  if (needsNumMath) {
+    helpers["nmath"] = "../nummath"
+  }
+
+  return outcode.length > 1 ? "(" + outcode.join(", ") + ")" : outcode[0]
 }
 
 
@@ -521,17 +615,29 @@ function mapRewriteRules(
 ) :Map<string,RewriteRule[]> {
   let m = new Map<string,RewriteRule[]>() // op => rules with op as 1st
   let matchesWithoutCond = new Set<string>()
+
   for (let r of rules) {
+    let hasComplexCond = false
+    if (r.match instanceof sexpr.List) for (let n of r.match) {
+      for (let i = 1; i < r.match.length; i++) {
+        if (r.match[i] instanceof sexpr.List) {
+          // match rule has at least one arg condition
+          hasComplexCond = true
+          break
+        }
+      }
+    }
+
     for (let opname of r.matchops) {
       let rules2 = m.get(opname)
       if (!rules2) {
         rules2 = [ r ]
         m.set(opname, rules2)
-        if (!r.cond) {
+        if (!r.cond && !hasComplexCond) {
           matchesWithoutCond.add(opname)
         }
       } else {
-        if (!r.cond) {
+        if (!r.cond && !hasComplexCond) {
           if (matchesWithoutCond.has(opname)) {
             // case: there are multiple unconditional rules for the same op.
             // e.g.
@@ -656,7 +762,7 @@ function parseRewriteRules(a :ArchDescr, srcrules :sexpr.List, rulesFile :string
     canonicalizeOpnames(match, list)
     let varset = new Set<string>()
     let vars = [] as string[]
-    let auxintvar  :string|undefined = undefined // [x]
+    let auxIntvar  :string|undefined = undefined // [x]
     let auxvar     :string|undefined = undefined // {x}
     let typevar    :string|undefined = undefined // <x>
 
@@ -691,10 +797,10 @@ function parseRewriteRules(a :ArchDescr, srcrules :sexpr.List, rulesFile :string
         if (v instanceof sexpr.Pre) {
           if (parent === match) {
             if (v.type == "[") {
-              if (auxintvar) {
-                syntaxErr(`secondary auxint var ${v}`, v)
+              if (auxIntvar) {
+                syntaxErr(`secondary auxInt var ${v}`, v)
               }
-              auxintvar = v.value
+              auxIntvar = v.value
             } else if (v.type == "{") {
               if (auxvar) {
                 syntaxErr(`secondary aux var ${v}`, v)
@@ -817,7 +923,7 @@ function parseRewriteRules(a :ArchDescr, srcrules :sexpr.List, rulesFile :string
       condRefVars,
       sub,
       vars,
-      // auxintvar,
+      // auxIntvar,
       // auxvar,
       // typevar,
     })
@@ -984,9 +1090,6 @@ function buildOpTable(a :ArchDescr) :Set<string> {
     if (op.type) {
       types.add(typename(op.type))
     }
-    if (op.aux) {
-      types.add(typename(op.aux))
-    }
 
     let opcode = nextOpcode++
 
@@ -1062,6 +1165,15 @@ function fmtop(op :OpInfo, opcode :int) :string {
       if (k == "reg") {
         assert(typeof v == "object")
         v = fmtRegInfo(v as RegInfo)
+      } else if (k == "aux") {
+        if (typeof v == "string") {
+          assert(AuxType[v as string] !== undefined, `no AuxType.${v}`)
+          v = "AuxType." + v
+        } else {
+          let name = AuxType[v as int] as string
+          assert(name !== undefined, `no AuxType[${v}]`)
+          v = "AuxType." + name
+        }
       } else if (v instanceof NativeType) {
         v = typename(v)
       } else {
