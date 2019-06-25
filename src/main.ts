@@ -234,6 +234,10 @@ async function main(options? :MainOptions) :Promise<MainResult> {
         if (isNodeJsLikeEnv && fn) {
           console.log(`\n-----------------------\n`)
           printir(fn)
+          console.log(
+            `━━━━━━━━━━━━━━━━━━━━━━━━` +
+            `━━━━━━━━━━━━━━━━━━━━━━━━`
+          )
         }
       }
 
