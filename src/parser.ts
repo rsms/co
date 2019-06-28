@@ -1263,7 +1263,7 @@ export class Parser extends scanner.Scanner {
 
       if (!(t instanceof IntType) && !(t instanceof UnresolvedType)) {
         // lhs is not a mutable type. For instance, it might be str.
-        this.syntaxError(`cannot mutate ${lhs[0]}`, lhs[0].pos)
+        this.syntaxError(`cannot mutate ${lhs[0]} of type ${t}`, lhs[0].pos)
       }
 
       let s = new Assignment(pos, p.scope, op, lhs, emptyExprList)
