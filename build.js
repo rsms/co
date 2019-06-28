@@ -43,10 +43,10 @@ const clean = argv.includes('-clean')
 const minify = !argv.includes('-nominify')
 const noBuild = argv.includes("-nobuild")
 const noLint = argv.includes("-nolint")
+const productIsExectuable = !argv.includes("-lib")
 
 // config
 const productName = "co"
-const productIsExectuable = true
 const cachedir = pjoin(rootdir, ".build-cache")
 const srcdir   = pjoin(rootdir, "src")
 const mainEntry = pjoin(srcdir, "main.ts")
