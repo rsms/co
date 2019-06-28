@@ -26,7 +26,7 @@ window.readFileSync = function(fn, options) {
 <link rel="stylesheet" href="{{url_root}}r/ted.css?v={{ build_version }}" type="text/css">
 <script src="{{url_root}}r/ted.js?v={{ build_version }}"></script>
 <script src="{{url_root}}r/uibindings.js?v={{ build_version }}"></script>
-<script src="xlang.debug.js?v={{ build_version }}"></script>
+<script src="co.js?v={{ build_version }}"></script>
 
 <style type="text/css">
 
@@ -198,7 +198,7 @@ body {
     display: flex;
   }
     .sources .info #result-ir {
-      max-width: 250px;
+      max-width: 320px;
     }
   .sources .result {
     /*background: lightpink;*/
@@ -421,9 +421,9 @@ class Console {
       }
       return obj
     }).join(' ')
-    
+
     msgel.innerText = s
-    
+
     if (cls) {
       ent.classList.add(cls)
     }
