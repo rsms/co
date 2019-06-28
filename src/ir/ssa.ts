@@ -75,6 +75,22 @@ export class Value {
     assert(type.mem > 0, `ir.Value assigned abstract type ${type}`)
   }
 
+  // clone returns a new value that is a clean copy of the receiver.
+  // The returned clone will have zero uses and null linked-list links.
+  clone() :Value {
+    const a = this
+    const b = new Value(a.b.f.newValueID(), a.b, a.op, a.type, a.auxInt, a.aux)
+    b.pos     = a.pos
+    b.b       = a.b
+    b.args    = a.args.slice()
+    b.comment = a.comment
+    b.reg     = a.reg
+    for (let u of a.args) {
+      u.uses++
+    }
+    return b
+  }
+
   toString() {
     return 'v' + this.id
   }
@@ -256,6 +272,13 @@ export class Block {
   //
   pushValueFront(v :Value) {
     this.values.unshift(v)
+  }
+
+  // insertValue inserts v before refv
+  //
+  insertValue(refv :Value, v :Value) {
+    assert(this.values.indexOf(refv) != -1)
+    this.values.splice(this.values.indexOf(refv), 0, v)
   }
 
   // removeValue removes all uses of v
@@ -483,6 +506,10 @@ export class Fun {
       auxInt,
       aux
     )
+  }
+
+  newValueID() :ID {
+    return this.vid++
   }
 
   freeValue(v :Value) {

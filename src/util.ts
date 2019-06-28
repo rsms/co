@@ -234,10 +234,20 @@ export const debuglog = DEBUG ? function(...v :any[]) {
   let prefix = ''
 
   if (e.stack) {
-    // let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)/.exec(e.stack.split(/\n/, 3)[2])
-    let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(
+    let m = /\s*at\s+(?:[^\s]+\.|)[^\s\.]+\s+\[as ([^\]]+)\]\s+\(.+\/src\/(.+)\)/.exec(
       e.stack.split(/\n/, 3)[2]
     )
+    if (!m) {
+      // m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)/.exec(e.stack.split(/\n/, 3)[2])
+      m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(
+        e.stack.split(/\n/, 3)[2]
+      )
+      if (m && m[1] == "dlog") {
+        m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(
+          e.stack.split(/\n/, 4)[3]
+        )
+      }
+    }
     if (m) {
       const fun = m[1]
       const origin = m[2]
@@ -249,7 +259,8 @@ export const debuglog = DEBUG ? function(...v :any[]) {
           prefix = 'TODO src/' + origin + ' ' + fun + '>'
           v[0] = trmsg.substr(5).replace(/^\s*/, '')
         } else {
-          prefix = filename + '/' + fun + '>'
+          // prefix = filename + '/' + fun + '>'
+          prefix = fun + '>'
         }
       } else {
         prefix = fun + '>'

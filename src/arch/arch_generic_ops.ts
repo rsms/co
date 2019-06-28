@@ -29,7 +29,7 @@ const ops :OpDescription[] = [
   ["Unknown"], // Unknown value. Used for Values whose values don't matter because they are dead code.
   ["Phi", -1, ZeroWidth], // select an argument based on which predecessor block we came from
   ["Copy", 1],  // output = arg0
-  ["Arg", ZeroWidth], // argument to current function
+  ["Arg", ZeroWidth, {aux: "Int32"}], // argument to current function. aux=position.
   ["CallArg", 1, ZeroWidth], // argument for function call
   ["NilCheck", 2, NilCheck, FaultOnNilArg0], // panic if arg0 is nil. arg1=mem.
 
@@ -68,10 +68,14 @@ const ops :OpDescription[] = [
 
 
   // memory
-  ["Load", 2],                  // Load from arg0. arg1=addr
+  ["Load", 2],          // Load from arg0. arg1=addr
   ["Store", 3, t.addr], // Store arg1 to arg0.  arg2=addr, aux=type
   ["Move", 3, t.addr],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
   ["Zero", 2, t.addr],  // arg0=destptr, arg1=addr, auxInt=size, aux=type
+
+  // resgiter allocation spill and restore
+  ["StoreReg", 1],
+  ["LoadReg", 1],
 
 
   // 2-input arithmetic

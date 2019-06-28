@@ -1,19 +1,19 @@
 import { UInt64 } from '../int64'
 
-// A Register is a machine register, like AX.
-// They are numbered densely from 0 (for each architecture).
-export interface Register {
-  num    :int // dense numbering
-  name   :string
-  // objNum :int // arch-specific register number
-}
-
 
 export type Reg = int // uint8
 export type RegSet = UInt64  // each bit corresponds to a register
 
 export const emptyRegSet = UInt64.ZERO
 export const noReg :Reg = 255
+
+// A Register is a machine register, like AX.
+// They are numbered densely from 0 (for each architecture).
+export interface Register {
+  num    :Reg // dense numbering
+  name   :string
+  // objNum :int // arch-specific register number
+}
 
 
 export interface RegInfoEntry {

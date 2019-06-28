@@ -1,6 +1,6 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
 import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
-import { fmtop, opinfo } from "./ops"
+import { ops, fmtop, opinfo } from "./ops"
 import { OpInfo, AuxType } from "./op"
 
 export type LineWriter = (s :string) => any
@@ -68,21 +68,23 @@ function fmtval(f :IRFmt, v :Value) :string {
   if (f.types) {
     s += ' ' + f.style.purple(`<${v.type}>`)
   }
-  for (let i = 0; i < opi.argLen; i++) {
+  for (let i = 0, z = v.args.length; i < z; i++) {
     s += ' ' + v.args[i]
   }
   if (opi.aux != AuxType.None) {
     s += fmtaux(f, v, opi)
   }
-  // if (v.reg != noReg) {
-  //   s += ` {${style.orange(v.reg.toString())}}`
-  // }
   if (v.reg) {
-    s += ` ${style.orange(v.reg.name)}`
+    s += ` : ${style.orange(v.reg.name)}`
   }
+  let usecomment = (
+    v.uses == 0 ? "unused" :
+    v.uses == 1 ? "1 use" :
+    `${v.uses} uses`
+  )
   s += f.style.grey(
-    v.comment ? `  // ${v.comment}. use ${v.uses}` :
-    `  // use ${v.uses}`
+    v.comment ? `  // ${v.comment}; ${usecomment}` :
+    `  // ${usecomment}`
   )
   return s
 }
