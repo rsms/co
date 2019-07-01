@@ -181,6 +181,9 @@ export class Parser extends scanner.Scanner {
     return false
   }
 
+  // want reports a syntax error if tok is not p.tok.
+  // in any case, this function will advance the scanner by one token.
+  //
   want(tok :token) {
     const p = this
     if (!p.got(tok)) {
@@ -1726,6 +1729,7 @@ export class Parser extends scanner.Scanner {
     // Arguments      = "("
     //   [ (  ExpressionList | Type [ "," ExpressionList ] ) [ "..." ] [ "," ]]
     //   ")" .
+    let e = new Error()
     const p = this
     let x = p.operand(ctx)
 
@@ -2098,12 +2102,51 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // bracketExpr = IndexExpr | SliceExpr | ListExpr
+  typedListExpr(operand :TypeExpr) :ListExpr {
+    return this.listExpr(operand.type)
+  }
+
+
+  // bracketExpr = ListExpr | TypeExpr | IndexExpr | SliceExpr
   // IndexExpr   = Expr "[" Expr "]"
   // SliceExpr   = Expr "[" Expr? ":" Expr? "]"
   //
-  bracketExpr(operand :Expr, ctx :exprCtx) :IndexExpr|SliceExpr|TypeExpr {
+  bracketExpr(operand :Expr, ctx :exprCtx) :ListExpr|TypeExpr|IndexExpr|SliceExpr|BadExpr {
     const p = this
+
+    if (operand instanceof TypeExpr) {
+      // operand is type, e.g. int[][...
+      //                       ~~~~~
+      return p.typedListExpr(operand)
+    }
+
+    // Note on case where operand.type instanceof TypeType
+    //
+    // operand is type, e.g. int[...
+    //                       ~~~
+    // This syntax is a little tricky as it only works when the type has been
+    // resolved already.
+    // It means that the following cases are different:
+    //
+    // Case 1:
+    //   type foo int
+    //   a = foo[1, 2]  // ok as foo's type is resolved here
+    //
+    // Case 2:
+    //   a = foo[1, 2]  // error, as foo's type is unknown here
+    //   type foo int
+    //
+    // We could work around this by looking for commas when parsing the
+    // brackets, but single-item expressions would become ambiguous. e.g.
+    //
+    //   int[2, 3] would be parsed as ListExpr
+    //   int[2]    would be parsed as IndexExpr !
+    //   int[2,]   would be parsed as ListExpr
+    //   int[][2]  would be parsed as ListExpr
+    //
+    // So, it would be a very small benefit (not having to add "[]" at end of
+    // list type expr) but introduce unintuitive syntax, which isn't worth it.
+
     const pos = p.pos
     p.want(token.LBRACKET)
 
@@ -2115,7 +2158,6 @@ export class Parser extends scanner.Scanner {
       }
       let lt = p.types.getGenericInstance(t_list, [opt])
       return new TypeExpr(pos, p.scope, lt)
-      // return new TypeExpr(pos, p.scope, new TypeType(lt))
     }
 
     let x1 :Expr|null = null
@@ -2147,7 +2189,16 @@ export class Parser extends scanner.Scanner {
     }
 
     // index
-    p.want(token.RBRACKET)
+    if (!p.got(token.RBRACKET)) {
+      p.syntaxError(`in index expression; expecting ]`)
+      if (p.tok == token.COMMA) {
+        // common mistake: int[1,2] -- really want int[][1,2]
+        p.diag("info", `Did you mean ${operand}[] here?`, pos, "E_SUGGESTION")
+      }
+      p.advanceUntil(token.RBRACKET) // avoids superfluous errors in common cases
+      p.next()
+      return p.bad(pos)
+    }
 
     assert(x1 != null)
     assert(x1 instanceof Expr)
@@ -2543,15 +2594,14 @@ export class Parser extends scanner.Scanner {
 
     // add punctuation etc. as needed to msg
     if (msg == "") {
-      // nothing to do
+      // msg is empty; ok
     } else if (
       msg.startsWith("in ") ||
       msg.startsWith("at ") ||
-      msg.startsWith("after "))
-    {
+      msg.startsWith("after ") ||
+      msg.startsWith("expecting ")
+    ) {
       msg = " " + msg
-    } else if (msg.startsWith("expecting ")) {
-      msg = ", " + msg
     } else {
       // plain error - we don't care about current token
       p.errorAt(msg, position)

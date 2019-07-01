@@ -232,6 +232,8 @@ export class TypeResolver extends ErrorReporter {
     r.resolvers.set(ast.IndexExpr, r.maybeResolveIndexExpr)
     r.resolvers.set(ast.IfExpr, r.maybeResolveIfExpr)
 
+    r.resolvers.set(ast.BadExpr, r.neverResolve)
+
     // r.resolvers.set(ast.ReturnStmt, r.maybeResolveReturnStmt)
   }
 
@@ -241,6 +243,11 @@ export class TypeResolver extends ErrorReporter {
   //   const r = this
   //   return n.result ? r.resolve(n.result) : t_nil
   // }
+
+
+  neverResolve = (n :ast.Expr) => {
+    return null
+  }
 
 
   maybeResolveNodeWithTypeExpr = (n :ast.Field|ast.VarDecl|ast.TypeDecl) => {
@@ -343,13 +350,13 @@ export class TypeResolver extends ErrorReporter {
 
     if (funtype instanceof TypeType) {
       // call is a type call
-      // TODO: args
+      dlog(`TODO type call on ${funtype.type}`)
       return funtype.type
     }
 
     if (!(funtype instanceof FunType)) {
       // call is a type call
-      // TODO: args
+      dlog(`TODO type call on ${funtype}`)
       return funtype
     }
 
@@ -447,11 +454,12 @@ export class TypeResolver extends ErrorReporter {
         //    foo(a...)
         //
         if (
-          !(x.type instanceof RestType || x.type instanceof ListType) ||
+          !(x.type instanceof ListType) ||
           x.type.types[0] !== wantRest
         ) {
+          // dlog({type0: (x.type as any).types[0], type1: wantRest})
           r.error(
-            `passing ${x.type} as argument where ${wantArgs[i]} is expected`,
+            `passing ${x.type} as argument where ${wantRest} is expected`,
             x.pos
           )
         }

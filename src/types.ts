@@ -301,11 +301,18 @@ export class ListType extends GenericTypeInstance {
       (other instanceof ListType && this.types[0].equals(other.types[0]))
     )
   }
+
+  // accepts returns true if the other type is compatible with this type.
+  accepts(other :Type) :bool {
+    // accept all [sub]classes of ListType, including e.g. RestType
+    return other instanceof ListType && this.types[0].equals(other.types[0])
+  }
 }
 
 
 // RestType = "..." Type
 // Specialized generic type instance.
+// Rest is really a list, but represented as a subclass
 //
 export class RestType extends ListType {
   toString() :string {

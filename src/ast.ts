@@ -406,6 +406,10 @@ export class TypeExpr extends Expr {
     super(pos, scope)
     this.type = type
   }
+
+  toString() {
+    return `(type ${this.type})`
+  }
 }
 
 

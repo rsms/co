@@ -2,29 +2,17 @@
 // fun f_int_int_(z int, x ...int) int
 // fun f_int_(x ...int) int
 // fun f_int_int(x, y int) int
-fun f_int_f32_int_(a int, b f32, x ...int) int
+fun f_int_f32_int_(a int, b f32, x ...u32) int
 
 // list1 [int] // ok; calls parseType -> parseListType
 
 fun entry(x int, y ...int) f32 {
   // note: effective type of y here is [int]
 
-  // a       = [1, 2, 3]       // type is int[]
-  // b u32[] = [1, 2, 3]       // type is u32[]
-  // c       = u32[](1, 2, 3)  // type is u32[]
+  ls list<u32>
 
-  // v [int] = [1, 2, 3]
-  // v2 = [int][1, 2, 3]
-
-  // ls list<int>
-
-  // // _ = (12, 3, 4)
-  // _ = [] // E: unable to infer type for empty list
-  // _ int[] = []  // ok
-  nine = 9
-  _ = [1.1, 2, 4, nine, x]
-  // _ f32[] = [1.1, 2, x]  // E: x (type int) converted to f32
-  _ f32[] = [1.1, 2, f32(x)]  // ok: explicit cast
+  // z = u32[][3, 4]
+  z = u32[3, 4] // E: "unexpected ,, expecting ]"
 
   // ok:
   // f_int_f32_int_(1, 2.3)          // ok (empty rest)

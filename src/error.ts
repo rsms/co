@@ -3,12 +3,13 @@ import { termColorSupport, style, noStyle } from './termstyle'
 
 // error codes
 class _errors {
-  E_SYNTAX  = 'syntax'
-  E_CONV    = 'type or value conversion'
-  E_RESOLVE = 'reference resolution'
-  E_UNUSED_VAR   = 'declared and not used'
-  E_UNUSED_PARAM = 'unused parameter'
-  E_UNUSED_FIELD = 'unused field'
+  E_SYNTAX       = "syntax"
+  E_CONV         = "type or value conversion"
+  E_RESOLVE      = "reference resolution"
+  E_UNUSED_VAR   = "declared and not used"
+  E_UNUSED_PARAM = "unused parameter"
+  E_UNUSED_FIELD = "unused field"
+  E_SUGGESTION   = "suggests a change"
 }
 export const errors = new _errors()
 
