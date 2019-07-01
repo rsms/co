@@ -3,11 +3,11 @@ import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
 import { TypeResolver } from './resolve'
-import { ByteStr, ByteStrSet } from './bytestr'
+import { ByteStr, strings } from './bytestr'
 import { Universe } from './universe'
-import { debuglog as dlog } from './util'
 import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
+import { numconv } from './numconv'
 import {
   File,
   Scope,
@@ -50,6 +50,7 @@ import {
   SelectorExpr,
   IndexExpr,
   SliceExpr,
+  ListExpr,
 
   builtInTypes as bitypes,
   GetTypeExpr,
@@ -57,31 +58,38 @@ import {
 
 import {
   Type,
+  NativeType,
   IntType,
   NumType,
   FunType,
   UnresolvedType,
+  TypeType,
   UnionType,
   TupleType,
+  ListType,
   RestType,
+  GenericType,
+  GenericTypeInstance,
 
   t_nil,
-  // t_u8, t_i8, t_u16, t_i16,
   t_u32, t_i32, t_u64, t_i64,
-  // t_uint, t_int, t_usize, t_isize,
-  // t_f32,
-  t_f64,
+  t_f64, t_f32,
   t_str0,
+  t_list,
 } from './types'
 
-const kEmptyByteArray = new Uint8Array(0)
-const kBytes__ = new Uint8Array([0x5f]) // '_'
-const kBytes_dot = new Uint8Array([0x2e]) // '.'
-const kBytes_init = new Uint8Array([0x69, 0x6e, 0x69, 0x74]) // 'init'
+import { debuglog as dlog } from './util'
+// const dlog = function(..._ :any[]){} // silence dlog
+
+const kEmptyByteArray = new Uint8Array(0) // used for empty string
+
+const str__    = strings.get(new Uint8Array([0x5f])) // "_"
+const str_dot  = strings.get(new Uint8Array([0x2e])) // "."
+const str_init = strings.get(new Uint8Array([0x69, 0x6e, 0x69, 0x74])) // "init"
 
 const emptyExprList :Expr[] = []
 
-type exprCtx = Assignment|VarDecl|null
+type exprCtx = Type|Assignment|VarDecl|null
 
 
 // funInfo contains information about the current function, used for data
@@ -109,7 +117,6 @@ class funInfo {
 export class Parser extends scanner.Scanner {
   fnest      :int = 0   // function nesting level (for error handling)
   universe   :Universe
-  strSet     :ByteStrSet
   comments   :Comment[]|null
   scope      :Scope
   filescope  :Scope
@@ -119,10 +126,6 @@ export class Parser extends scanner.Scanner {
   unresolved :Set<Ident>|null   // unresolved identifiers
   funstack   :funInfo[]  // function stack
   types      :TypeResolver
-
-  _id__      :ByteStr
-  _id_dot    :ByteStr
-  _id_init   :ByteStr
 
   initParser(
     sfile      :SrcFile,
@@ -142,17 +145,12 @@ export class Parser extends scanner.Scanner {
 
     p.fnest = 0
     p.universe = universe
-    p.strSet = universe.strSet
     p.comments = null
     p.diagh = diagh
     p.initfnest = 0
     p.unresolved = null
     p.funstack = []
     p.types = typeres
-
-    p._id__ = p.strSet.emplace(kBytes__)
-    p._id_dot = p.strSet.emplace(kBytes_dot)
-    p._id_init = p.strSet.emplace(kBytes_init)
 
     if (smode & scanner.Mode.ScanComments) {
       p.next = p.next_comments
@@ -258,7 +256,7 @@ export class Parser extends scanner.Scanner {
   declare(scope :Scope, ident: Ident, decl :Node, x: Expr|null) {
     const p = this
 
-    if (ident.value === p._id__) {
+    if (ident.value === str__) {
       // "_" is never declared
       return
     }
@@ -269,6 +267,8 @@ export class Parser extends scanner.Scanner {
     if (!scope.declareEnt(ent)) {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
+
+    // dlog(`declare ${ident} (val=${x}) at ${decl} in ${scope} [${ent.type}]`)
 
     ident.ent = ent
     // TODO: in the else branch, we could count locals/registers needed here.
@@ -284,61 +284,79 @@ export class Parser extends scanner.Scanner {
     }
   }
 
-  // Resolve resolves ent of an Expr
-  //
-  // If x is an identifier, resolve attempts to resolve x by looking up
-  // the entity it denotes. If no entity is found and collectUnresolved is
-  // set, x is marked as unresolved and collected in the list of unresolved
-  // identifiers.
-  //
-  // Returns x
-  //
-  resolve<N extends Expr>(x :N, collectUnresolved :bool = true) :N {
+
+  resolveEnt(id :Ident) :Ent|null {
     const p = this
-
-    // nothing to do if x is not an identifier or the blank identifier
-    if (!(x instanceof Ident) || x.value === p._id__) {
-      return x
-    }
-
-    assert(x.ent == null, "already resolved")
-
-    // try to resolve the identifier
-    let s :Scope|null = x.scope
+    // if (id.value === str__) {
+    //   return null  // "_" never resolves
+    // }
+    assert(id.ent == null, "already resolved")
+    let s :Scope|null = id.scope
     while (s) {
-      const ent = s.lookupImm(x.value)
+      // dlog(`lookupImm ${id} in ${s}`)
+      const ent = s.lookupImm(id.value)
       if (ent) {
-        // dlog(`${x} found in scope#${s.level()}`)
-        x.refEnt(ent) // reference ent
-
-        if (!x.type) {
-          x.type = ent.type || p.types.markUnresolved(x)
-          if (x.type instanceof UnresolvedType) {
-            // references something that itself is undefined
-            x.type.addRef(x)
-          }
-        }
-
-        return x
+        // dlog(`${id} found in scope#${s.level()}`)
+        id.refEnt(ent)
+        return ent
       }
       s = s.outer
     }
+    // dlog(`${id} not found`)
+    // all local scopes are known, so any unresolved identifier
+    // must be found either in the file scope, package scope
+    // (perhaps in another file), or universe scope --- collect
+    // them so that they can be resolved later
+    if (!p.unresolved) {
+      p.unresolved = new Set<Ident>([id])
+    } else {
+      p.unresolved.add(id)
+    }
+    return null
+  }
 
-    // dlog(`${x} not found`)
-    if (collectUnresolved) {
-      // all local scopes are known, so any unresolved identifier
-      // must be found either in the file scope, package scope
-      // (perhaps in another file), or universe scope --- collect
-      // them so that they can be resolved later
-      if (!p.unresolved) {
-        p.unresolved = new Set<Ident>([x])
+
+  resolveType(x :Ident) :Ident {
+    const p = this
+    let ent = p.resolveEnt(x)
+    if (ent) {
+      if (ent.decl instanceof TypeExpr || ent.decl instanceof TypeDecl) {
+        // identifier names a value or is not yet known
+        x.type = ent.type || p.types.markUnresolved(x)
+        if (x.type instanceof UnresolvedType) {
+          // references something that itself is undefined
+          x.type.addRef(x)
+        }
       } else {
-        p.unresolved.add(x)
+        p.syntaxError(`${x} is not a type`, x.pos)
       }
     }
-
     return x
   }
+
+
+  resolveVal<N extends Expr>(x :N) :N {
+    if (!(x instanceof Ident) || x.value === str__) { // ignore "_"
+      return x
+    }
+    const p = this
+    let ent = p.resolveEnt(x)
+    if (ent) {
+      if (ent.decl instanceof TypeExpr) {
+        // identifier names a type
+        x.type = new TypeType(ent.decl.type)
+      } else {
+        // identifier names a value or is not yet known
+        x.type = ent.type || p.types.markUnresolved(x)
+        if (x.type instanceof UnresolvedType) {
+          // references something that itself is undefined
+          x.type.addRef(x)
+        }
+      }
+    }
+    return x
+  }
+
 
   // ctxType returns the type of the context, or null if the type is not known
   // or if the type can't be reliably inferred, in which case it should be
@@ -347,6 +365,9 @@ export class Parser extends scanner.Scanner {
   ctxType(ctx :exprCtx) :Type|null {
     const p = this
     if (ctx) {
+      if (ctx instanceof Type) {
+        return ctx
+      }
       if (ctx instanceof VarDecl) {
         return ctx.type && p.types.maybeResolve(ctx.type) || null
       }
@@ -354,8 +375,11 @@ export class Parser extends scanner.Scanner {
         // common case: single assignment
         // we handle multi assignments later, in p.assignment()
         return (
-          ctx.lhs && ctx.lhs.length == 1 ? p.types.maybeResolve(ctx.lhs[0]) :
-          null
+          ctx.type ||
+          ( ctx.lhs && ctx.lhs.length == 1 ?
+              p.types.maybeResolve(ctx.lhs[0]) :
+              null
+          )
         )
       }
     }
@@ -404,8 +428,7 @@ export class Parser extends scanner.Scanner {
         break
 
       case token.DOT:
-        const s = p._id_dot
-        localIdent = new Ident(p.pos, p.scope, s)
+        localIdent = new Ident(p.pos, p.scope, str_dot)
         p.next()
         break
     }
@@ -501,7 +524,7 @@ export class Parser extends scanner.Scanner {
     // TypeSpec = "type" identifier [ "=" ] Type
     const p = this
     const pos = p.pos
-    const ident = p.ident()
+    const id = p.ident()
     const alias = p.got(token.ASSIGN)
 
     let t = p.maybeType()
@@ -511,8 +534,13 @@ export class Parser extends scanner.Scanner {
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
     }
 
-    const d = new TypeDecl(pos, p.scope, ident, alias, t as TypeExpr, group)
-    // TODO: declare in scope
+    // ids at the file level are declared in the package scope
+    const scope = p.scope === p.filescope ? p.pkgscope : p.scope
+
+    const d = new TypeDecl(pos, scope, id, alias, t as TypeExpr, group)
+
+    p.declare(scope, id, d, d.type)
+
     return d
   }
 
@@ -523,7 +551,7 @@ export class Parser extends scanner.Scanner {
     const typ = p.maybeType()
     let isError = false
 
-    // vars at the file level are declared in the package scope
+    // ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
     // if (p.scope !== p.filescope && p.tok == token.ASSIGN) {
@@ -576,7 +604,7 @@ export class Parser extends scanner.Scanner {
       // case: statement(!ctx) at top-level
       name = p.ident()
       // functions called "init" at the file level are special
-      isInitFun = p.scope === p.filescope && name.value.equals(p._id_init)
+      isInitFun = p.scope === p.filescope && name.value.equals(str_init)
     } else {
       name = p.maybeIdent()
     }
@@ -674,8 +702,24 @@ export class Parser extends scanner.Scanner {
           let lastindex = f.body.list.length - 1
           let result = f.body.list[lastindex]
           if (result instanceof Expr) {
-            let rettype = p.types.resolve(result)
-            let ret = new ReturnStmt(result.pos, result.scope, result, rettype)
+            let x = result as Expr
+            let xtype = p.types.resolve(x)
+            let rettype = sig.result.type
+            if (!(xtype instanceof UnresolvedType) && !xtype.equals(rettype)) {
+              // attempt type conversion; rettype -> x.type
+              const convexpr = p.types.convertLossless(rettype, x)
+              if (convexpr) {
+                x = convexpr as Expr
+              } else {
+                p.syntaxError(
+                  x instanceof Ident ?
+                    `cannot use ${x} (type ${xtype}) as return type ${rettype}` :
+                    `cannot use ${xtype} as return type ${rettype}`,
+                  x.pos
+                )
+              }
+            }
+            let ret = new ReturnStmt(x.pos, x.scope, x, sig.result.type)
             f.body.list[lastindex] = ret
           }
         }
@@ -715,10 +759,14 @@ export class Parser extends scanner.Scanner {
     const funtype = p.types.resolve(f) as FunType
     assert(funtype.constructor === FunType) // funtype always resolves
 
-    if (name && name.value !== p._id__ && !isInitFun) {
+    if (name && name.value !== str__ && !isInitFun) {
       // since we declared the name of the function, the name now represents
       // the function and thus its type.
       name.type = funtype
+      if (name.ent && !name.ent.type) {
+        // assign type to declaration
+        name.ent.type = funtype
+      }
     }
 
     return f
@@ -737,7 +785,10 @@ export class Parser extends scanner.Scanner {
     const p = this
     const pos = p.pos
     const params = p.tok == token.LPAREN ? p.parameters() : []
-    const result = p.maybeType() || defaultType
+    let result = defaultType
+    if (p.tok != token.LBRACE) {
+      result = p.maybeType() || defaultType
+    }
     return new FunSig(pos, p.scope, params, result)
   }
 
@@ -824,7 +875,7 @@ export class Parser extends scanner.Scanner {
         if (p.got(token.ELLIPSIS)) {
           const x = p.maybeType()
           if (x) {
-            let t = new RestType(p.types.resolve(x))
+            let t = p.types.getRestType(p.types.resolve(x))
             typ = new RestTypeExpr(pos, scope, x, t)
           } else {
             typ = p.badTypeExpr()
@@ -870,7 +921,9 @@ export class Parser extends scanner.Scanner {
     if (named == 0) {
       // none named -- types only
       for (let f of fields) {
-        p.resolve(f.type)
+        if (f.type instanceof Ident) {
+          p.resolveType(f.type)
+        }
       }
     } else {
 
@@ -900,7 +953,7 @@ export class Parser extends scanner.Scanner {
               p.syntaxError("illegal parameter name", f.type.pos)
             }
           } else if (f.type) {
-            p.resolve(f.type)
+            p.resolveVal(f.type)
             t = p.types.resolve(f.type)
             typ = f.type
             if (typ instanceof RestTypeExpr) {
@@ -934,7 +987,9 @@ export class Parser extends scanner.Scanner {
         // declare names in function scope
         for (let f of fields) {
           assert(f.name != null)
-          p.resolve(f.type)
+          if (f.type instanceof Ident) {
+            p.resolveType(f.type)
+          }
           ;(f.name as Ident).type = p.types.resolve(f.type)
           p.declare(scope, f.name as Ident, f, null)
         }
@@ -1055,6 +1110,32 @@ export class Parser extends scanner.Scanner {
   }
 
 
+  // convertType tries to fit expression x into type t.
+  // May return a new conversion expression or x verbatim if x is
+  // already compatible with t.
+  //
+  convertType(t :Type, x :Expr) :Expr {
+    const p = this
+    if (
+      x.type === t ||
+      x.type instanceof UnresolvedType ||
+      t instanceof UnresolvedType
+    ) {
+      return x
+    }
+    const convertedx = p.types.convert(t, x)
+    if (convertedx) {
+      // if (convertedx !== x) {
+      //   // no error and conversion is needed.
+      //   // replace original expression with conversion expression
+      // }
+      return convertedx
+    }
+    p.error(`cannot convert "${x}" (type ${x.type}) to type ${t}`, x.pos)
+    return x
+  }
+
+
   processAssign(
     lhs :Expr[],
     rhs :Expr[]|null,
@@ -1064,33 +1145,33 @@ export class Parser extends scanner.Scanner {
   ) {
     const p = this
 
-    // TODO refactor this and move this function (that has a closure)
-    function maybeConvRVal(typ :Type, rval :Expr, index :int) {
-      if (
-        !(rval.type instanceof UnresolvedType) &&
-        !(typ instanceof UnresolvedType)
-      ) {
-        const convx = p.types.convert(typ, rval)
-        if (!convx) {
-          if (rval.type instanceof UnresolvedType) {
-            // unresolved
-            return
-          }
-          p.error(
-            (rval.type instanceof UnresolvedType ?
-              `cannot convert "${rval}" to type ${typ}` :
-              `cannot convert "${rval}" (type ${rval.type}) to type ${typ}`
-            ),
-            rval.pos
-          )
-        } else if (convx !== rval) {
-          // no error and conversion is needed.
-          // replace original expression with conversion expression
-          assert(rhs != null)
-          ;(rhs as any)[index] = convx
-        }
-      }
-    }
+    // // TODO refactor this and move this function (that has a closure)
+    // function maybeConvRVal(typ :Type, rval :Expr, index :int) {
+    //   if (
+    //     !(rval.type instanceof UnresolvedType) &&
+    //     !(typ instanceof UnresolvedType)
+    //   ) {
+    //     const convx = p.types.convert(typ, rval)
+    //     if (!convx) {
+    //       if (rval.type instanceof UnresolvedType) {
+    //         // unresolved
+    //         return
+    //       }
+    //       p.error(
+    //         (rval.type instanceof UnresolvedType ?
+    //           `cannot convert "${rval}" to type ${typ}` :
+    //           `cannot convert "${rval}" (type ${rval.type}) to type ${typ}`
+    //         ),
+    //         rval.pos
+    //       )
+    //     } else if (convx !== rval) {
+    //       // no error and conversion is needed.
+    //       // replace original expression with conversion expression
+    //       assert(rhs != null)
+    //       ;(rhs as any)[index] = convx
+    //     }
+    //   }
+    // }
 
     // Check each left-hand identifier against scope and unresolved.
     // Note that exprList already has called p.resolve on all ids.
@@ -1130,7 +1211,8 @@ export class Parser extends scanner.Scanner {
 
         // check & resolve type, converting rval if needed
         id.type = typ
-        maybeConvRVal(typ, rval, i)
+
+        rhs[i] = p.convertType(typ, rval) // maybeConvRVal(typ, rval, i)
 
         continue
       }
@@ -1147,7 +1229,7 @@ export class Parser extends scanner.Scanner {
         id.type = reqt
         if (rval) {
           // see if we need to convert the rval to fit the destination type
-          maybeConvRVal(reqt, rval, i)
+          rhs![i] = p.convertType(reqt, rval) // maybeConvRVal(reqt, rval, i)
         }
       } else {
         assert(rval, "processAssign called with no reqt and no rvals")
@@ -1205,7 +1287,7 @@ export class Parser extends scanner.Scanner {
         let x = lhs[i] as Ident
         if (x.ent) {
           x.unrefEnt()
-        } else {
+        } else if (x.value !== str__) {
           assert(p.unresolved != null)
           ;(p.unresolved as Set<Ident>).delete(x)
         }
@@ -1493,7 +1575,7 @@ export class Parser extends scanner.Scanner {
       xs.length == 1 ? xs[0] :
         // e.g. "return 1", "return (1, 2)"
 
-      new TupleExpr(xs[0].pos, xs[0].scope, xs)
+      new TupleExpr(xs[0].pos, xs[0].scope, xs, null)
         // Support paren-less tuple return
         // e.g. "return 1, 2" == "return (1, 2)"
     )
@@ -1559,6 +1641,14 @@ export class Parser extends scanner.Scanner {
     const p = this
     let x = p.unaryExpr(ctx)
 
+    // if (ctx && !ctx.type && ctx instanceof Assignment) {
+    //   let ctxt = p.ctxType(ctx)
+    //   if (!ctxt) {
+    //     // in assignment context without type, assume type of first value
+    //     ctx.type = p.types.resolve(x)
+    //   }
+    // }
+
     while (
       (token.operator_beg < p.tok && p.tok < token.operator_end) &&
       p.prec > pr)
@@ -1569,14 +1659,14 @@ export class Parser extends scanner.Scanner {
       p.next()
 
       let y = p.binaryExpr(tprec, ctx)
-      x = new Operation(pos, p.scope, op, x, y)
 
-      p.types.resolve(x)
+      x = new Operation(pos, p.scope, op, x, y)
 
       // Note: We need to resolve types here rather than outside this
       // loop since x may be an identifier in the left-hand-side of an
       // assignment operation, which would cause type resolution to fail,
       // which is slow.
+      p.types.resolve(x)
     }
 
     return x
@@ -1662,12 +1752,47 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  call(fun :Expr, ctx :exprCtx) :CallExpr {
+  // TODO: callNativeType(fun :Expr, t :NativeType) :CallExpr {
+  // }
+
+
+  call(receiver :Expr, _ :exprCtx) :CallExpr {
     // Arguments = "(" [
     //     ( ExpressionList | Type [ "," ExpressionList ] )
     //     [ "..." ] [ "," ]
     //   ] ")"
     const p = this
+
+    // read expected arguments from potentially known function type
+    let argtypes :Type[] = []
+    if (receiver.type instanceof TypeType) {
+      dlog(`calling a type ${receiver.type.type} (via receiver.type is TypeType)`)
+      if (receiver.type.type instanceof NativeType) {
+        // TODO: fast path for common case: conversion to native type
+        // return p.callNativeType(receiver, receiver.type.type)
+      }
+      //
+      // TODO: args depend on type. TypeType.type could be any kind of Type,
+      // like a struct. In the case of a collection Type, the args should
+      // reflect the arguments of that type.
+      //
+      argtypes = [ receiver.type.type ]
+    } else if (receiver instanceof TypeExpr) {
+      dlog(`calling a type ${receiver.type} (via receiver is TypeExpr)`)
+      if (receiver.type instanceof NativeType) {
+        // TODO: fast path for common case: conversion to native type
+        // return p.callNativeType(receiver, receiver.type.type)
+      }
+      argtypes = [ receiver.type ]
+    } else if (receiver.type instanceof FunType) {
+      argtypes = receiver.type.args
+    } else {
+      assert(
+        receiver.type == null,
+        `resolved, unexpected receiver=${receiver} .type=${receiver.type} ` +
+        `(${receiver.type && receiver.type.constructor.name})`
+      )
+    }
 
     // call or conversion
     // convtype '(' expr ocomma ')'
@@ -1678,18 +1803,48 @@ export class Parser extends scanner.Scanner {
     p.want(token.LPAREN)
     // p.xnest++
 
-    while (p.tok != token.EOF && p.tok != token.RPAREN) {
-      args.push(p.expr(ctx))
-      hasDots = p.got(token.ELLIPSIS)
-      if (!p.ocomma(token.RPAREN) || hasDots) {
-        break
+    if (receiver.type) {
+      // parse expected arguments with type information
+      let i = 0
+      let wantSpread = true   // set when we encounter ... argdef
+      let argtype :Type|null = null
+      while (p.tok != token.EOF && p.tok != token.RPAREN) {
+        if (!wantSpread) {
+          argtype = argtypes[i++] || null
+          if (argtype instanceof RestType) {
+            wantSpread = true
+            argtype = argtype.types[0]
+          }
+        }
+        // parse arg with expected argtype as context
+        args.push(p.expr(argtype))
+        hasDots = p.got(token.ELLIPSIS)
+        if (!p.ocomma(token.RPAREN) || hasDots) {
+          break
+        }
+      }
+      // Note: Actual verification and conversion of argument types is done
+      // by the resolver.
+    } else {
+      // The function type is unknown.
+      // Parse any arguments until we encounter a closing ")"
+      while (p.tok != token.EOF && p.tok != token.RPAREN) {
+        args.push(p.expr(null))
+        hasDots = p.got(token.ELLIPSIS)
+        if (!p.ocomma(token.RPAREN) || hasDots) {
+          break
+        }
       }
     }
 
     // p.xnest--
     p.want(token.RPAREN)
 
-    return new CallExpr(pos, p.scope, fun, args, hasDots)
+    let cx = new CallExpr(pos, p.scope, receiver, args, hasDots)
+    // if (receiver.type && receiver.type instanceof FunType) {
+    //   cx.type = receiver.type.result
+    // }
+    return cx
   }
 
 
@@ -1703,7 +1858,7 @@ export class Parser extends scanner.Scanner {
     switch (p.tok) {
       case token.NAME:
       case token.NAMEAT:
-        return p.dotident(ctx, p.resolve(p.ident()))
+        return p.dotident(ctx, p.resolveVal(p.ident()))
 
       case token.LPAREN:
         return p.parenExpr(ctx)
@@ -1722,6 +1877,9 @@ export class Parser extends scanner.Scanner {
 
       // case _Lbrack, _Chan, _Map, _Struct, _Interface:
       //   return p.type_() // othertype
+
+      case token.LBRACKET:
+        return p.listExpr(ctx)
 
       case token.STRING:
         return p.strlit()
@@ -1762,7 +1920,22 @@ export class Parser extends scanner.Scanner {
     assert(!isNaN(p.floatval), 'scanner produced invalid number')
     const x = new FloatLit(p.pos, p.scope, p.floatval, t_f64)
     p.next() // consume literal token
-    return p.numLitConv(x, p.ctxType(ctx))
+    let dstt = p.ctxType(ctx)
+    if (dstt) {
+      if (dstt === t_f32) {
+        // common case: context is f32 and we parsed a float literal.
+        // attempt to fit the literal into f32.
+        let [, lossless] = numconv(x.value, t_f32)
+        if (lossless) {
+          x.type = t_f32
+        } else {
+          p.syntaxError(`constant ${x} overflows ${t_f32}`, x.pos)
+        }
+      } else if (dstt !== x.type) {
+        return p.numLitConv(x, dstt)
+      }
+    }
+    return x
   }
 
 
@@ -1889,14 +2062,61 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // bracketExpr = IndexExpr | SliceExpr
-  // IndexExpr   = Expr "[" Expr "]"
-  // SliceExpr   = Expr "[" Expr? ":" Expr? "]"
+  // ListExpr = "[" ExprList [("," | ";")] "]"
   //
-  bracketExpr(operand :Expr, ctx :exprCtx) :IndexExpr|SliceExpr {
+  listExpr(ctx :exprCtx) :ListExpr {
     const p = this
     const pos = p.pos
     p.want(token.LBRACKET)
+
+    let l :Expr[] = []
+    let ctxt = p.ctxType(ctx)
+    let t :ListType|null = ctxt instanceof ListType ? ctxt : null
+    let itemtype :Type|null = t ? t.types[0] : null
+
+    while (p.tok != token.RBRACKET) {
+      let x = p.expr(itemtype)
+      if (!t) {
+        if (x.type && !x.type.isUnresolved) {
+          t = new ListType(x.type)
+        }
+      } else {
+        x = p.types.convert(t.types[0], x) || x
+      }
+      l.push(x)
+      if (p.tok as token != token.RBRACKET && !p.ocomma(token.RBRACKET)) {
+        break  // error: unexpected ;, expecting comma, or )
+      }
+    }
+    p.want(token.RBRACKET)
+
+    if (l.length == 0 && !t) {
+      p.syntaxError(`unable to infer type of empty list`, pos)
+    }
+
+    return new ListExpr(pos, p.scope, l, t)
+  }
+
+
+  // bracketExpr = IndexExpr | SliceExpr | ListExpr
+  // IndexExpr   = Expr "[" Expr "]"
+  // SliceExpr   = Expr "[" Expr? ":" Expr? "]"
+  //
+  bracketExpr(operand :Expr, ctx :exprCtx) :IndexExpr|SliceExpr|TypeExpr {
+    const p = this
+    const pos = p.pos
+    p.want(token.LBRACKET)
+
+    if (p.got(token.RBRACKET)) {
+      // list type expression. e.g. x[]
+      let opt :Type = p.types.resolve(operand)
+      if (opt instanceof TypeType) {
+        opt = opt.type
+      }
+      let lt = p.types.getGenericInstance(t_list, [opt])
+      return new TypeExpr(pos, p.scope, lt)
+      // return new TypeExpr(pos, p.scope, new TypeType(lt))
+    }
 
     let x1 :Expr|null = null
     if (p.tok != token.COLON) {
@@ -1983,7 +2203,7 @@ export class Parser extends scanner.Scanner {
       //   l[0]
       // ) :
       l.length == 1 ? l[0] :
-      new TupleExpr(pos, p.scope, l)
+      new TupleExpr(pos, p.scope, l, /*type*/null)
     )
   }
 
@@ -2013,25 +2233,101 @@ export class Parser extends scanner.Scanner {
   //
   maybeType() :TypeExpr|null {
     const p = this
+    let tx :TypeExpr|null = null
 
     switch (p.tok) {
 
-      case token.NAME:
-        const x = p.dotident(null, p.resolve(p.ident()))
-        return new TypeExpr(x.pos, x.scope, p.types.resolve(x))
+      case token.NAME: {
+        let x = p.dotident(null, p.resolveType(p.ident()))
+        tx = new TypeExpr(x.pos, x.scope, p.types.resolve(x))
+        break
+      }
 
       case token.LPAREN:
-        return p.tupleType()
+        tx = p.tupleType()
+        break
 
       case token.LBRACE:
-        dlog(`TODO: parse struct type def`)
-        return null
+        dlog(`TODO: parse struct type`)
+        break
+
+      // case token.LBRACKET:
+      //   dlog(`TODO: parse list type`)
+      //   break //p.tupleType()
 
       // TODO: all other types
-
-      default:
-        return null
     }
+
+    if (tx) {
+      // generic use. e.g. T<A,B>
+      if (p.tok == token.LSS) {
+        tx = p.genericTypeInstance(tx)
+      }
+
+      // list. e.g. T[][]
+      while(p.tok == token.LBRACKET) {
+        tx = p.listType(tx)
+      }
+    }
+
+    return tx
+  }
+
+
+  // GenericTypeInstance = Type "<" (TypeArgs ","? )? ">"
+  // TypeArgs            = Type ("," Type)*
+  //
+  genericTypeInstance(tx :TypeExpr) :TypeExpr {
+    const p = this
+    const pos = p.pos
+    const args :Type[] = []
+
+    p.want(token.LSS)  // consume "<"
+
+    read_loop: while (p.tok != token.GTR) {
+      let tx2 = p.type()
+      assert(tx2.type, 'null type')
+      args.push(tx2.type)
+      if (p.tok == token.COMMA) {
+        p.next() // consume optional comma
+      } else {
+        // end of type def
+        if (p.tok == token.SHR) {
+          // convert token ">>" to ">", effectively creating the appearance
+          // that there are a token ">" followed by a token ">".
+          // This happens because the scanner is unable to distinguish between
+          // ">>" and ">".
+          p.tok = token.GTR
+        } else {
+          if (p.tok as token != token.GTR) {
+            p.syntaxError(`expecting comma or >`)
+            p.advanceUntil(token.GTR)
+          }
+          p.next() // consume ">"
+        }
+        break
+      }
+    }
+
+    let proto = tx.type
+    if (proto instanceof GenericType) {
+      tx.type = p.types.getGenericInstance(proto, args)
+    } else if (proto instanceof UnresolvedType) {
+      tx.type = new GenericTypeInstance(proto, args)
+    } else {
+      p.syntaxError(`instantiating non-generic type ${proto}`, pos)
+    }
+
+    return tx
+  }
+
+
+  listType(tx :TypeExpr) :TypeExpr {
+    const p = this
+    p.want(token.LBRACKET)
+    p.want(token.RBRACKET)
+    tx.type = new ListType(tx.type)
+    return tx
   }
 
 
@@ -2063,7 +2359,7 @@ export class Parser extends scanner.Scanner {
 
     while (p.tok != token.RPAREN) {
       tx = p.type()
-      assert(tx.type, 'unresolved type')
+      assert(tx.type, 'null type')
       types.push(tx.type as Type)
       if (!p.ocomma(token.RPAREN)) {
         // error: unexpected ;, expecting comma, or )
@@ -2100,13 +2396,13 @@ export class Parser extends scanner.Scanner {
     const p = this
     const pos = p.pos
     if (p.tok == token.NAME) {
-      const s = p.strSet.emplace(p.takeByteValue(), p.hash)
+      const s = strings.get(p.takeByteValue(), p.hash)
       p.next()
       return new Ident(pos, p.scope, s)
     }
     p.syntaxError("expecting identifier", pos)
     p.advanceUntil()
-    return new Ident(pos, p.scope, p._id__)
+    return new Ident(pos, p.scope, str__)
   }
 
   maybeIdent() :Ident|null {
@@ -2116,7 +2412,7 @@ export class Parser extends scanner.Scanner {
 
   fallbackIdent(pos? :Pos) :Ident {
     const p = this
-    return new Ident(pos === undefined ? p.pos : pos, p.scope, p._id__)
+    return new Ident(pos === undefined ? p.pos : pos, p.scope, str__)
   }
 
   // osemi parses an optional semicolon.
@@ -2140,6 +2436,14 @@ export class Parser extends scanner.Scanner {
   }
 
   // ocomma parses an optional comma.
+  //
+  // Note: If you are looking for optionally parsing a comma, without
+  // error reporting, then simply the following would be enough:
+  //
+  //   if (p.tok == token.COMMA) {
+  //     p.next()
+  //   }
+  //
   ocomma(follow :token) :bool {
     const p = this
 

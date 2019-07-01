@@ -37,6 +37,7 @@ const GeneralCategories = {
 // Based on http://www.unicode.org/Public/10.0.0/ucd/PropList.txt
 const WhitespaceCats = ['Cc', 'Zl', 'Zp', 'Zs']
 const LetterCats = ['Lu', 'Ll']
+// const NthIdentifiers = LetterCats.concat(['Lt', 'Lo', 'Sm', 'Sc', 'Sk', 'So'])
 const DigitCats = ['Nd']
 const HexDigitRanges = [
   [0x0030, 0x0039], // Nd  [10] DIGIT ZERO..DIGIT NINE
@@ -77,6 +78,8 @@ function main() {
   console.log('// letters\n' + genUniCategoryCode(LetterCats))
   console.log('// digits\n' + genUniCategoryCode(DigitCats))
 
+  // console.log('// Nth identifier\n' + genUniCategoryCode(NthIdentifiers))
+
   console.log('// Emoji_Presentation\n' +
     genRangesCode(cpsToRanges(cats.get('Emoji_Presentation'))))
 
@@ -91,7 +94,7 @@ function main() {
 
 
 function loadEmojiData() {
-  // http://unicode.org/Public/emoji/6.0/emoji-data.txt
+  // curl -O https://unicode.org/Public/emoji/12.0/emoji-data.txt
   //
   //  <cp range> <SP>+ ";" <category> <SP>* # <SP>* <uc-version> <SP>+ [<range-length>] <comment>? <LF>
   //
@@ -132,12 +135,13 @@ function loadEmojiData() {
 
 function loadUnicodeData() {
   // http://www.unicode.org/Public/10.0.0/ucd/UnicodeData.txt
+  // curl -O https://www.unicode.org/Public/12.1.0/ucd/UnicodeData.txt
   const lines = fs.readFileSync(__dirname + '/UnicodeData.txt', 'utf8').trim().split('\n')
   // See ftp://ftp.unicode.org/Public/3.0-Update/UnicodeData-3.0.0.html
   // See   #General%20Category  for a list of categories (field 2)
   //
   //                 2F47;KANGXI RADICAL SUN;So;0;ON;<compat> 65E5;;;;N;;;;;
-  // 
+  //
   //  Example line: "0004;<control>;Cc;0;BN; ; ; ; ;N;END OF TRANSMISSION;  ;  ;  ; ..."
   //  Field:            0;        1; 2;3; 4;5;6;7;8;9;                 10;11;12;13; ...
   //
@@ -230,7 +234,7 @@ function genRangesCode(ranges) {
   let js = ''
   if (ranges.length) {
     js += '  return (\n'
-    
+
     if (ranges.length > 1) {
       js += `    ${hex(minCp)} <= c && c <= ${hex(maxCp)} && ( // ${cpName(minCp)}..${cpName(maxCp)}\n`
     }

@@ -1,4 +1,4 @@
-import { NativeType, BasicType } from '../types'
+import { BasicType } from '../types'
 import { RegInfo } from './reg'
 
 

@@ -4,10 +4,10 @@ import * as utf8 from './utf8'
 // Interned byte strings
 //
 
-let _nextId = 0
+// let _nextId = 0
 
 export class ByteStr {
-  readonly _id :int = _nextId++ // only for debugging
+  // readonly _id :int = _nextId++ // only for debugging
   constructor(
   readonly hash  :int,
   readonly bytes :Uint8Array,
@@ -31,11 +31,16 @@ export class ByteStr {
   }
 }
 
-export class ByteStrSet {
-  _m = new Map<int,ByteStr[]>() // naive implementation
-  // TODO: use a rb-tree or something like that
 
+export class ByteStrSet {
+  _m = new Map<int,ByteStr[]>()
+
+  // DEPRECATED
   emplace(value :Uint8Array, hash :int = 0) :ByteStr {
+    return this.get(value, hash)
+  }
+
+  get(value :Uint8Array, hash :int = 0) :ByteStr {
     if (!hash) {
       hash = hashBytes(value, 0, value.length)
     }
@@ -55,7 +60,16 @@ export class ByteStrSet {
       return bs
     }
   }
+
+  clear() {
+    this._m.clear()
+  }
 }
+
+
+// process-wide shared instance
+export const strings = new ByteStrSet()
+
 
 // hashBytes returns an unsigned 31 bit integer hash of an array of bytes.
 // It's using the FNV1a algorithm which is very fast and has good distribution

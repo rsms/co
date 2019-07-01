@@ -1,0 +1,28 @@
+// declarations
+toplevel1 int[]
+toplevel2 list<int>  // type identical to int[]
+
+fun lists(x int) {
+  _ = u32[](1, 2, 3)     // u32[]
+  _ = list<u32>(1, 2, 3) // u32[]   --- TODO
+
+  // empty lists
+  _ int[]       // empty list of ints
+  _ int[] = []  // same thing
+  // _ = [] // E: unable to infer type of empty list
+
+  // explicit type
+  _ u32[] = [1, 2.0, x]  // u32[]
+  _ = u32[](1, 2, 3)     // u32[]
+  _ = list<u32>(1, 2, 3) // u32[]
+
+  // inferred type
+  _ = [1,   2.0, x]     // type is int[]
+  _ = [1.0, 2.0, x]     // type is f64[]
+
+  // mixed element types with automatic conversion
+  nine = 9
+  _ = [1.1, 2, 4, nine, x]
+  // _ f32[] = [1.1, 2, x]  // E: x (type int) converted to f32
+  _ f32[] = [1.1, 2, f32(x)]  // ok: explicit cast
+}

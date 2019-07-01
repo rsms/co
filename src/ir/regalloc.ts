@@ -386,9 +386,9 @@ export class RegAllocator {
     // {gp,fp}k is the maximum number of registers we have available for
     // general-purpose and floating-point registers.
     let gpk = countRegs(this.config.gpRegMask)
-    let fpk = countRegs(this.config.fpRegMask)
+    // let fpk = countRegs(this.config.fpRegMask)
     gpk = 4 // DEBUG XXX OVERRIDE
-    fpk = 4 // DEBUG XXX OVERRIDE
+    // fpk = 4 // DEBUG XXX OVERRIDE
 
     // Stack of values
     let valstack :{id:ID, edges:Set<ID>}[] = []
@@ -582,7 +582,6 @@ export class RegAllocator {
           // rewrite value as StoreReg with the original value as arg0
           assert(a.gpSpillReg != -1)
           spills.push(v.id)
-          let b = x.b
           let y = x.clone()
           y.reg = a.registers[a.gpSpillReg]
           x.reset(ops.StoreReg)

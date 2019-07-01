@@ -33,14 +33,24 @@ function _stackTrace(cons) {
 // }
 //
 function _parseStackFrame(sf) {
-  let m = /^\s*at\s+([^\s]+)\s+\((?:.+\/(src\/[^\:]+)|([^\:]+))\:(\d+)\:(\d+)\)$/.exec(sf)
+  //let m = /^\s*at\s+([^\s]+)\s+\((?:.+\/(src\/[^\:]+)|([^\:]+))\:(\d+)\:(\d+)\)$/.exec(sf)
+  let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+(?:\[as ([^\]]+)\]\s+|)\((?:.+[\/ ](src\/[^\:]+)|([^\:]*))(?:\:(\d+)\:(\d+)|.*)\)/.exec(sf)
+  // 1: name
+  // 2: as-name | undefined
+  // 3: src-filename
+  // 4: filename
+  // 5: line
+  // 6: column
+  //
   if (m) {
     return {
-      func: m[1],
-      file: m[2] || m[3],
-      line: parseInt(m[4]),
-      col:  parseInt(m[5]),
+      func: m[2] || m[1],
+      file: m[3] || m[4],
+      line: m[5] ? parseInt(m[5]) : 0,
+      col:  m[6] ? parseInt(m[6]) : 0,
     }
+  } else {
+    console.log("failed to parse stack frame", JSON.stringify(sf))
   }
   return null
 }
@@ -67,48 +77,54 @@ function assert() {
     var cond = arguments[0]
       , msg = arguments[1]
       , cons = arguments[2] || assert
-    if (!cond) {
-      if (!assert.throws && typeof process != 'undefined') {
-        var stack = _stackTrace(cons)
-        console.error('assertion failure:', msg || cond)
-        var sf = _parseStackFrame(stack.substr(0, stack.indexOf('\n') >>> 0))
-        if (sf) {
-          try {
-            const fs = require('fs')
-            const lines = fs.readFileSync(sf.file, 'utf8').split(/\n/)
-            const line_before = lines[sf.line - 2]
-            const line        = lines[sf.line - 1]
-            const line_after  = lines[sf.line]
-            let context = [' > ' + line]
-            if (typeof line_before == 'string') {
-              context.unshift('   ' + line_before)
-            }
-            if (typeof line_after == 'string') {
-              context.push('   ' + line_after)
-            }
-            console.error(sf.file + ':' + sf.line + ':' + sf.col)
-            console.error(context.join('\n') + '\n\nStack trace:')
-          } catch (_) {}
+    if (cond) {
+      return
+    }
+    let stack = _stackTrace(cons)
+    let message = 'assertion failure: ' + (msg || cond)
+
+    if (typeof process != 'undefined') {
+      var sf = _parseStackFrame(stack.substr(0, stack.indexOf('\n') >>> 0))
+      if (sf) try {
+        let fs = require('fs')
+        let lines = fs.readFileSync(sf.file, 'utf8').split(/\n/)
+        let line_before = lines[sf.line - 2]
+        let line        = lines[sf.line - 1]
+        let line_after  = lines[sf.line]
+        let context = [' > ' + line]
+        if (typeof line_before == 'string') {
+          context.unshift('   ' + line_before)
         }
-        console.error(stack)
-        exit(3)
-      } else {
-        var e = new Error('assertion failure: ' + (msg || cond))
-        e.name = 'AssertionError'
-        e.stack = _stackTrace(cons)
-        throw e
-      }
+        if (typeof line_after == 'string') {
+          context.push('   ' + line_after)
+        }
+        stack = (
+          sf.file + ':' + sf.line + ':' + sf.col + "\n" +
+          context.join('\n') + '\n\nStack trace:\n' +
+          stack
+        )
+      } catch (_) {}
+    }
+
+    if (!assert.throws && typeof process != 'undefined') {
+      console.error(message + "\n" + stack)
+      exit(3)
+    } else {
+      var e = new Error(message)
+      e.name = 'AssertionError'
+      e.stack = stack
+      throw e
     }
   }
 }
 
-var repr = __utillib && __utillib.inspect ? function repr(obj) {
+var repr = __utillib && __utillib.inspect ? function repr(obj, maxdepth) {
   let color = typeof process != "undefined" && process.stdout && process.stdout.isTTY;
-  return __utillib.inspect(obj, /*showHidden*/false, /*depth*/4, !!color)
-} : function repr(obj) {
+  return __utillib.inspect(obj, /*showHidden*/false, /*depth*/maxdepth||4, !!color)
+} : function repr(obj, maxdepth) {
   // TODO: something better
   try {
-    return JSON.stringify(obj)
+    return JSON.stringify(obj, null, 2)
   } catch (_) {
     return String(obj)
   }
@@ -131,7 +147,7 @@ if (
     let e = new Error(), srcloc = '?'
     if (e.stack) {
       let sf = e.stack.split(/\n/, 3)[2]
-      let m = /\s+(?:\(.+\/(src\/.+)\)|at\s+.+\/(src\/.+))$/.exec(sf)
+      let m = /\s+(?:\(.+[\/\s](src\/.+)\)|at\s+.+[\/\s](src\/.+))$/.exec(sf)
       if (m) {
         srcloc = m[1] || m[2]
         var p = srcloc.lastIndexOf('/')
@@ -156,10 +172,13 @@ if (
     hasRunAllTests = true
     let throws = assert.throws
     assert.throws = true
+    var longestTestName = allTests.reduce((a, t) => Math.max(a, t.name.length), 0)
+    var spaces = "                                                              "
     try {
       for (let i = 0; i < allTests.length; ++i) {
         let t = allTests[i];
-        console.log(`[TEST] ${t.name}${t.srcloc ? '\t'+t.srcloc : ''}`);
+        let name = t.name + spaces.substr(0, longestTestName - t.name.length)
+        console.log(`[TEST] ${name}${t.srcloc ? '  '+t.srcloc : ''}`);
         t.f();
       }
       assert.throws = throws

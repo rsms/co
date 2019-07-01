@@ -11,11 +11,12 @@ import {
   t_u16,
   t_u32,
   t_u64,
-  t_usize
+  t_uintptr
 } from "../types"
 
 const u64_ffff = new UInt64(65535,0),
-      u64_10000ffff = new UInt64(65535,1);
+      u64_10000ffff = new UInt64(65535,1),
+      u64_2ffffffff = new UInt64(-1,2);
 
 export const ops = {
   
@@ -299,8 +300,9 @@ export const ops = {
   CovmADD32const: 274,
   CovmADD64: 275,
   CovmMUL32: 276,
-  CovmZeroLarge: 277,
-  CovmLowNilCheck: 278,
+  CovmCALL: 277,
+  CovmZeroLarge: 278,
+  CovmLowNilCheck: 279,
 
   // END
   OpcodeMax: undefined,
@@ -410,7 +412,7 @@ export const opinfo :OpInfo[] = [
   { name: "SB",
     argLen: 0,
     generic: true,
-    type: t_usize,
+    type: t_uintptr,
     zeroWidth: true,
   },
   { name: "Load",
@@ -420,17 +422,17 @@ export const opinfo :OpInfo[] = [
   { name: "Store",
     argLen: 3,
     generic: true,
-    type: t_usize,
+    type: t_uintptr,
   },
   { name: "Move",
     argLen: 3,
     generic: true,
-    type: t_usize,
+    type: t_uintptr,
   },
   { name: "Zero",
     argLen: 2,
     generic: true,
-    type: t_usize,
+    type: t_uintptr,
   },
   { name: "StoreReg",
     argLen: 1,
@@ -1619,7 +1621,7 @@ export const opinfo :OpInfo[] = [
     argLen: 3,
     generic: true,
     hasSideEffects: true,
-    type: t_usize,
+    type: t_uintptr,
   },
   { name: "AtomicExchange32",
     argLen: 3,
@@ -1655,13 +1657,13 @@ export const opinfo :OpInfo[] = [
     argLen: 3,
     generic: true,
     hasSideEffects: true,
-    type: t_usize,
+    type: t_uintptr,
   },
   { name: "AtomicOr8",
     argLen: 3,
     generic: true,
     hasSideEffects: true,
-    type: t_usize,
+    type: t_uintptr,
   },
 
   // covm
@@ -1737,6 +1739,17 @@ export const opinfo :OpInfo[] = [
       clobbers: UInt64.ZERO
     },
     type: t_u32,
+  },
+  { name: "CALL",
+    argLen: 1,
+    aux: AuxType.SymOff,
+    call: true,
+    clobberFlags: true,
+    reg: {
+      inputs: [],
+      outputs: [],
+      clobbers: u64_2ffffffff /*RegSet { r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11 r12 r13 r14 r15 r16 r17 r18 r19 r20 r21 r22 r23 r24 r25 r26 r27 r28 r29 r30 r31 r32 r33 }*/
+    },
   },
   { name: "ZeroLarge",
     argLen: 2,

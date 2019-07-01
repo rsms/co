@@ -1,5 +1,5 @@
 import { assertEq } from './test'
-import { asciibuf } from './util'
+import * as utf8 from './utf8'
 import { Position, SrcFileSet } from './pos'
 import { token, tokstr } from './token'
 import * as scanner from './scanner'
@@ -40,7 +40,7 @@ export function dumpTokens(s :scanner.Scanner) {
 export function sourceScanner(srctext :string) :scanner.Scanner {
   let s = new scanner.Scanner()
   let fileSet = new SrcFileSet()
-  let src = asciibuf(dedentMultiLineString(srctext))
+  let src = utf8.encodeString(dedentMultiLineString(srctext))
   let file = fileSet.addFile('a', src.length)
   s.init(file, src, ReportErrors ? onScanError : null)
   return s
@@ -97,10 +97,18 @@ TEST('basics', () => {
        comment
        ignored */
     ]  // implicit semicolon here
+    i-d…
+    x > y
+    generic<typearg>
+    foo<bar<baz>>
     `, [
     token.INT,      SEMIC,
     token.NAME,     SEMIC,
     token.RBRACKET, SEMIC,
+    token.NAME, SEMIC,
+    token.NAME, token.GTR, token.NAME, SEMIC,
+    token.NAME, token.LSS, token.NAME, token.GTR, SEMIC,
+    token.NAME, token.LSS, token.NAME, token.LSS, token.NAME, token.SHR, SEMIC,
   ])
 })
 

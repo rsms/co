@@ -163,19 +163,13 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       assert(v >= 0 && v <= _Int32_UINT8_MAX)
     }
 
-  } else if (t === t_f64) {
-    // ? -> f64
+  } else if (t === t_f64 || t === t_f32) {
+    // ? -> f64|f32
     lossless = true
     if (typeof v != 'number') {
       v = v.toFloat64()
     }
-
-  } else if (t === t_f32) {
-    // ? -> f32
-    lossless = true
-    if (typeof v != 'number') {
-      v = v.toFloat64()
-    }
+    // TODO: if(t===t_f32) check overflow
 
   } else {
     assert(false, `unexpected destination type ${t}`)

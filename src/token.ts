@@ -96,7 +96,7 @@ export enum token {
   cmpop_beg,
   // prec.OR
   OROR, // ||
-  
+
   // prec.AND
   ANDAND, // &&
 
@@ -114,7 +114,7 @@ export enum token {
   SUB, // -
   OR,  // |
   XOR, // ^  "NOT" when unary, "XOR" when binary
-  
+
   // prec.MUL
   MUL,     // *
   QUO,     // /

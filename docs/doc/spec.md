@@ -86,7 +86,7 @@ break        default      for          import       switch
 case         defer        fun          package      type
 chan         else         go           range        var
 const        enum         goto         return       while
-continue     fallthrough  if           select       
+continue     fallthrough  if           select
 ```
 
 
@@ -168,7 +168,7 @@ ratio_lit = decimals "/" decimals
 Represents a character constant; an integer value identifying a
 Unicode code point.
 Within the quotes, any character may appear except newline and unescaped
-single quote. A single quoted character represents the Unicode value of the 
+single quote. A single quoted character represents the Unicode value of the
 character itself, while multi-character sequences beginning with a backslash
 encode values in various formats.
 
@@ -644,7 +644,7 @@ fun encode(codepoint char, _ UTF-8) byte[] {
 
 fun encode(codepoint char, _ UTF-16) uint16[] {
   // produces a list of 16-bit integers representing the
-  // codepoint as UTF16 
+  // codepoint as UTF16
 }
 
 grinning-face = char(0x1F600)
@@ -742,10 +742,8 @@ The value of an uninitialized list is equivalent to a list of a
 zero-length array.
 
 ```txt
-SliceType = ElementType "[]"
-
-SliceExpr = SliceType "(" ExprList [("," | ";")] ")"
-          | "[" ExprList [("," | ";")] "]"
+ListType = ElementType "[]]"
+ListExpr = "[" ExprList [("," | ";")] "]"
 ```
 
 Like arrays, lists are indexable and have a length.
@@ -769,18 +767,28 @@ The capacity of a list a can be discovered using the built-in function `a.cap`.
 ```go
 type A byte[]
 type A { x, y int32 }[]
-type A float64[]
-type A int[][]
+type A f64[]
+type A int[][]       // list of list of integers
 
-a = [1, 2, 3, 4]        // type is int[]
-b uint32[] = [1, 2, 3]  // type is uint32[]
-c = [                   // multi-line via semicolon rules
-  100
-  200
-  300
-)
-d = float64[3][3]()     // 3 arrays, each with 3 zero-value float64's
+a = [1, 2, 3, 4]     // type is int[]
+b u32[] = [1, 2, 3]  // type is u32[]
+c = u32[](1, 2, 3)   // type is u32[]
+d = [                // multi-line via semicolon rules
+  [1, 10, 100]       // type is int[][]
+  [2, 20, 200]
+  [3, 30, 300]
+]
+e = [                // type is (int,str)[] -- list of tuples
+  (1, "one")
+  (2, "two")
+]
 ```
+
+> Note: We choose to use postfix list type syntax over surrounding
+> syntax mainly because how types are specified in variable declarations.
+> For example, the following would be ambiguous:<br>
+> `v [t] = []  // var declaration`<br>
+> `v[t] = []   // assignment`
 
 
 ### Records

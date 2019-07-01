@@ -32,7 +32,7 @@ import {
   Assignment,
   Operation,
   CallExpr,
-  TupleExpr,
+  CollectionExpr,
   BadExpr,
   TypeExpr,
   BadTypeExpr,
@@ -392,9 +392,9 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   }
 
   if (n instanceof CallExpr) {
-    s += ' ' + repr1(n.fun, newline, c) + ' ('
+    s += ' ' + repr1(n.receiver, newline, c) + ' ('
     s += reprv(n.args, nl2, c, '')
-    if (n.hasDots) {
+    if (n.hasRest) {
       s += '...'
     }
     return s + '))'
@@ -408,8 +408,8 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return s + ' ' + repr1(n.expr, newline, c) + ')'
   }
 
-  if (n instanceof TupleExpr) {
-    return s + ' ' + reprv(n.exprs, nl2, c, '') + ')'
+  if (n instanceof CollectionExpr) {
+    return s + ' ' + reprv(n.entries, nl2, c, '') + ')'
   }
 
   if (n.constructor === NoOpStmt) {

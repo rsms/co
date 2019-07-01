@@ -1,0 +1,14 @@
+fun generics {
+  type T1 (int, f32, list<int>)
+
+  _ u32[]
+  _ u32[][]
+  _ tuple<i32,tuple<u32,f32>> // (i32, (u32, f32))
+  _ tuple<i32,tuple<i32,tuple<u32,f32>>> // (i32, (i32, (u32, f32)))
+  _ list<tuple<int,str>[]>[]  // (int, str)[][][]
+  _ list<int> // int[]
+  _ list<int> // int[]
+  _ list<f32> // f32[]
+  _ list<f32> // f32[]
+  _ T1.2[]    // int[][] because T1.2 = list<int>
+}

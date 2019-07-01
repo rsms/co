@@ -85,7 +85,7 @@ const gpsp  = gp.or(buildReg("SP"))  // gp + SP
 
 // The "registers", which are actually variables, can get clobbered
 // if we're switching coroutines, because it unwinds the stack. [go-wasm]
-// const callerSave = gp.or(fp).or(buildReg("g")) // gp | fp | g
+const callerSave = gp.or(fp).or(buildReg("g")) // gp | fp | g
 
 // Common reginfo.
 // Naming schema is <regs> <num-inputs> <num-outputs> [<out-regs>].
@@ -105,6 +105,8 @@ const ops :OpDescription[] = [
   ["ADD64", 2, Commutative, t.u64, { reg: gp21 }], // arg0 + arg1
 
   ["MUL32", 2, Commutative, t.u32, { reg: gp21 }], // arg0 + arg1
+
+  ["CALL", 1, Call, ClobberFlags, { reg: regInfo([], [], /*clobbers*/ callerSave), aux: "SymOff" }], // call static function aux.(SB). arg0=mem, auxint=argsize, returns mem
 
   ["ZeroLarge", 2, { reg: gp10, aux: "Int64" }],  // large zeroing. arg0=start, arg1=mem, auxInt=len/8, returns mem
 

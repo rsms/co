@@ -113,7 +113,7 @@ export class Scanner extends ErrorReporter {
     s.sdata = sdata
     s.errh = errh || null
     s.mode = mode
-  
+
     s.ch = 0x20 /*' '*/
     s.tok = token.EOF
     s.offset = 0
@@ -124,7 +124,7 @@ export class Scanner extends ErrorReporter {
     s.parenL = 0
     s.interpStrL = 0
     s.byteval = null
-  
+
     s.readchar()
   }
 
@@ -140,12 +140,12 @@ export class Scanner extends ErrorReporter {
 
   // Read the next Unicode char into s.ch.
   // s.ch < 0 means end-of-file.
-  private readchar() {
+  readchar() {
     const s = this
 
     if (s.rdOffset < s.sdata.length) {
       s.offset = s.rdOffset
-      
+
       if (s.ch == 0xA /*\n*/ ) {
         s.lineOffset = s.offset
         s.sfile.addLine(s.offset)
@@ -180,7 +180,7 @@ export class Scanner extends ErrorReporter {
   // function, you should either call readchar() to update s.ch and s.offset
   // or call next().
   //
-  private undobyte() {
+  undobyte() {
     const s = this
     assert(s.ch < 0x80)
     s.rdOffset -= 1
@@ -551,13 +551,15 @@ export class Scanner extends ErrorReporter {
           } else {
             s.tok = token.SHR
             s.prec = prec.MUL
+            insertSemi = true
           }
         } else {
           s.tok = token.GTR
           s.prec = prec.CMP
+          insertSemi = true
         }
         break
-      
+
       case 0x3D: // =
         if (s.gotchar(0x3D)) { // ==
           s.tok = token.EQL
@@ -737,7 +739,7 @@ export class Scanner extends ErrorReporter {
     s.int32val = NaN
 
     switch (s.ch) {
-    
+
     case -1: // EOF
       s.error("unterminated character literal")
       s.tok = token.ILLEGAL
@@ -1213,7 +1215,7 @@ export class Scanner extends ErrorReporter {
   findCommentLineEnd() :bool {
     // initial '/' already consumed; s.ch == '*'
     const s = this
-    
+
     // save state
     const enterOffset = s.offset
 
@@ -1238,7 +1240,7 @@ export class Scanner extends ErrorReporter {
       }
     }
   }
-  
+
   interpretCommentPragma() {
     const s = this
     const offs = s.startoffs
@@ -1276,7 +1278,7 @@ export class Scanner extends ErrorReporter {
   findLineEnd() :bool {
     // initial '/' already consumed; enters with s.ch == '*'
     const s = this
-  
+
     // read ahead until a newline, EOF, or non-comment token is found
     while (s.ch == 0x2f || s.ch == 0x2a) { // / *
       if (s.ch == 0x2f) { // /
@@ -1319,7 +1321,7 @@ export class Scanner extends ErrorReporter {
 
       s.readchar() // consume '/'
     }
-  
+
     return false
   }
 
@@ -1382,13 +1384,16 @@ function isUniIdentStart(c :int) :bool {
 
 function isUniIdentCont(c :int) :bool {
   return (
-    unicode.isLetter(c) ||
-    unicode.isDigit(c) ||
     c == 0x2D || // -
     c == 0x5F || // _
     c == 0x24 || // $
-    unicode.isEmojiPresentation(c) ||
-    unicode.isEmojiModifierBase(c)
+    c > 0xFF || // shortcut to include most codepoints. not ideal but fast.
+    isLetter(c) ||
+    isDigit(c)
+    // unicode.isLetter(c) ||
+    // unicode.isDigit(c) ||
+    // unicode.isEmojiPresentation(c) ||
+    // unicode.isEmojiModifierBase(c) ||
   )
 }
 

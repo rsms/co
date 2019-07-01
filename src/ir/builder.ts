@@ -3,7 +3,7 @@ import { Pos, SrcFile } from '../pos'
 import { token } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
 import * as ast from '../ast'
-import * as types from '../types'
+// import * as types from '../types'
 import { Type, BasicType, FunType, t_nil, t_bool } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops, opinfo } from "./ops"
@@ -73,21 +73,20 @@ export class IRBuilder {
     r.incompletePhis = null
     r.flags = flags
 
-    // select integer types
-    const [intt_s, intt_u] = types.intTypes(config.intSize)
-    const [sizet_s, sizet_u] = types.intTypes(config.addrSize)
+    // // select integer types
+    // const [intt_s, intt_u] = types.intTypes(config.intSize)
+    // const [sizet_s, sizet_u] = types.intTypes(config.addrSize)
 
-    this.concreteType = (t :Type) :BasicType => {
-      switch (t) {
-      case types.t_int:   return intt_s
-      case types.t_uint:  return intt_u
-      case types.t_isize: return sizet_s
-      case types.t_usize: return sizet_u
-      default:
-        assert(t instanceof BasicType, `${t} is not a BasicType`)
-        return t as BasicType
-      }
-    }
+    // this.concreteType = (t :Type) :BasicType => {
+    //   switch (t) {
+    //   case types.t_int:   return intt_s
+    //   case types.t_uint:  return intt_u
+    //   case types.t_uintptr: return sizet_u
+    //   default:
+    //     assert(t instanceof BasicType, `${t} is not a BasicType`)
+    //     return t as BasicType
+    //   }
+    // }
   }
 
   // addTopLevel is the primary interface to builder
@@ -240,9 +239,10 @@ export class IRBuilder {
   // concreteType normalizes abstract types to concrete types.
   // E.g. concreteType(int) -> i32  (if int->i32 exists in typemap)
   //
-  concreteType(_ :Type) :BasicType {
+  concreteType(t :Type) :BasicType {
     // Note: This function is replaced by the constructor
-    return t_nil
+    assert(t instanceof BasicType)
+    return t as BasicType
   }
 
   // nilValue returns a placeholder value.
@@ -1041,8 +1041,8 @@ export class IRBuilder {
   funcall(x :ast.CallExpr) :Value {
     const s = this
 
-    if (x.hasDots) {
-      dlog(`TODO: handle call with hasDots`)
+    if (x.hasRest) {
+      dlog(`TODO: handle call with hasRest`)
     }
 
     // first unroll argument values
@@ -1054,12 +1054,12 @@ export class IRBuilder {
     // push params
     if (
       s.flags & IRBuilderFlags.Comments &&
-      x.fun instanceof ast.Ident &&
-      x.fun.ent
+      x.receiver instanceof ast.Ident &&
+      x.receiver.ent
     ) {
       // include comment with name of parameter, when available
-      let fx = x.fun.ent.decl as ast.FunExpr
-      let funstr = x.fun.toString() + '/'
+      let fx = x.receiver.ent.decl as ast.FunExpr
+      let funstr = x.receiver.toString() + '/'
       for (let i = 0; i < argvals.length; i++) {
         let v = argvals[i]
         let v2 = s.b.newValue1(ops.CallArg, v.type, v)
@@ -1077,11 +1077,11 @@ export class IRBuilder {
     }
 
     // TODO: handle any function by
-    // let fv = s.expr(x.fun)
+    // let fv = s.expr(x.receiver)
     // and implementing function resolution somehow in readGlobal et al.
 
-    assert(x.fun instanceof ast.Ident, "non-id callee not yet supported")
-    let funid = x.fun as ast.Ident
+    assert(x.receiver instanceof ast.Ident, "non-id callee not yet supported")
+    let funid = x.receiver as ast.Ident
     assert(funid.ent, "unresolved callee")
 
     let ft = funid.type as FunType

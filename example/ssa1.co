@@ -61,70 +61,88 @@
 // type A i32    // concrete
 // type B = i32  // alias
 
-fun foo(x, _, y int) int {
-  // x + y
+fun half(x int) int {
+  x / 2
+}
 
+fun foo(x, _, y int) int {
   a = x + y
   a = a + 5
-  d = a + 1
-  // c = a + d
+
+  d = half(a + 1)
 
   if x > y {
-    x *= 2 //|| 1
+    x *= 2
   } else {
     y *= 2
   }
+
   x + y + a + d
-
-  // if x > y {
-  //   x *= 2 //|| 1
-  // } else {
-  //   y *= 2
-  // }
-  // x + y
-
-  // if x > y {
-  //   x *= 2 //|| 1
-  // } else {
-  //   y *= 2
-  // }
-  // x + y
-
-  // if x > y {
-  //   x *= 2 //|| 1
-  // } else {
-  //   y *= 2
-  // }
-  // x + y
-
-  // if x > y {
-  //   x *= 2 //|| 1
-  // } else {
-  //   y *= 2
-  // }
-  // x + y
-
-  // if x > y {
-  //   x *= 2 //|| 1
-  // } else {
-  //   y *= 2
-  // }
-  // x + y
-
-  // if x > y {
-  //   x *= 2 //|| 1
-  // } else {
-  //   y *= 2
-  // }
-  // x + y
-
-
-  // k u8 = 200
-  // a = x + y
-  // b = a - a
-  // c = a * b
-  // c + k
 }
+
+
+// fun foo(x, _, y int) int {
+//   a = x + y
+//   a = a + 5
+
+//   d = half(a + 1)
+
+//   if x > y {
+//     x *= 2
+//   } else {
+//     y *= 2
+//   }
+
+//   x + y + a + d
+//   // if x > y {
+//   //   x *= 2 //|| 1
+//   // } else {
+//   //   y *= 2
+//   // }
+//   // x + y
+
+//   // if x > y {
+//   //   x *= 2 //|| 1
+//   // } else {
+//   //   y *= 2
+//   // }
+//   // x + y
+
+//   // if x > y {
+//   //   x *= 2 //|| 1
+//   // } else {
+//   //   y *= 2
+//   // }
+//   // x + y
+
+//   // if x > y {
+//   //   x *= 2 //|| 1
+//   // } else {
+//   //   y *= 2
+//   // }
+//   // x + y
+
+//   // if x > y {
+//   //   x *= 2 //|| 1
+//   // } else {
+//   //   y *= 2
+//   // }
+//   // x + y
+
+//   // if x > y {
+//   //   x *= 2 //|| 1
+//   // } else {
+//   //   y *= 2
+//   // }
+//   // x + y
+
+
+//   // k u8 = 200
+//   // a = x + y
+//   // b = a - a
+//   // c = a * b
+//   // c + k
+// }
 
 
 // fun foo(x, y int) int {

@@ -2,34 +2,22 @@ import { ArchInfo } from "../ir/arch_info"
 import { OpInfo, AuxType } from "../ir/op"
 import * as types from '../types'
 
-// export type Typename = "bool"
-//                      | "u8"
-//                      | "u16"
-//                      | "i16"
-//                      | "u32"
-//                      | "i32"
-//                      | "u64"
-//                      | "i64"
-//                      | "usize"
-//                      | "addr"
-//                      | "f32"
-//                      | "f64"
-//                      | "str"
-
 export const t = {
-  "bool":  types.t_bool,
-  "u8":    types.t_u8,
-  "u16":   types.t_u16,
-  "i16":   types.t_i16,
-  "u32":   types.t_u32,
-  "i32":   types.t_i32,
-  "u64":   types.t_u64,
-  "i64":   types.t_i64,
-  "usize": types.t_usize,
-  "addr":  types.t_addr,
-  "f32":   types.t_f32,
-  "f64":   types.t_f64,
-  "str":   types.t_str,
+  "bool":    types.t_bool,
+  "u8":      types.t_u8,
+  "u16":     types.t_u16,
+  "i16":     types.t_i16,
+  "u32":     types.t_u32,
+  "i32":     types.t_i32,
+  "u64":     types.t_u64,
+  "i64":     types.t_i64,
+  "int":     types.t_int,
+  "uint":    types.t_uint,
+  "uintptr": types.t_uintptr,
+  "addr":    types.t_addr,
+  "f32":     types.t_f32,
+  "f64":     types.t_f64,
+  "str":     types.t_str,
 }
 
 export const

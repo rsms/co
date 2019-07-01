@@ -228,31 +228,33 @@ export class AppendBuffer {
   }
 }
 
+const stackFrameRe = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+(?:\[as ([^\]]+)\]\s+|)\((?:.+[\/ ]src\/([^\:]+)|([^\:]*))(?:\:(\d+)\:(\d+)|.*)\)/
+
 // debug function
 export const debuglog = DEBUG ? function(...v :any[]) {
   let e = new Error()
   let prefix = ''
 
   if (e.stack) {
-    let m = /\s*at\s+(?:[^\s]+\.|)[^\s\.]+\s+\[as ([^\]]+)\]\s+\(.+\/src\/(.+)\)/.exec(
-      e.stack.split(/\n/, 3)[2]
-    )
-    if (!m) {
-      // m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)/.exec(e.stack.split(/\n/, 3)[2])
-      m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(
-        e.stack.split(/\n/, 3)[2]
-      )
-      if (m && m[1] == "dlog") {
-        m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+\(.+\/src\/(.+)\)/.exec(
-          e.stack.split(/\n/, 4)[3]
-        )
-      }
-    }
+
+    let m = stackFrameRe.exec(e.stack.split(/\n/, 3)[2])
+    // example: "at Foo.bar [as lol] (/<co> src/parser.ts:1839:5)"
+    // m = { 1:"bar", 2:"lol", 3:"parser.ts",               5:"1839", 6:"5" }
+    //
+    // example: "at Foo.bar (/<co> src/parser.ts:1839:5)"
+    // m = { 1:"bar",          3:"parser.ts",               5:"1839", 6:"5" }
+    //
+    // example: "at Foo.bar [as lol] (/abc/def:123:45)"
+    // m = { 1:"bar", 2:"lol",                4:"/abc/def", 5:"123", 6:"45" }
+    //
+    // example: "at Foo.bar [as lol] (blabla)"
+    // m = { 1:"foo",                         4:"blabla"                    }
+    //
     if (m) {
-      const fun = m[1]
-      const origin = m[2]
+      const fun = m[2] || m[1]
+      const origin = m[3] || m[4]
       if (origin) {
-        const filename = origin.split('.ts:', 1)[0]
+        // const filename = origin.split('.ts:', 1)[0]
         const trmsg = String(v[0])
         if (trmsg.indexOf('TODO:') == 0 || trmsg.indexOf('TODO ') == 0) {
           // message start with "TODO"

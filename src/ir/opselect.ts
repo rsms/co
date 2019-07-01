@@ -1,3 +1,6 @@
+//
+// select generic operators given AST
+//
 import { token } from '../token'
 import {
   Mem,

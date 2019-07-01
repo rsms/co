@@ -1,6 +1,6 @@
 // import { debuglog as dlog } from '../util'
 import { ByteStr, asciiByteStr } from '../bytestr'
-import { Num, numIsZero, isNum } from '../num'
+import { Num, numIsZero } from '../num'
 import { Pos, NoPos } from '../pos'
 import { Op } from './op'
 import { ops, opinfo, fmtop } from "./ops"
@@ -72,7 +72,7 @@ export class Value {
     this.auxInt = auxInt
     this.aux = aux
     assert(type instanceof BasicType)
-    assert(type.mem > 0, `ir.Value assigned abstract type ${type}`)
+    // assert(type.mem > 0, `ir.Value assigned abstract type ${type}`)
   }
 
   // clone returns a new value that is a clean copy of the receiver.

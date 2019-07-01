@@ -1,0 +1,58 @@
+
+// fun f_int_int_(z int, x ...int) int
+// fun f_int_(x ...int) int
+// fun f_int_int(x, y int) int
+fun f_int_f32_int_(a int, b f32, x ...int) int
+
+// list1 [int] // ok; calls parseType -> parseListType
+
+fun entry(x int, y ...int) f32 {
+  // note: effective type of y here is [int]
+
+  // a       = [1, 2, 3]       // type is int[]
+  // b u32[] = [1, 2, 3]       // type is u32[]
+  // c       = u32[](1, 2, 3)  // type is u32[]
+
+  // v [int] = [1, 2, 3]
+  // v2 = [int][1, 2, 3]
+
+  // ls list<int>
+
+  // // _ = (12, 3, 4)
+  // _ = [] // E: unable to infer type for empty list
+  // _ int[] = []  // ok
+  nine = 9
+  _ = [1.1, 2, 4, nine, x]
+  // _ f32[] = [1.1, 2, x]  // E: x (type int) converted to f32
+  _ f32[] = [1.1, 2, f32(x)]  // ok: explicit cast
+
+  // ok:
+  // f_int_f32_int_(1, 2.3)          // ok (empty rest)
+  // f_int_f32_int_(1, 2.3, y...)    // ok (spread y int[] as rest)
+  // f_int_f32_int_(1, 2.3, ls...)   // ok (spread ls int[] as rest)
+  // f_int_f32_int_(1, 2.3, [3, 4]...)  // ok (spread _ int[] as rest)
+  // f_int_f32_int_(1, 2.3, 3, 4)       // ok (synthetic rest; sugar for above)
+
+
+  // errors, argument count:
+  // f_int_f32_int_(1, y...) // E: not enough arguments
+  // f_int_f32_int_(1) // E: not enough arguments
+  // f_int_f32_int_(1, 2, 3, y...) // E: too many arguments
+
+  // errors, argument types:
+  // f_int_f32_int_(y...) // E:
+  // f_int_f32_int_(1, 2.3, y) // E: cannot use y (type [int]) as type int
+
+
+  // TODO:
+
+  // // ok: spread of tuples onto fixed arguments --TODO--
+  // t1 = (1, 2.3, 3, 4)
+  // f_int_f32_int_(t1...)
+
+  // // ok: spread of array
+  // a [int] = [3, 4, 5]
+  // f_int_f32_int_(1, 2.3, a...)
+
+  0
+}

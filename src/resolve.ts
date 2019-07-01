@@ -6,11 +6,13 @@ import { debuglog as dlog } from './util'
 import { token } from './token'
 import { Num } from './num'
 import { numEvalU32 } from './numeval'
+import { PathMap } from './pathmap'
 import * as ast from './ast'
 import {
   ReturnStmt,
   Expr,
   Ident,
+  NumLit,
   LiteralExpr,
   SelectorExpr,
   TypeConvExpr,
@@ -23,17 +25,21 @@ import {
 
   UnresolvedType,
   BasicType,
+  NumType,
   StrType,
   RestType,
+  ListType,
   TupleType,
   FunType,
+  TypeType,
   OptionalType,
   UnionType,
+  GenericType,
+  GenericTypeInstance,
 
+  t_f32,
   t_nil, t_bool,
-  // t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
-  // t_uint, t_int, t_usize, t_isize,
-  t_str0, t_str, t_stropt
+  t_str0, t_str, t_stropt,
 } from './types'
 
 
@@ -42,14 +48,34 @@ function isResolvedType(t :Type|null) :t is Type {
 }
 
 
+// Type resolver is a reusable resource for resolving types from AST.
+// It is allocated on a per-package basis.
+//
 export class TypeResolver extends ErrorReporter {
   fset       :SrcFileSet
   universe   :Universe
   unresolved :Set<UnresolvedType>
 
+  genericInstanceCache = new PathMap<Type,GenericTypeInstance>()
+    // maintains a collection of generic type instances
+
   constructor() {
     super('E_RESOLVE')
     this.setupResolvers()
+  }
+
+  getGenericInstance(t :GenericType, types :Type[]) :GenericTypeInstance {
+    const r = this
+    assert(t.rest || types.length == t.vars.length)
+    let path = [t, ...types]
+    let ti = r.genericInstanceCache.get(path)
+    if (ti) {
+      return ti
+    }
+    // cache miss
+    ti = t.newInstance(types)
+    r.genericInstanceCache.set(path, ti)
+    return ti
   }
 
   init(fset :SrcFileSet, universe :Universe, errh :ErrorHandler|null) {
@@ -59,6 +85,7 @@ export class TypeResolver extends ErrorReporter {
     r.fset = fset
     r.universe = universe
     r.unresolved = new Set<UnresolvedType>()
+    r.genericInstanceCache.clear()
   }
 
   // error resports an error
@@ -130,7 +157,7 @@ export class TypeResolver extends ErrorReporter {
   //
   resolve(n :Expr) :Type {
     if (n.type instanceof Type /*&& (n.type.constructor !== UnresolvedType)*/) {
-      if (n.type instanceof UnresolvedType) {
+      if (n.type instanceof UnresolvedType && n !== n.type.def) {
         n.type.addRef(n)
       }
       return n.type
@@ -141,7 +168,6 @@ export class TypeResolver extends ErrorReporter {
 
     if (!t) {
       t = r.markUnresolved(n)
-
       // error failing to resolve field of known type
       if (
         n instanceof SelectorExpr &&
@@ -149,15 +175,38 @@ export class TypeResolver extends ErrorReporter {
         n.lhs.ent
       ) {
         // Partially resolved selector, e.g.
-        // "a.B undefined (type <typeof(a)> has no field or method B)"
+        // "a.b undefined (type <typeof(a)> has no field or function b)"
         r.error(`${n} undefined`, n.pos)
       }
+      n.type = t
     }
-
-    n.type = t
 
     return t
   }
+
+
+  // maybeResolve attempts to resolve or infer the type of n.
+  // Returns null if the type can't be resolved or inferred.
+  // May mutate n.type and may call ErrorHandler.
+  //
+  maybeResolve(n :Expr|ReturnStmt) :Type|null {
+    const r = this
+
+    if (isResolvedType(n.type)) {
+      // already resolved
+      return n.type
+    }
+
+    // map node type to resolver function
+    const resolver = r.resolvers.get(n.constructor)
+    if (resolver) {
+      return n.type = resolver(n)
+    }
+
+    dlog(`TODO handle ${n.constructor.name}`)
+    return null  // unknown type
+  }
+
 
   resolvers = new Map<Function,(n:any)=>Type|null>()
 
@@ -184,29 +233,6 @@ export class TypeResolver extends ErrorReporter {
     r.resolvers.set(ast.IfExpr, r.maybeResolveIfExpr)
 
     // r.resolvers.set(ast.ReturnStmt, r.maybeResolveReturnStmt)
-  }
-
-
-  // maybeResolve attempts to resolve or infer the type of n.
-  // Returns null if the type can't be resolved or inferred.
-  // May mutate n.type and may call ErrorHandler.
-  //
-  maybeResolve(n :Expr|ReturnStmt) :Type|null {
-    const r = this
-
-    if (isResolvedType(n.type)) {
-      // already resolved
-      return n.type
-    }
-
-    // map node type to resolver function
-    const resolver = r.resolvers.get(n.constructor)
-    if (resolver) {
-      return n.type = resolver(n)
-    }
-
-    dlog(`TODO handle ${n.constructor.name}`)
-    return null  // unknown type
   }
 
 
@@ -281,13 +307,13 @@ export class TypeResolver extends ErrorReporter {
 
 
   maybeResolveTupleExpr = (n :ast.TupleExpr) => {
-    return this.maybeResolveTupleType(n.exprs)
+    return this.maybeResolveTupleType(n.entries)
   }
 
-  maybeResolveTupleType(exprs :Expr[]) {
+  maybeResolveTupleType(entries :Expr[]) {
     const r = this
     let types :Type[] = []
-    for (const x of exprs) {
+    for (const x of entries) {
       // Note: We don't check for unresolved types
       //
       // TODO: when x is unresolved, register the tuple _type_ as a dependency
@@ -308,16 +334,150 @@ export class TypeResolver extends ErrorReporter {
 
   maybeResolveCallExpr = (n :ast.CallExpr) => {
     const r = this
-    const funtype = r.resolve(n.fun)
-    // resolve argument types
-    for (let arg of n.args) {
-      // r.resolve(arg)
-      r.maybeResolve(arg)
+    const funtype = r.resolve(n.receiver)
+
+    if (!isResolvedType(funtype)) {
+      // unresolved
+      return funtype
     }
-    if (funtype instanceof FunType) {
-      return funtype.result
+
+    if (funtype instanceof TypeType) {
+      // call is a type call
+      // TODO: args
+      return funtype.type
     }
-    return null
+
+    if (!(funtype instanceof FunType)) {
+      // call is a type call
+      // TODO: args
+      return funtype
+    }
+
+    // unless TypeType, the only possible type is FunType
+    // assert(funtype instanceof FunType, `unexpected funtype ${funtype} (${funtype.constructor.name})`)
+    let wantArgs = (funtype as FunType).args
+
+    // resolve and verify arguments
+    let argcount = n.args.length // wantArgs.length
+    let wantLast = wantArgs[wantArgs.length - 1]
+    let wantRest = wantLast instanceof RestType ? wantLast.types[0] : null
+    let argdelta = argcount - wantArgs.length
+
+    dlog({ wantRest: `${wantRest}`, hasRest: n.hasRest, argdelta })
+
+    if (argdelta < 0 && (argdelta < -1 || !wantRest || n.hasRest)) {
+      r.syntaxError(
+        `not enough arguments in call to ${n.receiver}\n` +
+        `  got  (${n.args.map(a => a.type).join(", ")})\n` +
+        `  want (${wantArgs.join(", ")})`,
+        n.pos
+      )
+    } else if (argdelta > 0 && (!wantRest || n.hasRest)) {
+      r.syntaxError(
+        `too many arguments in call to ${n.receiver}\n` +
+        `  got  (${n.args.map(a => a.type).join(", ")})\n` +
+        `  want (${wantArgs.join(", ")})`,
+        n.pos
+      )
+    }
+
+    // want (A, B, ...C)
+    //
+    // ok:
+    // got  (A, B, ...C)  =>  (A, B, [*]C)
+    // got  (A, B, C, C)  =>  (A, B, [2]C)
+    // got  (A, B, []C)   =>  (A, B, [*]C)
+    // got  (A, B, C)     =>  (A, B, [1]C)
+    // got  (A, B)        =>  (A, B, [0]C)
+    //
+    // error:
+    // got  (A) Not enough arguments
+    // got  (A) Invalid type
+
+    const convarg = (x :Expr, t :Type) :Expr => {
+      if (x.type !== t) {
+        let x2 = r.convert(t, x)
+        if (x2) {
+          return x2
+        }
+        r.error(
+          x.isIdent ?
+            `passing ${x} (type ${x.type}) as argument where ${t} is expected` :
+            `passing ${x.type} as argument where ${t} is expected`,
+          x.pos
+        )
+      }
+      return x
+    }
+
+    let i = 0
+
+    // endPosArgs denotes the end of regular postional args
+    let endPosArgs = wantRest ? wantArgs.length-2 : wantArgs.length-1
+
+    while (i <= endPosArgs) {
+      let want = wantArgs[i]
+      let x = n.args[i]
+      let t = r.maybeResolve(x)
+
+      if (!t) {
+        return null  // at least one argument is unresolved
+      }
+      // dlog(`arg #${i} want ${want} got ${x} (${t})`)
+
+      // convert type of value if needed
+      n.args[i] = convarg(x, want)
+
+      i++
+    }
+
+    // parse rest
+    if (wantRest) {
+      if (n.hasRest) {
+        // rest forwarding or spread of array
+        assert(argcount - i == 1, `more than one arg remaining (rest -> rest)`)
+        let x = n.args[i]
+        let t = r.maybeResolve(x)
+        if (!t) {
+          return null // unresolved
+        }
+        // TODO: check for collection type and convert to rest.
+        // e.g.
+        //    a int[] = [3, 4, 5]
+        //    foo(a...)
+        //
+        if (
+          !(x.type instanceof RestType || x.type instanceof ListType) ||
+          x.type.types[0] !== wantRest
+        ) {
+          r.error(
+            `passing ${x.type} as argument where ${wantArgs[i]} is expected`,
+            x.pos
+          )
+        }
+        // ok. done
+      } else {
+        // synthetic rest
+        dlog(`parsing synthetic rest`)
+        let rest :Expr[] = []
+        for (; i < argcount; i++) {
+          let x = n.args[i]
+          let t = r.maybeResolve(x)
+          if (!t) {
+            return null  // unresolved
+          }
+          dlog(`rest arg #${i} want ${wantRest} got ${x} (${t})`)
+          x = convarg(x, wantRest)
+          rest.push(x)
+        }
+        if (rest.length == 0) {
+          // nil denotes empty rest
+          n.args.push(ast.builtInValues.nil)
+        }
+      }
+    }
+
+    return (funtype as FunType).result
   }
 
 
@@ -371,6 +531,40 @@ export class TypeResolver extends ErrorReporter {
         return xt
       }
 
+      // operator that needs same-type operands
+      if (n.op == token.ADD ||
+          n.op == token.SUB ||
+          n.op == token.MUL ||
+          n.op == token.QUO
+      ) {
+        if (xt.isFloat && !yt.isFloat) {
+          let cx = r.convert(xt, n.y)
+          if (cx) {
+            n.y = cx
+            return xt
+          }
+        } else if (!xt.isFloat && yt.isFloat) {
+          let cx = r.convert(yt, n.x)
+          if (cx) {
+            n.x = cx
+            return yt
+          }
+        } else if (xt.size >= yt.size) {
+          let cx = r.convert(xt, n.y)
+          if (cx) {
+            n.y = cx
+            return xt
+          }
+        } else {
+          let cx = r.convert(yt, n.x)
+          if (cx) {
+            n.x = cx
+            return yt
+          }
+        }
+      }
+
+      // try converting RHS operand to same type as LHS operand
       let x = r.convert(xt, n.y)
       if (x) {
         return x === n.y ? yt : r.resolve(x)
@@ -759,6 +953,26 @@ export class TypeResolver extends ErrorReporter {
     // TODO: expand
   }
 
+
+  // getLiteralExpr returns the literal expression for x, resolving
+  // constant idenfifiers as needed.
+  // Returns null if there's no literal expression at the end of x.
+  //
+  getLiteralExpr(x :Expr) :LiteralExpr|null {
+    if (x instanceof LiteralExpr) {
+      return x
+    }
+    let id :Expr|null = x
+    while (id instanceof ast.Ident && id.ent && id.ent.isConstant()) {
+      id = id.ent.value
+      if (id instanceof LiteralExpr) {
+        return id
+      }
+    }
+    return null
+  }
+
+
   // convertType attempts to convert expression x to type t.
   // If x is already of type t, x is returned unchanged.
   // If conversion is needed, a TypeConvExpr is returned,
@@ -766,35 +980,29 @@ export class TypeResolver extends ErrorReporter {
   // If conversion is impossible, null is returned to indicate error.
   //
   convert(t :Type, x :Expr) :Expr|null {
+    return this._convert(t, x, /*losslessOnly=*/false)
+  }
+
+
+  // convertLossless does the same thing as convert but returns null if the
+  // conversion would be lossy.
+  //
+  convertLossless(t :Type, x :Expr) :Expr|null {
+    return this._convert(t, x, /*losslessOnly=*/true)
+  }
+
+
+  _convert(t :Type, x :Expr, losslessOnly :bool) :Expr|null {
     const r = this
     const xt = r.resolve(x)
 
     if (xt === t || xt.equals(t)) {
+      // no conversion needed; already same type
       return x
     }
 
-    if (
-      r.isConstant(x) &&
-      t instanceof BasicType &&
-      xt instanceof BasicType
-    ) {
-      // expression with basic types
-      switch (basicTypeCompat(t, xt)) { // TypeCompat
-        case TypeCompat.NO: {
-          // Note: caller should report error
-          return null
-        }
-        case TypeCompat.LOSSY: {
-          r.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV')
-          // TODO: ^ use diag instead with DiagKind.ERROR as the default, so
-          // that user code can override this error into a warning instead, as
-          // it's still valid to perform a lossy conversion.
-          return new TypeConvExpr(x.pos, x.scope, x, t)
-        }
-        case TypeCompat.LOSSLESS: {
-          return new TypeConvExpr(x.pos, x.scope, x, t)
-        }
-      }
+    if (t instanceof BasicType && xt instanceof BasicType) {
+      return r.convertBasic(t, x, losslessOnly)
     }
 
     dlog(`TODO conversion of ${x} into type ${t}`)
@@ -802,6 +1010,101 @@ export class TypeResolver extends ErrorReporter {
     // TODO: figure out a scalable type conversion system
     // TODO: conversion of other types
 
+    return null
+  }
+
+
+  convertBasic(t :BasicType, x :Expr, losslessOnly :bool) :Expr|null {
+    const r = this
+
+    // literal
+    let litx = r.getLiteralExpr(x)
+    if (litx instanceof ast.NumLit) {
+      let x2 = r.convertNumLit(t, litx, losslessOnly)
+      if (x2) {
+        return x2
+      }
+    }
+
+    assert(x.type instanceof BasicType)
+
+    switch (basicTypeCompat(t, x.type as BasicType)) { // TypeCompat
+
+      case TypeCompat.NO: {
+        return null  // Caller should report error
+      }
+
+      case TypeCompat.LOSSY: {
+        if (losslessOnly) {
+          return null  // Caller should report error
+        }
+        r.error(
+          x.isIdent ?
+            `${x} (type ${x.type}) converted to ${t}` :
+            `${x.type} converted to ${t}`,
+          x.pos,
+          'E_CONV'
+        )
+        // TODO: ^ use diag instead with DiagKind.ERROR as the default, so
+        // that user code can override this error into a warning instead, as
+        // it's still valid to perform a lossy conversion.
+        return new TypeConvExpr(x.pos, x.scope, x, t)
+      }
+
+      case TypeCompat.LOSSLESS: {
+        // complex conversion
+        return new TypeConvExpr(x.pos, x.scope, x, t)
+      }
+
+    }
+  }
+
+
+  convertNumLit(t :NumType, x :NumLit, losslessOnly :bool) :NumLit|null {
+    const r = this
+    // Type hierarchy:
+    //   BasicType
+    //     NumType
+    //       FloatType
+    //       IntType
+    //         SIntType
+    //         UIntType
+    //
+    if (t.isFloat) {
+      // attempt simple type rewrites for trivial conversions
+      // e.g. 3.2 + 5 => (+ (f64 3.2) (i32 5)) => (+ (f64 3.2) (f64 5))
+      if (x instanceof ast.FloatLit) {
+        // float -> float
+        if (t === t_f32 && x.value > 0xffffff) {
+          if (losslessOnly) {
+            return null  // Caller should report error
+          }
+          r.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV')
+        }
+        x.type = t
+        return x
+      } else if (x instanceof ast.IntLit) {
+        // int -> float
+        // Note: IEEE-754 f32 has 24 significant bits, f64 has 53 bits.
+        let f = typeof x.value == "number" ? x.value : x.value.toFloat64()
+        if (f > (t_f32 ? 0xffffff : 0x1fffffffffffff)) {
+          if (losslessOnly) {
+            return null  // Caller should report error
+          }
+          r.error(`constant ${x} truncated to ${t}`, x.pos, 'E_CONV')
+        }
+        return new ast.FloatLit(x.pos, x.scope, f, t)
+      } else if (x instanceof ast.CharLit) {
+        // char -> float
+        return new ast.FloatLit(x.pos, x.scope, x.value, t)
+      }
+    } else { // t instanceof IntType
+      if (x instanceof ast.IntLit || x instanceof ast.CharLit) {
+        // int -> int
+        x.type = t
+        return x
+      }
+    }
     return null
   }
 }

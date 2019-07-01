@@ -61,7 +61,7 @@ const ops :OpDescription[] = [
     // function calls. It points to the top of the local stack frame,
     // so references should use negative offsets in the range
     // [−framesize, 0): x-8(SP), y-4(SP), and so on.
-  ["SB", ZeroWidth, t.usize],
+  ["SB", ZeroWidth, t.uintptr],
     // static base pointer (a.k.a. globals pointer)
     // SB is a pseudo-register that holds the "static base" pointer,
     // i.e. the address of the beginning of the program address space.

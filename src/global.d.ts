@@ -39,7 +39,7 @@ declare var assert :AssertFun
 
 // repr resturns a detailed string representation of the input
 //
-declare function repr(obj :any) :string
+declare function repr(obj :any, maxdepth? :int) :string
 
 // TEST can be called at init time to add a unit test to be run at startup.
 // Only active in debug builds (when DEBUG is true.)

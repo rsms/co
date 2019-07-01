@@ -18,10 +18,10 @@ body {
   -webkit-overflow-scrolling: touch;
   scroll-behavior: smooth;
 
-  -moz-font-feature-settings:"kern" 1, "liga" 1; 
-  -ms-font-feature-settings:"kern" 1, "liga" 1; 
-  -o-font-feature-settings:"kern" 1, "liga" 1; 
-  -webkit-font-feature-settings:"kern" 1, "liga" 1; 
+  -moz-font-feature-settings:"kern" 1, "liga" 1;
+  -ms-font-feature-settings:"kern" 1, "liga" 1;
+  -o-font-feature-settings:"kern" 1, "liga" 1;
+  -webkit-font-feature-settings:"kern" 1, "liga" 1;
   font-feature-settings:"kern" 1, "liga" 1;
 }
 
@@ -30,11 +30,13 @@ div.breaker { clear:both; }
 p, ul, ol, pre, blockquote, hr, object { margin: 1em 0; }
 ul, ol { margin-left:1.1em; }
 pre, code, tt {
-  font-family: Inconsolata, 
+  font-family: Inconsolata,
     "SFMono-Regular", Consolas, "Liberation Mono", Menlo, Courier, monospace;
   font-size:1.03em;
   letter-spacing: 0.01em;
 }
+code, tt { white-space: pre-wrap; }
+pre > code { white-space: pre; }
 img { display: block; border: none; vertical-align: bottom; }
 hr { height:1px; border:none; background-color:#ddd; }
 strong, b { font-weight: 500; letter-spacing:0.013em; color:#111; }
@@ -342,7 +344,7 @@ section.content {
   section:not(.sub) h1:first-child {
     margin-top:0;
   }
-  
+
   section img, section iframe {
     display:block;
     max-width:100%;
@@ -391,7 +393,7 @@ section.content {
     color: #333;
     padding:16px;
   }
-  
+
   section code {
     padding: 3px 0;
   }
@@ -670,7 +672,7 @@ section blockquote.sidenote.force-side {
     padding-left: 10px;
     padding-bottom: 0;
     border-left:1px solid #ccc;
-    margin-top: 2em !important;  override margin set by js-generated rule 
+    margin-top: 2em !important;  override margin set by js-generated rule
     margin-bottom: 2em;
     font-size: inherit;
     letter-spacing: inherit;

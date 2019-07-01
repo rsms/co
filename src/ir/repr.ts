@@ -1,6 +1,6 @@
 import { Style, stdoutStyle, style, noStyle } from '../termstyle'
 import { Pkg, Fun, Block, BlockKind, Value, BranchPrediction } from './ssa'
-import { ops, fmtop, opinfo } from "./ops"
+import { fmtop, opinfo } from "./ops"
 import { OpInfo, AuxType } from "./op"
 
 export type LineWriter = (s :string) => any
@@ -19,7 +19,7 @@ class IRFmt {
   }
 }
 
-function fmtaux(f :IRFmt, v :Value, opi :OpInfo) :string {
+function fmtaux(_f :IRFmt, v :Value, opi :OpInfo) :string {
   let auxInt = false
   let aux = false
   switch (opi.aux) {

@@ -13,6 +13,8 @@ import {
   FloatType,
   RestType,
   StrType,
+  ListType,
+  TupleType,
 } from './types'
 import * as types from './types'
 
@@ -489,18 +491,46 @@ export class IfExpr extends Expr {
 }
 
 
-export class TupleExpr extends Expr {
+export class CollectionExpr extends Expr {
+  entries :Expr[]
+}
+
+
+export class TupleExpr extends CollectionExpr {
   // TupleExpr = "(" Expr ("," Expr)+ ")"
-  constructor(pos :Pos, scope :Scope,
-  public exprs :Expr[],
-  ) {
+  // e.g. (1, true, "three")
+
+  type :TupleType|null
+
+  constructor(pos :Pos, scope :Scope, entries :Expr[], type :TupleType|null) {
     super(pos, scope)
+    this.entries = entries
+    this.type = type
   }
 
   toString() {
-    return `(${this.exprs.map(x => x.toString()).join(', ')})`
+    return `(${this.entries.join(", ")})`
   }
 }
+
+
+export class ListExpr extends CollectionExpr {
+  // ListExpr = "[" ExprList [("," | ";")] "]"
+  // e.g. [1, 2, x]
+
+  type :ListType|null
+
+  constructor(pos :Pos, scope :Scope, entries :Expr[], type :ListType|null) {
+    super(pos, scope)
+    this.type = type
+    this.entries = entries
+  }
+
+  toString() :string {
+    return `[${this.entries.join(", ")}]`
+  }
+}
+
 
 export class SelectorExpr extends Expr {
   // Selector = Expr "." ( Ident | Selector )
@@ -519,6 +549,7 @@ export class SelectorExpr extends Expr {
 
 export class IndexExpr extends Expr {
   // IndexExpr = Expr "[" Expr "]"
+  // e.g. foo[1]
 
   indexv :int = -1  // >=0 = resolved, -1 = invalid/unresolved
     // TODO: remove when we remove resolve.resolveTupleIndex
@@ -556,6 +587,7 @@ export class IndexExpr extends Expr {
 
 export class SliceExpr extends Expr {
   // SliceExpr = Expr "[" Expr? ":" Expr? "]"
+  // e.g. foo[1:4]
 
   startnum :Num = -1
   endnum   :Num = -1
@@ -654,14 +686,6 @@ export class FloatLit extends NumLit {
 }
 
 
-// export const ImplicitOne = new IntLit(
-//   0,
-//   nilScope,
-//   token.INT,
-//   null as any as Uint8Array,
-// )
-
-
 export class StringLit extends LiteralExpr {
   type  :StrType
   value :Uint8Array
@@ -677,7 +701,9 @@ export class StringLit extends LiteralExpr {
   }
 }
 
+
 export class Assignment extends Expr {
+  // e.g. "x = y", "x++"
   constructor(pos :Pos, scope :Scope,
   public op  :token, // ILLEGAL means no operation
   public lhs :Expr[],
@@ -691,7 +717,9 @@ export class Assignment extends Expr {
   }
 }
 
+
 export class Operation extends Expr {
+  // e.g. "x + y"
   constructor(pos :Pos, scope :Scope,
   public op :token, // [token.operator_beg .. token.operator_end]
   public x  :Expr,
@@ -705,16 +733,31 @@ export class Operation extends Expr {
   }
 }
 
+
 export class CallExpr extends Expr {
   // Fun(ArgList[0], ArgList[1], ...)
   constructor(pos :Pos, scope :Scope,
-  public fun     :Expr,
-  public args    :Expr[],
-  public hasDots :bool,  // last argument is followed by ...
+  public receiver :Expr,
+  public args     :Expr[],
+  public hasRest  :bool,  // last argument is followed by ...
   ) {
     super(pos, scope)
   }
 }
+
+
+export class TypeCallExpr extends Expr {
+  // Type(parameter...)
+  constructor(pos :Pos, scope :Scope,
+  type :Type,
+  public args    :Expr[],
+  public hasDots :bool,  // last argument is followed by ...
+  ) {
+    super(pos, scope)
+    this.type = type
+  }
+}
+
 
 // export class ParenExpr extends Expr {
 //   // (X)
@@ -793,34 +836,36 @@ export class Atom extends Expr {
 
 
 // built-in, predefined types
-export const builtInTypes : {[name :string] :TypeExpr} = {
-  "nil":   new NativeTypeExpr(types.t_nil),
-  "bool":  new NativeTypeExpr(types.t_bool),
-  "u8":    new NativeTypeExpr(types.t_u8),
-  "i8":    new NativeTypeExpr(types.t_i8),
-  "u16":   new NativeTypeExpr(types.t_u16),
-  "i16":   new NativeTypeExpr(types.t_i16),
-  "u32":   new NativeTypeExpr(types.t_u32),
-  "i32":   new NativeTypeExpr(types.t_i32),
-  "u64":   new NativeTypeExpr(types.t_u64),
-  "i64":   new NativeTypeExpr(types.t_i64),
-  "uint":  new NativeTypeExpr(types.t_uint),
-  "int":   new NativeTypeExpr(types.t_int),
-  "usize": new NativeTypeExpr(types.t_usize),
-  "isize": new NativeTypeExpr(types.t_isize),
-  "f32":   new NativeTypeExpr(types.t_f32),
-  "f64":   new NativeTypeExpr(types.t_f64),
+export const builtInTypes = {
+  "nil":     new NativeTypeExpr(types.t_nil),
+  "bool":    new NativeTypeExpr(types.t_bool),
+  "u8":      new NativeTypeExpr(types.t_u8),
+  "i8":      new NativeTypeExpr(types.t_i8),
+  "u16":     new NativeTypeExpr(types.t_u16),
+  "i16":     new NativeTypeExpr(types.t_i16),
+  "u32":     new NativeTypeExpr(types.t_u32),
+  "i32":     new NativeTypeExpr(types.t_i32),
+  "u64":     new NativeTypeExpr(types.t_u64),
+  "i64":     new NativeTypeExpr(types.t_i64),
+  "uint":    new NativeTypeExpr(types.t_uint),
+  "int":     new NativeTypeExpr(types.t_int),
+  "uintptr": new NativeTypeExpr(types.t_uintptr),
+  "f32":     new NativeTypeExpr(types.t_f32),
+  "f64":     new NativeTypeExpr(types.t_f64),
 
-  "byte":  new NativeTypeExpr(types.t_byte),
-  "char":  new NativeTypeExpr(types.t_char),
+  "byte":    new NativeTypeExpr(types.t_byte),
+  "char":    new NativeTypeExpr(types.t_char),
 
-  "str":   new NativeTypeExpr(types.t_str),
+  "str":     new NativeTypeExpr(types.t_str),
+
+  "list":    new NativeTypeExpr(types.t_list),
+  "tuple":   new NativeTypeExpr(types.t_tuple),
 }
 
 
 const typeToBuiltInTypes = new Map<Type,TypeExpr>()
 for (let k in builtInTypes) {
-  let x = (builtInTypes)[k]
+  let x = (builtInTypes as any)[k] as TypeExpr
   typeToBuiltInTypes.set(x.type, x)
 }
 
@@ -834,8 +879,8 @@ export function GetTypeExpr(t :Type) :TypeExpr {
 
 
 // built-in, predefined values
-export const builtInValues : {[name :string] :Expr} = {
-  "true":  new Atom("true",  types.t_bool),
-  "false": new Atom("false", types.t_bool),
-  "nil":   new Atom("nil",   types.t_nil),
+export const builtInValues = {
+  true:  new Atom("true",  types.t_bool),
+  false: new Atom("false", types.t_bool),
+  nil:   new Atom("nil",   types.t_nil),
 }

@@ -2,7 +2,6 @@ import { Parser } from './parser'
 import { bindpkg } from './bind'
 import * as scanner from './scanner'
 import { Position, SrcFileSet } from './pos'
-import { ByteStrSet } from './bytestr'
 import { TypeSet } from './typeset'
 import { Package, Scope, Ent } from './ast'
 import { astRepr } from './ast_repr'
@@ -174,9 +173,8 @@ interface MainOptions {
 }
 
 async function main(options? :MainOptions) :Promise<MainResult> {
-  const strSet = new ByteStrSet()
   const typeSet = new TypeSet()
-  const universe = new Universe(strSet, typeSet)
+  const universe = new Universe(typeSet)
   const typeres = new TypeResolver()
   const parser = new Parser()
 
@@ -196,6 +194,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   }
 
   // skip code generation?
+  options.noIR = true // XXX
   if (options.noIR) {
     return { success: true, diagnostics, ast: r.pkg }
   }

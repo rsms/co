@@ -294,18 +294,17 @@ const rout = {
   format: 'cjs',
   name: productName,
   sourcemap: true,
+  sourcemapExcludeSources: true, // don't include source code in sourcemap
+  sourcemapPathTransform: relativePath => {
+    // ../src/foo/bar.ts -> /<co> src/foo/bar.ts
+    // return "/<co> " + Path.relative('..', relativePath)
+    return Path.relative('../src', relativePath)
+  },
   freeze: debug, // Object.freeze(x) on import * as x from ...
   banner: execBanner + versionBanner + wrapperStart,
   footer: wrapperEnd,
   intro: '',
 }
-
-// // add source-map-support
-// let sourceMapSupportJS = fs.readFileSync(
-//   pjoin(rootdir, 'deps/source-map-support/index.js'),
-//   'utf8'
-// )
-// rout.intro += "(function(){})()"
 
 // add predefined constants to intro
 rout.intro += 'var ' + Object.keys(defines_all).map(k =>
@@ -998,7 +997,18 @@ function logBuildError(err) {
 }
 
 
+const debugSourceMapRoot = "/<co> src"
+
+
 function onBuildCompleted(duration, outfiles) {
+  // patch sourcemap mapfile; add "sourceRoot":debugSourceMapRoot
+  // note: in non-watch mode patchSourceMap takes care of this.
+  if (watch) {
+    let s = fs.readFileSync(mapfile, 'utf8')
+    s = `{"sourceRoot":${JSON.stringify(debugSourceMapRoot)},` + s.substr(1)
+    fs.writeFileSync(mapfile, s, 'utf8')
+  }
+
   console.log(`built ${outfiles.join(', ')} in ${ Math.round((duration/100))/10 }s`)
   if (productIsExectuable) {
     fs.stat(rout.file, (err, st) => {
@@ -1016,15 +1026,15 @@ function patchSourceMap(m) { // :Promise<string>
   const srcDirRel = relpath(dirname(outfile), srcdir)
   const sourceRootRel = dirname(srcDirRel)
 
-  m.sourceRoot = srcDirRel
+  m.sourceRoot = debug ? debugSourceMapRoot : srcDirRel
 
-  m.sources = m.sources.map(path => {
-    if (path.startsWith(srcDirRel)) {
-      const abspath = Path.resolve(dirname(outfile), path)
-      return relpath(srcdir, abspath)
-    }
-    return path
-  })
+  // m.sources = m.sources.map(path => {
+  //   if (path.startsWith(srcDirRel)) {
+  //     const abspath = Path.resolve(dirname(outfile), path)
+  //     return relpath(srcdir, abspath)
+  //   }
+  //   return path
+  // })
 
   return m
 }
