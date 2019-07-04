@@ -906,7 +906,7 @@ export class TypeResolver extends ErrorReporter {
   maybeResolveTupleAccess(x :IndexExpr) :bool {
     const p = this
 
-    let tupletype = x.operand.type as TupleType
+    let tupletype = (x.operand.type as Type).canonicalType() as TupleType
     assert(tupletype, 'unresolved operand type')
     assert(tupletype instanceof TupleType)
     assert(tupletype.types.length > 0, 'empty tuple')

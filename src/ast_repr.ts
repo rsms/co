@@ -201,7 +201,8 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   }
 
   if (n instanceof TypeExpr) {
-    return reprt(n.type, newline, c)
+    return `(type ${c.style.blue(`${n.type}`)})`
+    // return reprt(n.type, newline, c)
   }
 
   if (n instanceof BadExpr) {
@@ -275,8 +276,12 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   }
 
   if (n instanceof Assignment) {
-    let s = newline + `(${c.style.grey('assign')} `
-    s += reprv(n.lhs, nl2, c)
+    let s = newline + "(assign "
+    if (n.lhs.length == 1) {
+      s += repr1(n.lhs[0], nl2, c)
+    } else {
+      s += reprv(n.lhs, nl2, c)
+    }
     if (n.op == token.ILLEGAL) {
       s += ' = '
     } else {
@@ -349,6 +354,39 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return s + ')'
   }
 
+  if (n instanceof CallExpr) {
+    s += 'call ' + repr1(n.receiver, newline, c) + ' ('
+    s += reprv(n.args, nl2, c, '')
+    if (n.hasRest) {
+      s += '...'
+    }
+    return s + '))'
+  }
+
+  if (n instanceof VarDecl) {
+    s += "var "
+    // if (n.group) {
+    //   s += '[#' + c.groupId(n.group) + '] '
+    // }
+    if (n.idents.length == 1) {
+      s += reprt(n.idents[0].type, newline, c) + reprid(n.idents[0], c)
+    } else {
+      s += '(' + n.idents.map(id =>
+        reprt(id.type, newline, c) + reprid(id, c)
+      ).join(' ') + ')'
+    }
+    // if (n.type) {
+    //   s += reprt(n.type.type, newline, c) + ' ' + reprv(n.idents, nl2, c)
+    // } else {
+    //   s += ' (' + n.idents.map(id =>
+    //     reprt(id.type, newline, c) + reprid(id, c)
+    //   ).join(' ') + ')'
+    // }
+    if (n.values) {
+      s += ' ' + reprv(n.values, nl2, c)
+    }
+    return s + ')'
+  }
 
   // --------
 
@@ -363,23 +401,6 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return s + ' )'
   }
 
-  if (n instanceof VarDecl) {
-    if (n.group) {
-      s += ' [#' + c.groupId(n.group) + ']'
-    }
-    if (n.type) {
-      s += reprt(n.type.type, newline, c) + ' ' + reprv(n.idents, nl2, c)
-    } else {
-      s += ' (' + n.idents.map(id =>
-        reprt(id.type, newline, c) + reprid(id, c)
-      ).join(' ') + ')'
-    }
-    if (n.values) {
-      s += ' ' + reprv(n.values, nl2, c)
-    }
-    return s + ')'
-  }
-
   if (n instanceof TypeDecl) {
     if (n.group) {
       s += ' [#' + c.groupId(n.group) + ']'
@@ -389,15 +410,6 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
       s += ' ='
     }
     return s + ' ' + repr1(n.type, nl2, c) + ')'
-  }
-
-  if (n instanceof CallExpr) {
-    s += ' ' + repr1(n.receiver, newline, c) + ' ('
-    s += reprv(n.args, nl2, c, '')
-    if (n.hasRest) {
-      s += '...'
-    }
-    return s + '))'
   }
 
   // if (n instanceof ParenExpr) {

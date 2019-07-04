@@ -70,6 +70,7 @@ import {
   RestType,
   GenericType,
   GenericTypeInstance,
+  AliasType,
 
   t_nil,
   t_u32, t_i32, t_u64, t_i64,
@@ -90,6 +91,17 @@ const str_init = strings.get(new Uint8Array([0x69, 0x6e, 0x69, 0x74])) // "init"
 const emptyExprList :Expr[] = []
 
 type exprCtx = Type|Assignment|VarDecl|null
+
+
+export class SyntaxError extends Error {
+  pos :Pos
+
+  constructor(msg :string, pos :Pos) {
+    super(msg)
+    this.name = "SyntaxError"
+    this.pos = pos
+  }
+}
 
 
 // funInfo contains information about the current function, used for data
@@ -126,6 +138,7 @@ export class Parser extends scanner.Scanner {
   unresolved :Set<Ident>|null   // unresolved identifiers
   funstack   :funInfo[]  // function stack
   types      :TypeResolver
+  throwOnSyntaxError :bool = false  // throw SyntaxError instead of reporting
 
   initParser(
     sfile      :SrcFile,
@@ -151,8 +164,10 @@ export class Parser extends scanner.Scanner {
     p.unresolved = null
     p.funstack = []
     p.types = typeres
+    p.throwOnSyntaxError = false
 
     if (smode & scanner.Mode.ScanComments) {
+      // sub token reader with one that does does not ignore comments
       p.next = p.next_comments
     }
 
@@ -537,10 +552,12 @@ export class Parser extends scanner.Scanner {
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
     }
 
+    t.type = new AliasType(id.value, t.type)
+
     // ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
-    const d = new TypeDecl(pos, scope, id, alias, t as TypeExpr, group)
+    const d = new TypeDecl(pos, scope, id, alias, t, group)
 
     p.declare(scope, id, d, d.type)
 
@@ -1134,7 +1151,9 @@ export class Parser extends scanner.Scanner {
       // }
       return convertedx
     }
-    p.error(`cannot convert "${x}" (type ${x.type}) to type ${t}`, x.pos)
+    if (!(x.type instanceof UnresolvedType)) {
+      p.error(`cannot convert "${x}" (type ${x.type}) to type ${t}`, x.pos)
+    }
     return x
   }
 
@@ -1642,7 +1661,7 @@ export class Parser extends scanner.Scanner {
   binaryExpr(pr :prec, ctx :exprCtx) :Expr {
     // Expression = UnaryExpr | Expression binary_op Expression
     const p = this
-    let x = p.unaryExpr(ctx)
+    let x = p.unaryExpr(pr, ctx)
 
     // if (ctx && !ctx.type && ctx instanceof Assignment) {
     //   let ctxt = p.ctxType(ctx)
@@ -1652,17 +1671,25 @@ export class Parser extends scanner.Scanner {
     //   }
     // }
 
-    while (
-      (token.operator_beg < p.tok && p.tok < token.operator_end) &&
-      p.prec > pr)
-    {
+    return p.maybeBinaryExpr(x, pr, ctx)
+  }
+
+
+  // Call after parsing an expression which might be part of a binary expression.
+  // If the next token is a binary-expression operator, then return an Operator,
+  // otherwise x is returned verbatim.
+  //
+  maybeBinaryExpr(x :Expr, pr :prec, ctx :exprCtx) :Expr {
+    const p = this
+    while (token.operator_beg < p.tok && p.tok < token.operator_end && p.prec > pr) {
+      // save operator info and parse next token
       const pos = p.pos
-      const tprec = p.prec
+      const pr2 = p.prec
       const op = p.tok
       p.next()
 
-      let y = p.binaryExpr(tprec, ctx)
-
+      // expect some expression to follow
+      let y = p.binaryExpr(pr2, ctx)
       x = new Operation(pos, p.scope, op, x, y)
 
       // Note: We need to resolve types here rather than outside this
@@ -1671,11 +1698,36 @@ export class Parser extends scanner.Scanner {
       // which is slow.
       p.types.resolve(x)
     }
-
     return x
   }
 
-  unaryExpr(ctx :exprCtx) :Expr {
+
+  // maybeGenericTypeInstance parses either a "less than" binop, e.g. "x<y",
+  // or a generic type instance expression, e.g. "type<arg>".
+  //
+  // LtBinOp         = Expr "<" Expr
+  // GenericTypeExpr = TypeExpr "<" ExprList ","? ">"
+  //
+  maybeGenericTypeInstance(lhs :Expr, pr :prec, ctx :exprCtx) :Expr {
+    const p = this
+    assert(p.tok == token.LSS)  // enter at token.LSS "<"
+    let pos = p.pos
+    return p.tryWithBacktracking(
+
+      // try to parse as generic type, e.g. "x<y>"
+      () => {
+        let t = p.types.resolve(lhs)
+        let tx = new TypeExpr(lhs.pos, lhs.scope, t)
+        return p.genericTypeInstance(tx)
+      },
+
+      // else, parse as binary expression, e.g. "x < y"
+      () => p.maybeBinaryExpr(lhs, pr, ctx),
+    )
+  }
+
+
+  unaryExpr(pr :prec, ctx :exprCtx) :Expr {
     // UnaryExpr = PrimaryExpr | unary_op UnaryExpr
     const p = this
     const t = p.tok
@@ -1689,7 +1741,7 @@ export class Parser extends scanner.Scanner {
         p.next()
         // unaryExpr may have returned a parenthesized composite literal
         // (see comment in operand)
-        let x = new Operation(pos, p.scope, t, p.unaryExpr(ctx))
+        let x = new Operation(pos, p.scope, t, p.unaryExpr(pr, ctx))
         p.types.resolve(x)
 
         let isint = x.type instanceof IntType
@@ -1706,11 +1758,11 @@ export class Parser extends scanner.Scanner {
       // TODO: case token.ARROWL; `<-x`, `<-chan E`
     }
 
-    return p.primExpr(ctx)
+    return p.primExpr(pr, ctx)
   }
 
 
-  primExpr(ctx :exprCtx) :Expr {
+  primExpr(pr :prec, ctx :exprCtx) :Expr {
     // PrimaryExpr =
     //   Operand |
     //   Conversion |
@@ -1746,6 +1798,11 @@ export class Parser extends scanner.Scanner {
 
       case token.DOT:
         x = p.selectorExpr(x, ctx)
+        break
+
+      case token.LSS:
+        // could be either x<y (LT x y) or x<y> (type x y)
+        x = p.maybeGenericTypeInstance(x, pr, ctx)
         break
 
       default:
@@ -1903,7 +1960,6 @@ export class Parser extends scanner.Scanner {
       default: {
         const x = p.bad()
         p.syntaxError("expecting expression")
-        // p.next()
         return x
       }
     }
@@ -2034,7 +2090,8 @@ export class Parser extends scanner.Scanner {
     case token.INT_HEX:
       // e.g. "t.3"
       let x = new IndexExpr(pos, p.scope, operand, p.intLit(ctx, p.tok))
-      if (operand.type instanceof TupleType) {
+      let optype = operand.type ? operand.type.canonicalType() : null
+      if (optype instanceof TupleType) {
         if (!p.types.maybeResolveTupleAccess(x)) {
           x.type = p.types.markUnresolved(x)
         }
@@ -2042,7 +2099,7 @@ export class Parser extends scanner.Scanner {
         // numeric access on something that's not a tuple
         x.type = p.types.markUnresolved(x)
         p.syntaxError(
-          `numeric field access on non-tuple type ${operand.type}`,
+          `numeric field access on non-tuple type ${optype}`,
           pos
         )
       }
@@ -2152,10 +2209,7 @@ export class Parser extends scanner.Scanner {
 
     if (p.got(token.RBRACKET)) {
       // list type expression. e.g. x[]
-      let opt :Type = p.types.resolve(operand)
-      if (opt instanceof TypeType) {
-        opt = opt.type
-      }
+      let opt :Type = p.types.resolve(operand).canonicalType()
       let lt = p.types.getGenericInstance(t_list, [opt])
       return new TypeExpr(pos, p.scope, lt)
     }
@@ -2360,13 +2414,18 @@ export class Parser extends scanner.Scanner {
       }
     }
 
-    let proto = tx.type
+    let proto = tx.type.canonicalType()
+    let alias = (tx.type instanceof AliasType) ? tx.type : null
     if (proto instanceof GenericType) {
       tx.type = p.types.getGenericInstance(proto, args)
     } else if (proto instanceof UnresolvedType) {
       tx.type = new GenericTypeInstance(proto, args)
     } else {
       p.syntaxError(`instantiating non-generic type ${proto}`, pos)
+    }
+
+    if (alias) {
+      tx.type = new AliasType(alias.name, tx.type)
     }
 
     return tx
@@ -2532,6 +2591,55 @@ export class Parser extends scanner.Scanner {
     }
   }
 
+
+  // tryWithBacktracking takes two or more functions which represents
+  // different possiblities, or branches, of ambiguous syntax which requires
+  // backtracking. In case one function fails to parse, then the parser
+  // "backtracks" to where it started and tries the next function.
+  //
+  // The following steps are performed, starting with the first function:
+  //
+  //   1. Record a snapshot of the scanner state
+  //   2. If this is the last function, simply call the function and
+  //      return its value, else...
+  //   3. wrap the function call in a try-catch block
+  //   4. Setup the syntax error handler to throw an error instead of
+  //      reporting errors.
+  //   5. Call the function and return its value
+  //      - If the function executed without throwing an exception, then
+  //        its return value is returned from this function and we are done.
+  //      - If a SyntaxError was thrown, advance to the next function and
+  //        continue with step 1.
+  //      - Any other error thrown will propagate.
+  //
+  tryWithBacktracking<R>(...f :(()=>R)[]) :R {
+    // make sure syntax errors cause exceptions
+    let origRaiseOnSyntaxError = this.throwOnSyntaxError
+    this.throwOnSyntaxError = true
+    let s = this.allocSnapshot()
+    let i = 0
+    try {
+      this.recordSnapshot(s)
+      while (i < f.length-1) {
+        try {
+          return f[i]()
+        } catch (e) {
+          if (!(e instanceof SyntaxError)) { throw e }
+          // fall through and try next function
+        }
+        i++
+        this.restoreSnapshot(s)
+      }
+    } finally {
+      // restore throwOnSyntaxError and free snapshot
+      this.throwOnSyntaxError = origRaiseOnSyntaxError
+      this.freeSnapshot(s)
+    }
+    // last function is called without a "harness"
+    return f[i]()
+  }
+
+
   // advanceUntil consumes tokens until it finds a token of the followlist.
   // The stopset is only considered if we are inside a function (p.fnest > 0).
   // The followlist is the list of valid tokens that can follow a production;
@@ -2583,10 +2691,17 @@ export class Parser extends scanner.Scanner {
   }
 
   // syntaxError reports a syntax error
+  // If a BadExpr then no error was reported and backtracking should follow,
+  // by the caller to this function returning the BadExpr object.
   //
-  syntaxError(msg :string, pos :Pos = this.pos) {
+  syntaxError(msg :string, pos :Pos = this.pos) :BadExpr|null {
     const p = this
-    const position = p.sfile.position(pos)
+
+    if (p.throwOnSyntaxError) {
+      throw new SyntaxError(msg, pos)
+    }
+
+    let position = p.sfile.position(pos)
 
     // if (p.tok == token.EOF) {
     //   return // avoid meaningless follow-up errors
@@ -2605,7 +2720,7 @@ export class Parser extends scanner.Scanner {
     } else {
       // plain error - we don't care about current token
       p.errorAt(msg, position)
-      return
+      return null
     }
 
     let cond = (
@@ -2617,6 +2732,7 @@ export class Parser extends scanner.Scanner {
       // print token state when compiled in debug mode
       console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
     }
+    return null
   }
 
   // diag reports a diagnostic message, or an error if k is ERROR

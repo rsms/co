@@ -11,4 +11,21 @@ fun generics {
   _ list<f32> // f32[]
   _ list<f32> // f32[]
   _ T1.2[]    // int[][] because T1.2 = list<int>
+
+  // ambiguous expressions
+  type t tuple
+  a, b, x = 1, 2, 3
+  _ = x < a && b > a     // (assign _ (ANDAND (LSS x a) (GTR b a)))
+  _ = t<int,f32>()       // (assign _ (call (type tuple<int,f32>) ()))
+  _ = unkn<int,f32>()    // (assign _ (call (type ~unkn<int,f32>) ()))
+  _ = list<int>()        // (assign _ (call (type int[]) ()))
+  _ int[] = list<int>()  // (var _ (call (type int[]) ()))
+  _, _ = a<b,a>b         // (assign _ (LSS a b) (GTR a b))
+  _ = [a<b,a>b]          // (assign _ (list (LSS a b) (GTR a b)))
+  _ = [t<int,f32>]       // (assign _ (list (type tuple<int,f32>)))
+  t<int,f32>()           // (call (type tuple<int,f32>)) ())
+  list<int>()            // (call (type int[]) ())
 }
+
+// late-resolved type alias
+type unkn list

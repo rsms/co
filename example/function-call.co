@@ -9,10 +9,34 @@ fun f_int_f32_int_(a int, b f32, x ...u32) int
 fun entry(x int, y ...int) f32 {
   // note: effective type of y here is [int]
 
-  ls list<u32>
+  // ls list<u32>
+  type t tuple
+  a, b = 1, 2
+
+
+  // type t tuple
+  // a, b, c, d = 1, 2, 3, 4
+
+  // // Challenge: How to parse both `type<arg,arg>` and `x<y` and `x>y`?
+  // _ = t<a,b>     // (type t a b) ;
+  // _ = a<b        // (LT a b) ;
+  // _ = a>b        // (GT a b) ;
+  // _ = a<b>c      // (GT (<bool>LT a b) c) ;  -- invalid
+  // _, _ = a<b,c>d // (LT a b), (GT c d) ;
+  _ = [a<b,a>b]  // (list (LT a b) (GT c d)) ;
+  // //
+  // // might be doable since GT can not be an operand to LT,
+  // // and LT can not be an operand to GT.
+  // //
+  // // another idea is to look for a number of tokens after a matching ">":
+  // // t<a,b> ...
+  // //   ; ( [    Type
+  // //   id literal
+  // //
+
 
   // z = u32[][3, 4]
-  z = u32[3, 4] // E: "unexpected ,, expecting ]"
+  // z = u32[3, 4] // E: "unexpected ,, expecting ]" + diagnostic
 
   // ok:
   // f_int_f32_int_(1, 2.3)          // ok (empty rest)

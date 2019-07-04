@@ -61,6 +61,12 @@ export class Type {
   isTuple() : this is TupleType {
     return this instanceof TupleType
   }
+
+  // canonicalType returns the underlying canonical type for
+  // classes that wraps a type, like AliasType.
+  canonicalType() :Type {
+    return this
+  }
 }
 
 
@@ -242,7 +248,7 @@ export class GenericType extends Type {
   }
 
   toString() :string {
-    return `${this.name}<${this.vars.map(v => v.name).join(", ")}>`
+    return `${this.name}<${this.vars.map(v => v.name).join(",")}>`
   }
 
   // instantiate creates a new specific instance of this generic type.
@@ -278,7 +284,7 @@ export class GenericTypeInstance extends Type {
       this.proto instanceof UnresolvedType ? this.proto.toString() :
       this.proto.name.toString()
     )
-    return `${name}<${this.types.join(", ")}>`
+    return `${name}<${this.types.join(",")}>`
   }
 }
 
@@ -337,7 +343,7 @@ export class TupleType extends GenericTypeInstance {
   }
 
   toString() :string {
-    return '(' + this.types.map(t => t.toString()).join(', ') + ')'
+    return 'tuple<' + this.types.map(t => t.toString()).join(',') + '>'
   }
 
   equals(other :Type) :bool {
@@ -469,6 +475,28 @@ export class TypeType extends Type {
 
   equals(other :Type) :bool {
     return this === other || (other instanceof TypeType && this.type.equals(other.type))
+  }
+
+  canonicalType() :Type {
+    return this.type
+  }
+}
+
+
+// AliasType is a named type.
+//
+// type foo int => AliasType("foo", int)
+//
+export class AliasType extends TypeType {
+  name :ByteStr
+
+  constructor(name :ByteStr, t :Type) {
+    super(t)
+    this.name = name
+  }
+
+  toString() :string {
+    return `alias ${this.name} ${this.type}`
   }
 }
 

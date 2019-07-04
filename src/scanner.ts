@@ -33,6 +33,25 @@ const linePrefix = asciibuf('//!line ')
 
 enum istrOne { OFF, WAIT, CONT }
 
+const decodeRes :utf8.DecodeResult = {c:0,w:0}
+
+// Snapshot represents a point between tokens and is
+// just enough data to "time travel" a scanner within the same
+// source file and scan session.
+//
+export interface Snapshot {
+  tok        :token
+  ch         :int
+  offset     :int
+  rdOffset   :int
+  lineOffset :int
+  insertSemi :bool
+  parenL     :int
+  interpStrL :int
+  byteval    :Uint8Array|null
+  errorCount :int
+}
+
 // A Scanner holds the scanner's internal state while processing a given text.
 // It must be initialized via init before use or resue.
 //
@@ -71,6 +90,7 @@ export class Scanner extends ErrorReporter {
 
   // sparse buffer state (not reset by s.init)
   private appendbuf  :AppendBuffer|null = null // for string literals
+  private snapshotFreeList :Snapshot[] = []
 
   // public state - ok to modify
   public errorCount :int = 0 // number of errors encountered
@@ -114,18 +134,55 @@ export class Scanner extends ErrorReporter {
     s.errh = errh || null
     s.mode = mode
 
-    s.ch = 0x20 /*' '*/
+    // reset scanner state
     s.tok = token.EOF
+    s.ch = 0x20 /*' '*/
     s.offset = 0
     s.rdOffset = 0
     s.lineOffset = 0
     s.insertSemi = false
-    s.errorCount = 0
     s.parenL = 0
     s.interpStrL = 0
     s.byteval = null
+    s.errorCount = 0
 
     s.readchar()
+  }
+
+  recordSnapshot(s :Snapshot) {
+    s.tok        = this.tok
+    s.ch         = this.ch
+    s.offset     = this.offset
+    s.rdOffset   = this.rdOffset
+    s.lineOffset = this.lineOffset
+    s.insertSemi = this.insertSemi
+    s.parenL     = this.parenL
+    s.interpStrL = this.interpStrL
+    s.byteval    = this.byteval
+    s.errorCount = this.errorCount
+  }
+
+  restoreSnapshot(s :Snapshot) {
+    this.tok        = s.tok
+    this.ch         = s.ch
+    this.offset     = s.offset
+    this.rdOffset   = s.rdOffset
+    this.lineOffset = s.lineOffset
+    this.insertSemi = s.insertSemi
+    this.parenL     = s.parenL
+    this.interpStrL = s.interpStrL
+    this.byteval    = s.byteval
+    this.errorCount = s.errorCount
+  }
+
+  allocSnapshot() :Snapshot {
+    let s = this.snapshotFreeList.pop()
+    if (!s) { s = {} as Snapshot }
+    return s
+  }
+
+  freeSnapshot(s :Snapshot) {
+    this.snapshotFreeList.push(s)
   }
 
   // setOffset sets the read offset.
@@ -135,8 +192,6 @@ export class Scanner extends ErrorReporter {
     const s = this
     s.offset = s.rdOffset = offs
   }
-
-  private _r :utf8.DecodeResult = {c:0,w:0}
 
   // Read the next Unicode char into s.ch.
   // s.ch < 0 means end-of-file.
@@ -151,20 +206,20 @@ export class Scanner extends ErrorReporter {
         s.sfile.addLine(s.offset)
       }
 
-      s._r.w = 1
-      s._r.c = s.sdata[s.rdOffset]
+      decodeRes.w = 1
+      decodeRes.c = s.sdata[s.rdOffset]
 
-      if (s._r.c >= 0x80) {
+      if (decodeRes.c >= 0x80) {
         // uncommon case: non-ASCII character
-        if (!utf8.decode(s.sdata, s.rdOffset, s._r)) {
+        if (!utf8.decode(s.sdata, s.rdOffset, decodeRes)) {
           s.errorAtOffs('invalid UTF-8 encoding', s.offset)
-        } else if (s._r.c == 0) {
+        } else if (decodeRes.c == 0) {
           s.errorAtOffs('illegal NUL byte in input', s.offset)
         }
       }
 
-      s.rdOffset += s._r.w
-      s.ch = s._r.c
+      s.rdOffset += decodeRes.w
+      s.ch = decodeRes.c
     } else {
       s.offset = s.sdata.length
       if (s.ch == 0xA /*\n*/) {
