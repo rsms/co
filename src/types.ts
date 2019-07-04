@@ -457,46 +457,56 @@ export class UnionType extends Type {
 }
 
 
-// TypeType represents the type of a type.
-// For example, typeof(int) == TypeType{type:IntType}
-//
-export class TypeType extends Type {
-  type :Type
+// // TypeType represents the type of a type.
+// // For example, typeof(int) == TypeType{type:IntType}
+// //
+// export class TypeType extends Type {
+//   type :Type
 
-  constructor(type :Type) {
-    super()
-    assert(!(type instanceof TypeType), "assigning TypeType to TypeType")
-    this.type = type
-  }
+//   constructor(type :Type) {
+//     super()
+//     assert(!(type instanceof TypeType), "assigning TypeType to TypeType")
+//     this.type = type
+//   }
 
-  toString() :string {
-    return `type<${this.type}>`
-  }
+//   toString() :string {
+//     return `type<${this.type}>`
+//   }
 
-  equals(other :Type) :bool {
-    return this === other || (other instanceof TypeType && this.type.equals(other.type))
-  }
+//   equals(other :Type) :bool {
+//     return this === other || (other instanceof TypeType && this.type.equals(other.type))
+//   }
 
-  canonicalType() :Type {
-    return this.type
-  }
-}
+//   canonicalType() :Type {
+//     return this.type
+//   }
+// }
 
 
 // AliasType is a named type.
 //
 // type foo int => AliasType("foo", int)
 //
-export class AliasType extends TypeType {
+export class AliasType extends Type {
   name :ByteStr
+  type :Type
 
   constructor(name :ByteStr, t :Type) {
-    super(t)
+    super()
     this.name = name
+    this.type = t
+  }
+
+  equals(other :Type) :bool {
+    return this === other || (other instanceof AliasType && this.type.equals(other.type))
   }
 
   toString() :string {
     return `alias ${this.name} ${this.type}`
+  }
+
+  canonicalType() :Type {
+    return this.type
   }
 }
 

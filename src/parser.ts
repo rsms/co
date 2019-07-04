@@ -63,7 +63,6 @@ import {
   NumType,
   FunType,
   UnresolvedType,
-  TypeType,
   UnionType,
   TupleType,
   ListType,
@@ -362,7 +361,8 @@ export class Parser extends scanner.Scanner {
     if (ent) {
       if (ent.decl instanceof TypeExpr) {
         // identifier names a type
-        x.type = new TypeType(ent.decl.type)
+        // x.type = new TypeType(ent.decl.type)
+        x.type = ent.decl.type
       } else {
         // identifier names a value or is not yet known
         x.type = ent.type || p.types.markUnresolved(x)
@@ -552,6 +552,7 @@ export class Parser extends scanner.Scanner {
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
     }
 
+    // create new alias type
     t.type = new AliasType(id.value, t.type)
 
     // ids at the file level are declared in the package scope
@@ -1826,19 +1827,20 @@ export class Parser extends scanner.Scanner {
 
     // read expected arguments from potentially known function type
     let argtypes :Type[] = []
-    if (receiver.type instanceof TypeType) {
-      dlog(`calling a type ${receiver.type.type} (via receiver.type is TypeType)`)
-      if (receiver.type.type instanceof NativeType) {
-        // TODO: fast path for common case: conversion to native type
-        // return p.callNativeType(receiver, receiver.type.type)
-      }
-      //
-      // TODO: args depend on type. TypeType.type could be any kind of Type,
-      // like a struct. In the case of a collection Type, the args should
-      // reflect the arguments of that type.
-      //
-      argtypes = [ receiver.type.type ]
-    } else if (receiver instanceof TypeExpr) {
+    // if (receiver.type instanceof TypeType) {
+    //   dlog(`calling a type ${receiver.type.type} (via receiver.type is TypeType)`)
+    //   if (receiver.type.type instanceof NativeType) {
+    //     // TODO: fast path for common case: conversion to native type
+    //     // return p.callNativeType(receiver, receiver.type.type)
+    //   }
+    //   //
+    //   // TODO: args depend on type. TypeType.type could be any kind of Type,
+    //   // like a struct. In the case of a collection Type, the args should
+    //   // reflect the arguments of that type.
+    //   //
+    //   argtypes = [ receiver.type.type ]
+    // } else
+    if (receiver instanceof TypeExpr) {
       dlog(`calling a type ${receiver.type} (via receiver is TypeExpr)`)
       if (receiver.type instanceof NativeType) {
         // TODO: fast path for common case: conversion to native type

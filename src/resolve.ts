@@ -31,7 +31,6 @@ import {
   ListType,
   TupleType,
   FunType,
-  TypeType,
   OptionalType,
   UnionType,
   GenericType,
@@ -348,11 +347,11 @@ export class TypeResolver extends ErrorReporter {
       return funtype
     }
 
-    if (funtype instanceof TypeType) {
-      // call is a type call
-      dlog(`TODO type call on ${funtype.type}`)
-      return funtype.type
-    }
+    // if (funtype instanceof TypeType) {
+    //   // call is a type call
+    //   dlog(`TODO type call on ${funtype.type}`)
+    //   return funtype.type
+    // }
 
     if (!(funtype instanceof FunType)) {
       // call is a type call
