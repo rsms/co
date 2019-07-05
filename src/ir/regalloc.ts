@@ -493,6 +493,7 @@ export class RegAllocator {
 
     if (isSpilling) {
       // Reserve spill register.
+      //
       // We take an opportunistic approach to reserving a register for
       // spills by doing it only when we _might_ spill, i.e. when picking
       // results in selecting a node with interference greater than the
@@ -501,6 +502,10 @@ export class RegAllocator {
       // is that since we do not actually know for sure if picking a node
       // leads to a spill later on, we can paradoxically cause spills which
       // would otherwise be avoidable with the same number of registers.
+      //
+      // TODO: Consider a multi-pass approach, perhaps when config.optimize
+      // is set. We would trade compilation time for possibly much better
+      // code, but how much better remains to be tested & researched.
       this.reserveGpSpillReg(--gpk)
     }
 
