@@ -229,15 +229,34 @@ export class AppendBuffer {
 }
 
 const stackFrameRe = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+(?:\[as ([^\]]+)\]\s+|)\((?:.+[\/ ]src\/([^\:]+)|([^\:]*))(?:\:(\d+)\:(\d+)|.*)\)/
+  // 1: name
+  // 2: as-name | undefined
+  // 3: src-filename
+  // 4: filename
+  // 5: line
+  // 6: column
 
 // debug function
-export const debuglog = DEBUG ? function(...v :any[]) {
-  let e = new Error()
-  let prefix = ''
+export const debuglog = DEBUG ? _debuglog : function(..._ :any[]){}
 
-  if (e.stack) {
+function _debuglog(...v :any[]) {
+  let stackFrame = ""
+  if (Error.captureStackTrace) {
+    const e = {stack:''}
+    Error.captureStackTrace(e, _debuglog)
+    stackFrame = e.stack.split(/\n/, 2)[1]
+  } else {
+    let e = new Error()
+    if (e.stack) {
+      stackFrame = e.stack.split(/\n/, 3)[2]
+    }
+  }
 
-    let m = stackFrameRe.exec(e.stack.split(/\n/, 3)[2])
+  let prefix = "DEBUG>"
+  let suffix = ""
+
+  if (stackFrame) {
+    let m = stackFrameRe.exec(stackFrame)
     // example: "at Foo.bar [as lol] (/<co> src/parser.ts:1839:5)"
     // m = { 1:"bar", 2:"lol", 3:"parser.ts",               5:"1839", 6:"5" }
     //
@@ -253,28 +272,25 @@ export const debuglog = DEBUG ? function(...v :any[]) {
     if (m) {
       const fun = m[2] || m[1]
       const origin = m[3] || m[4]
+      prefix = fun + '>'
       if (origin) {
-        // const filename = origin.split('.ts:', 1)[0]
         const trmsg = String(v[0])
         if (trmsg.indexOf('TODO:') == 0 || trmsg.indexOf('TODO ') == 0) {
           // message start with "TODO"
           prefix = 'TODO src/' + origin + ' ' + fun + '>'
           v[0] = trmsg.substr(5).replace(/^\s*/, '')
-        } else {
-          // prefix = filename + '/' + fun + '>'
-          prefix = fun + '>'
         }
-      } else {
-        prefix = fun + '>'
+        suffix = `at src/${origin}:${m[5]}:${m[6]}`
       }
-    } else {
-      prefix = 'DEBUG>'
     }
   }
 
   v.splice(0, 0, prefix)
+  if (suffix) {
+    v.push(suffix)
+  }
   console.log.apply(console, v)
-} : function(..._ :any[]){}
+}
 
 
 // is2pow returns true if n is a power-of-two number.

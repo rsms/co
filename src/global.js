@@ -33,7 +33,6 @@ function _stackTrace(cons) {
 // }
 //
 function _parseStackFrame(sf) {
-  //let m = /^\s*at\s+([^\s]+)\s+\((?:.+\/(src\/[^\:]+)|([^\:]+))\:(\d+)\:(\d+)\)$/.exec(sf)
   let m = /\s*at\s+(?:[^\s]+\.|)([^\s\.]+)\s+(?:\[as ([^\]]+)\]\s+|)\((?:.+[\/ ](src\/[^\:]+)|([^\:]*))(?:\:(\d+)\:(\d+)|.*)\)/.exec(sf)
   // 1: name
   // 2: as-name | undefined

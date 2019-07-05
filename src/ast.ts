@@ -424,6 +424,7 @@ export class BadTypeExpr extends TypeExpr {
 
 
 // "..." TypeExpr
+// TODO: get rid of this and just use TypeExpr with RestType
 //
 export class RestTypeExpr extends TypeExpr {
   type :RestType

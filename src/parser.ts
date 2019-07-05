@@ -3,7 +3,7 @@ import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
 import { TypeResolver } from './resolve'
-import { ByteStr, strings } from './bytestr'
+import { strings } from './bytestr'
 import { Universe } from './universe'
 import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
@@ -864,13 +864,22 @@ export class Parser extends scanner.Scanner {
         // checks for ")" and an empty parameter set with linebreaks never
         // produces a semicolon implicitly. I.e. "foo(<LF><LF>)" == "foo()"
         // However, it's a syntax error to write "foo(;)"
+        let isRest = false
+        if (p.tok == token.ELLIPSIS) {
+          // ...T
+          isRest = true
+          p.next()
+        }
         const x = p.maybeType()
         if (x) {
           typ = x
+          if (isRest) {
+            // typ = new RestTypeExpr(pos, x.scope, x, p.types.getRestType(x.type))
+            x.type = p.types.getRestType(x.type)
+          }
         } else {
           typ = p.badTypeExpr()
-          p.syntaxError("expecting name or type")
-          // p.next()
+          p.syntaxError("expecting name or type", pos)
         }
       }
 
@@ -1712,7 +1721,6 @@ export class Parser extends scanner.Scanner {
   maybeGenericTypeInstance(lhs :Expr, pr :prec, ctx :exprCtx) :Expr {
     const p = this
     assert(p.tok == token.LSS)  // enter at token.LSS "<"
-    let pos = p.pos
     return p.tryWithBacktracking(
 
       // try to parse as generic type, e.g. "x<y>"
@@ -1782,8 +1790,7 @@ export class Parser extends scanner.Scanner {
     // Arguments      = "("
     //   [ (  ExpressionList | Type [ "," ExpressionList ] ) [ "..." ] [ "," ]]
     //   ")" .
-    let e = new Error()
-    const p = this
+    let p = this
     let x = p.operand(ctx)
 
     loop:
@@ -1825,21 +1832,10 @@ export class Parser extends scanner.Scanner {
     //   ] ")"
     const p = this
 
-    // read expected arguments from potentially known function type
+    // expected arguments from potentially known function type
     let argtypes :Type[] = []
-    // if (receiver.type instanceof TypeType) {
-    //   dlog(`calling a type ${receiver.type.type} (via receiver.type is TypeType)`)
-    //   if (receiver.type.type instanceof NativeType) {
-    //     // TODO: fast path for common case: conversion to native type
-    //     // return p.callNativeType(receiver, receiver.type.type)
-    //   }
-    //   //
-    //   // TODO: args depend on type. TypeType.type could be any kind of Type,
-    //   // like a struct. In the case of a collection Type, the args should
-    //   // reflect the arguments of that type.
-    //   //
-    //   argtypes = [ receiver.type.type ]
-    // } else
+
+    // do we know the function type?
     if (receiver instanceof TypeExpr) {
       dlog(`calling a type ${receiver.type} (via receiver is TypeExpr)`)
       if (receiver.type instanceof NativeType) {
@@ -1864,22 +1860,21 @@ export class Parser extends scanner.Scanner {
     let hasDots = false
 
     p.want(token.LPAREN)
-    // p.xnest++
 
-    if (receiver.type) {
+    if (receiver.type && !receiver.type.isUnresolved) {
       // parse expected arguments with type information
-      let i = 0
-      let wantSpread = true   // set when we encounter ... argdef
-      let argtype :Type|null = null
+      let i = 0  // index into argtypes
+      let restType :Type|null = null  // set when we encounter ...
       while (p.tok != token.EOF && p.tok != token.RPAREN) {
-        if (!wantSpread) {
+        // parse arg with expected argtype as context
+        let argtype :Type|null = restType
+        if (!argtype) {
           argtype = argtypes[i++] || null
           if (argtype instanceof RestType) {
-            wantSpread = true
-            argtype = argtype.types[0]
+            restType = argtype
           }
         }
-        // parse arg with expected argtype as context
+        // parse arg with context set to the expected argument type
         args.push(p.expr(argtype))
         hasDots = p.got(token.ELLIPSIS)
         if (!p.ocomma(token.RPAREN) || hasDots) {
@@ -1900,14 +1895,9 @@ export class Parser extends scanner.Scanner {
       }
     }
 
-    // p.xnest--
     p.want(token.RPAREN)
 
-    let cx = new CallExpr(pos, p.scope, receiver, args, hasDots)
-    // if (receiver.type && receiver.type instanceof FunType) {
-    //   cx.type = receiver.type.result
-    // }
-    return cx
+    return new CallExpr(pos, p.scope, receiver, args, hasDots)
   }
 
 
@@ -2022,33 +2012,38 @@ export class Parser extends scanner.Scanner {
     }
 
     p.next() // consume literal token
+
+    // return possibly-converted number literal
     return p.numLitConv(x, p.ctxType(ctx))
   }
 
 
-  // numLitConv may convert x (in-place) to a different type as requested
-  // by reqt.
+  // numLitConv may convert x (in-place) to a different type as requested by reqt.
   //
-  numLitConv(x :NumLit, reqt :Type | null) :NumLit {
-    if (reqt) {
-      const p = this
-      // a certain type was requested
-      if (reqt instanceof NumType) {
-        // capture refs to current type and value before converting, as
-        // convertToType may change these properties.
-        if (!x.convertToType(reqt)) {
-          let xt = x.type
-          let xv = x.value
-          if ((xt instanceof IntType) == (reqt instanceof IntType)) {
-            p.syntaxError(`constant ${xv} overflows ${reqt.name}`, x.pos)
-          } else {
-            p.syntaxError(`constant ${xv} truncated to ${reqt.name}`, x.pos)
-          }
+  numLitConv(x :NumLit, reqt :Type|null) :NumLit {
+    if (!reqt) {
+      return x
+    }
+    const p = this
+    // unwrap rest type. e.g. ...u32 => u32
+    if (reqt instanceof RestType) {
+      reqt = reqt.types[0]
+    }
+    if (reqt instanceof NumType) {
+      // capture refs to current type and value before converting, as
+      // convertToType may change these properties.
+      let xv = x.value
+      let xt = x.type
+      if (!x.convertToType(reqt)) {
+        if ((xt instanceof IntType) == (reqt instanceof IntType)) {
+          p.syntaxError(`constant ${xv} overflows ${reqt.name}`, x.pos)
+        } else {
+          p.syntaxError(`constant ${xv} (type ${xt}) truncated to ${reqt.name}`, x.pos)
         }
-      } else {
-        // reqt is not a number type
-        p.syntaxError(`invalid value ${x.value} for type ${reqt}`, x.pos)
       }
+    } else {
+      // reqt is not a number type
+      p.syntaxError(`invalid value ${x.value} for type ${reqt}`, x.pos)
     }
     return x
   }

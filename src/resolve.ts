@@ -244,7 +244,7 @@ export class TypeResolver extends ErrorReporter {
   // }
 
 
-  neverResolve = (n :ast.Expr) => {
+  neverResolve = (_ :ast.Expr) => {
     return null
   }
 
@@ -369,8 +369,6 @@ export class TypeResolver extends ErrorReporter {
     let wantRest = wantLast instanceof RestType ? wantLast.types[0] : null
     let argdelta = argcount - wantArgs.length
 
-    dlog({ wantRest: `${wantRest}`, hasRest: n.hasRest, argdelta })
-
     if (argdelta < 0 && (argdelta < -1 || !wantRest || n.hasRest)) {
       r.syntaxError(
         `not enough arguments in call to ${n.receiver}\n` +
@@ -429,7 +427,6 @@ export class TypeResolver extends ErrorReporter {
       if (!t) {
         return null  // at least one argument is unresolved
       }
-      // dlog(`arg #${i} want ${want} got ${x} (${t})`)
 
       // convert type of value if needed
       n.args[i] = convarg(x, want)
@@ -456,7 +453,6 @@ export class TypeResolver extends ErrorReporter {
           !(x.type instanceof ListType) ||
           x.type.types[0] !== wantRest
         ) {
-          // dlog({type0: (x.type as any).types[0], type1: wantRest})
           r.error(
             `passing ${x.type} as argument where ${wantRest} is expected`,
             x.pos
@@ -465,7 +461,6 @@ export class TypeResolver extends ErrorReporter {
         // ok. done
       } else {
         // synthetic rest
-        dlog(`parsing synthetic rest`)
         let rest :Expr[] = []
         for (; i < argcount; i++) {
           let x = n.args[i]
@@ -473,7 +468,7 @@ export class TypeResolver extends ErrorReporter {
           if (!t) {
             return null  // unresolved
           }
-          dlog(`rest arg #${i} want ${wantRest} got ${x} (${t})`)
+          // dlog(`rest arg #${i} want ${wantRest} got ${x} (${t})`)
           x = convarg(x, wantRest)
           rest.push(x)
         }
