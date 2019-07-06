@@ -89,8 +89,7 @@ const passes :Pass[] = [
   // required("schedule", schedule), // schedule values
   // optional("late nilcheck", nilcheckelim2),
   // required("flagalloc", flagalloc), // allocate flags register
-  required("regalloc", regalloc),
-    // allocate int & float registers + stack slots
+  required("regalloc", regalloc), // allocate registers & stack slots
   // optional("loop rotate", loopRotate),
   // required("stackframe", stackframe),
   // optional("trim", trim), // remove empty blocks

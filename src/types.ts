@@ -125,6 +125,15 @@ export class BasicType extends NativeType {
   toString() :string {
     return this.name
   }
+
+  // convenience function used by arch rewrite rules
+  isI8()  :bool { return this.mem == Mem.i8 }
+  isI16() :bool { return this.mem == Mem.i16 }
+  isI32() :bool { return this.mem == Mem.i32 }
+  isI64() :bool { return this.mem == Mem.i64 }
+  isF32() :bool { return this.mem == Mem.f32 }
+  isF64() :bool { return this.mem == Mem.f64 }
+  isPtr() :bool { return this.mem == Mem.Ptr }
 }
 
 export class NumType extends BasicType {

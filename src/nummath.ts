@@ -1,8 +1,19 @@
+//
+// Provides basic functions for the Num type where the caller does not need
+// to know about the underlying type of Num.
+//
 import { Num } from "./num"
 import { Int64, SInt64, UInt64 } from "./int64"
 
+const U32_MAX  = new UInt64(0xFFFFFFFF | 0, 0)
+const S32_MIN  = new SInt64(-0x80000000, -1)
+
 export default {
 
+  // tests
+  isI32(x :Num) :bool {
+    return typeof x == 'number' || (x.lte(U32_MAX) && x.gte(S32_MIN))
+  },
 
   // binary operators
 

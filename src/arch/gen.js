@@ -122,6 +122,8 @@ let didRetryCompile = false
 
 function compile() {
   console.log("compiling gen.ts ->", rpath(progfile))
+  let opsFileBackup = ""
+  try { opsFileBackup = fs.readFileSync(opsOutFile, "utf8") } catch(_) {}
   try {
     proc.execFileSync(
       __dirname + "/../../node_modules/typescript/bin/tsc",
@@ -139,6 +141,10 @@ function compile() {
       didRetryCompile = true
       fs.copyFileSync(opsTemplateFile, opsOutFile)
       return compile()
+    }
+    if (opsFileBackup) {
+      console.log("restoring", opsOutFile)
+      fs.writeFileSync(opsOutFile, opsFileBackup,  "utf8")
     }
     console.error(err.message || ""+err)
     process.exit(1)

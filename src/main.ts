@@ -194,7 +194,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   }
 
   // skip code generation?
-  options.noIR = true // XXX
+  // options.noIR = true
   if (options.noIR) {
     return { success: true, diagnostics, ast: r.pkg }
   }
@@ -256,9 +256,12 @@ async function main(options? :MainOptions) :Promise<MainResult> {
             )
           }
         })
-
         let prog = new Program(f, config)
         prog.gen()
+      }
+
+      for (let [ , f] of irb.pkg.funs) {
+        printir(f)
       }
 
     }
@@ -320,6 +323,7 @@ if (isNodeJsLikeEnv) {
     main({
       sources: process.argv.slice(2).filter(v => !v.startsWith('-')),
       noOptimize: process.argv.includes('-no-optimize'),
+      genericIR: process.argv.includes('-ir'),
     }).catch(err => {
       console.error(err.stack || ''+err)
       process.exit(1)

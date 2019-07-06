@@ -36,7 +36,7 @@ function fmtaux(_f :IRFmt, v :Value, opi :OpInfo) :string {
 
   case AuxType.String:        // aux is a string
   case AuxType.Sym:           // aux is a symbol (a *gc.Node for locals or an *obj.LSym for globals)
-  case AuxType.Typ:           // aux is a type
+  case AuxType.Type:          // aux is a type
   case AuxType.CCop:          // aux is a ssa.Op that represents a flags-to-bool conversion (e.g. LessThan)
     aux = true
     break
@@ -44,7 +44,7 @@ function fmtaux(_f :IRFmt, v :Value, opi :OpInfo) :string {
   case AuxType.SymOff:        // aux is a symbol, auxInt is an offset
   case AuxType.SymValAndOff:  // aux is a symbol, auxInt is a ValAndOff
   case AuxType.SymInt32:      // aux is a symbol, auxInt is a 32-bit integer
-  case AuxType.TypSize:       // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
+  case AuxType.TypeSize:      // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
     auxInt = true
     aux = true
     break
@@ -54,7 +54,7 @@ function fmtaux(_f :IRFmt, v :Value, opi :OpInfo) :string {
   if (auxInt) {
     s += ` [${v.auxInt}]`
   }
-  if (aux) {
+  if (aux && v.aux !== null) {
     s += ` {${v.aux}}`
   }
   return s

@@ -35,8 +35,8 @@ export enum AuxType {
   SymOff,        // aux is a symbol, auxInt is an offset
   SymValAndOff,  // aux is a symbol, auxInt is a ValAndOff
   SymInt32,      // aux is a symbol, auxInt is a 32-bit integer
-  Typ,           // aux is a type
-  TypSize,       // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
+  Type,          // aux is a type
+  TypeSize,      // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
   CCop,          // aux is a ssa.Op that represents a flags-to-bool conversion (e.g. LessThan)
 }
 

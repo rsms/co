@@ -41,7 +41,7 @@ export type Location = Register | LocalSlot
 
 // Aux is an auxiliary value of Value
 //
-export type Aux = ByteStr | Uint8Array
+export type Aux = ByteStr | Uint8Array | BasicType
 
 
 // Value is a three-address-code operation
@@ -410,8 +410,7 @@ export class Block {
     return v
   }
 
-  // newValue2 returns a new value in the block with two arguments and zero
-  // aux values.
+  // newValue2 returns a new value in the block with two arguments
   newValue2(
     op :Op,
     t :BasicType|null,
@@ -424,6 +423,25 @@ export class Block {
     v.args = [arg0, arg1]
     arg0.uses++ //; arg0.users.add(v)
     arg1.uses++ //; arg1.users.add(v)
+    this.values.push(v)
+    return v
+  }
+
+  // newValue3 returns a new value in the block with three arguments
+  newValue3(
+    op :Op,
+    t :BasicType|null,
+    arg0 :Value,
+    arg1 :Value,
+    arg2 :Value,
+    auxInt :Num = 0,
+    aux :Aux|null = null,
+  ) :Value {
+    let v = this.f.newValue(this, op, t, auxInt, aux)
+    v.args = [arg0, arg1, arg2]
+    arg0.uses++ //; arg0.users.add(v)
+    arg1.uses++ //; arg1.users.add(v)
+    arg2.uses++ //; arg2.users.add(v)
     this.values.push(v)
     return v
   }
@@ -488,15 +506,16 @@ export class Fun {
   newValue(b :Block, op :Op, t :BasicType|null, auxInt :Num, aux :Aux|null) :Value {
     assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
     // TODO we could use a free list and return values when they die
+    assert(opinfo[op] !== undefined, `no opinfo for op ${op}`)
 
-    assert(
-      !t ||
-      !opinfo[op].type ||
-      opinfo[op].type!.mem == 0 ||
-      t === opinfo[op].type,
-      `op ${fmtop(op)} with different concrete type ` +
-      `(op.type=${opinfo[op].type}, t=${t})`
-    )
+    // assert(
+    //   !t ||
+    //   !opinfo[op].type ||
+    //   opinfo[op].type!.mem == 0 ||
+    //   t === opinfo[op].type,
+    //   `op ${fmtop(op)} with different concrete type ` +
+    //   `(op.type=${opinfo[op].type}, t=${t})`
+    // )
 
     return new Value(
       this.vid++,
@@ -527,13 +546,13 @@ export class Fun {
     // Select operation based on type
     let op :Op = ops.Invalid
     switch (t) {
-      case t_bool:            op = ops.ConstBool; break
-      case t_u8:  case t_i8:  op = ops.ConstI8; break
-      case t_u16: case t_i16: op = ops.ConstI16; break
-      case t_u32: case t_i32: op = ops.ConstI32; break
-      case t_u64: case t_i64: op = ops.ConstI64; break
-      case t_f32:             op = ops.ConstF32; break
-      case t_f64:             op = ops.ConstF64; break
+      case t_bool:             op = ops.ConstBool; break
+      case t_u8:  case t_i8:   op = ops.ConstI8; break
+      case t_u16: case t_i16:  op = ops.ConstI16; break
+      case t_u32: case t_i32:  op = ops.ConstI32; break
+      case t_u64: case t_i64:  op = ops.ConstI64; break
+      case t_f32:              op = ops.ConstF32; break
+      case t_f64:              op = ops.ConstF64; break
       default:
         assert(false, `invalid constant type ${t}`)
         break
@@ -628,3 +647,9 @@ export class Pkg {
     return null
   }
 }
+
+
+// export const nilFun = new Fun(new FunType([], t_nil), null, 0)
+// export const nilBlock = new Block(BlockKind.First, -1, nilFun)
+// export const nilValue = new Value(-1, nilBlock, ops.Invalid, t_nil, 0, null)
+export const nilValue = new Value(-1, null as any as Block, ops.Invalid, t_nil, 0, null)

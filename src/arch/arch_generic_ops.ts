@@ -30,14 +30,15 @@ const ops :OpDescription[] = [
   ["Phi", -1, ZeroWidth], // select an argument based on which predecessor block we came from
   ["Copy", 1],  // output = arg0
   ["Arg", ZeroWidth, {aux: "Int32"}], // argument to current function. aux=position.
+  ["InitMem", ZeroWidth],                               // memory input to the function.
   ["CallArg", 1, ZeroWidth], // argument for function call
   ["NilCheck", 2, NilCheck, FaultOnNilArg0], // panic if arg0 is nil. arg1=mem.
 
   // function calls
   // Arguments to the call have already been written to the stack.
   // Return values appear on the stack.
-  ["Call", 1, Call, {aux: "Int64"}], // call function
-  ["TailCall", 1, Call, {aux: "Int64"}], // call function
+  ["Call", 1, Call, t.addr, {aux: "SymOff"}], // call function at aux. auxint=arglen, arg0=mem, returns mem
+  ["TailCall", 1, Call, t.addr, {aux: "SymOff"}], // call function
   // ["ClosureCall", 3, Call, {aux: "Int64"}] // arg0=code pointer, arg1=context ptr, arg2=memory.  aux=arg size.
   // ["ICall", 2, Call, {aux: "Int64"}] // interface call.  arg0=code pointer, arg1=memory, aux=arg size.
 
@@ -51,7 +52,7 @@ const ops :OpDescription[] = [
   ["ConstI64", Constant, {aux: "Int64"}], // aux is Int64
   ["ConstF32", Constant, {aux: "Int32"}],
   ["ConstF64", Constant, {aux: "Int64"}],
-  ["ConstString", {aux: "String"}], // value is aux (string)
+  ["ConstStr", {aux: "String"}], // value in aux (string)
 
 
   // stack
@@ -68,10 +69,11 @@ const ops :OpDescription[] = [
 
 
   // memory
-  ["Load", 2],          // Load from arg0. arg1=addr
-  ["Store", 3, t.addr], // Store arg1 to arg0.  arg2=addr, aux=type
+  ["Load", 2],          // Load from arg0. arg1=mem
+  ["Store", 3, t.addr, {aux: "Type"}], // Store arg1 to arg0.  arg2=mem, aux=type. Ret mem.
   ["Move", 3, t.addr],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
   ["Zero", 2, t.addr],  // arg0=destptr, arg1=addr, auxInt=size, aux=type
+  ["OffPtr", 1, t.addr, {aux: "Int64"}], // offset pointer. arg0 + auxint. arg0 and res is mem
 
   // resgiter allocation spill and restore
   ["StoreReg", 1],

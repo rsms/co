@@ -3,18 +3,18 @@ import { Pos, SrcFile } from '../pos'
 import { token } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
 import * as ast from '../ast'
-// import * as types from '../types'
-import { Type, BasicType, FunType, t_nil, t_bool } from '../types'
+import * as types from '../types'
+import { Type, BasicType, FunType, t_nil, t_bool, UIntType } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops, opinfo } from "./ops"
-import { Value, Block, BlockKind, Fun, Pkg } from './ssa'
+import { Value, Block, BlockKind, Fun, Pkg, nilValue } from './ssa'
 import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'
 import { printir } from './repr'
 import { LocalSlot } from './localslot'
 
-// import { debuglog as dlog } from '../util'
-const dlog = function(..._ :any[]){} // silence dlog
+import { debuglog as dlog } from '../util'
+// const dlog = function(..._ :any[]){} // silence dlog
 
 const bitypes = ast.builtInTypes
 
@@ -44,6 +44,7 @@ export class IRBuilder {
   b        :Block       // current block
   f        :Fun         // current function
   flags    :IRBuilderFlags = IRBuilderFlags.Default
+  addrtype :UIntType
 
   vars :Map<ByteStr,Value>
     // variable assignments in the current block (map from variable symbol
@@ -59,6 +60,13 @@ export class IRBuilder {
     // are not known at the time a block starts, but is known and registered
     // before the block ends.
 
+  startmem :Value  // initial function memory  (InitMem)
+  sp       :Value  // current function's SP (stack pointer)
+  sb       :Value  // current function's SB (static base pointer)
+
+  stacktop :Value  // current top of stack
+
+
   init(config :Config,
        diagh :DiagHandler|null = null,
        flags :IRBuilderFlags = IRBuilderFlags.Default
@@ -72,21 +80,22 @@ export class IRBuilder {
     r.defvars = []
     r.incompletePhis = null
     r.flags = flags
+    r.sp = nilValue
 
     // // select integer types
-    // const [intt_s, intt_u] = types.intTypes(config.intSize)
-    // const [sizet_s, sizet_u] = types.intTypes(config.addrSize)
+    const [intt_s, intt_u] = types.intTypes(config.intSize)
+    r.addrtype = types.intTypes(config.addrSize)[1]
 
-    // this.concreteType = (t :Type) :BasicType => {
-    //   switch (t) {
-    //   case types.t_int:   return intt_s
-    //   case types.t_uint:  return intt_u
-    //   case types.t_uintptr: return sizet_u
-    //   default:
-    //     assert(t instanceof BasicType, `${t} is not a BasicType`)
-    //     return t as BasicType
-    //   }
-    // }
+    this.concreteType = (t :Type) :BasicType => {
+      switch (t) {
+      case types.t_int:     return intt_s
+      case types.t_uint:    return intt_u
+      case types.t_uintptr: return r.addrtype
+      default:
+        assert(t instanceof BasicType, `${t} is not a BasicType`)
+        return t as BasicType
+      }
+    }
   }
 
   // addTopLevel is the primary interface to builder
@@ -277,6 +286,14 @@ export class IRBuilder {
       x.sig.params.length
     )
 
+    // Add initial memory state, SP and SB to top of entry block
+    r.startmem = f.entry.newValue0(ops.InitMem, r.addrtype)
+    r.sp = f.entry.newValue0(ops.SP, r.addrtype)
+    r.sb = f.entry.newValue0(ops.SB, r.addrtype)
+
+    // stack starts at startmem
+    r.stacktop = r.startmem
+
     // initialize locals
     for (let i = 0; i < x.sig.params.length; i++) {
       let p = x.sig.params[i]
@@ -320,8 +337,15 @@ export class IRBuilder {
     //   "last block in function is not BlockKind.Ret")
 
     r.endFun()
-
     r.pkg.funs.set(f.name, f)
+
+    // zero out function state in debug mode, to cause errors on access
+    if (DEBUG) {
+      ;(r as any).startmem = null
+      ;(r as any).sp       = null
+      ;(r as any).sb       = null
+    }
+
     return f
   }
 
@@ -1038,42 +1062,45 @@ export class IRBuilder {
   }
 
 
+  spoffs = 0  // stack pointer offset
+
+  stackPush(v :Value) {
+    const s = this
+    assert(v.type instanceof BasicType)
+
+    // compute address (SP + stack offset)
+    let addr = s.b.newValue1(ops.OffPtr, s.addrtype, s.sp, s.spoffs)
+
+    // Store v to addr. arg2=mem, aux=type
+    s.stacktop = s.b.newValue3(ops.Store, s.addrtype, addr, v, s.stacktop, 0, v.type)
+
+    // increment offset to stack pointer
+    s.spoffs += v.type.size
+  }
+
+  stackPop(t :BasicType) :Value {
+    const s = this
+    assert(t.size <= s.addrtype.size)
+
+    // compute address (SP + stack offset)
+    let addr = s.b.newValue1(ops.OffPtr, s.addrtype, s.sp, s.spoffs)
+
+    // load return value at spoffs of type rt
+    s.stacktop = s.b.newValue2(ops.Load, t, addr, s.stacktop)
+
+    // decrement offset to stack pointer
+    s.spoffs -= t.size
+
+    return s.stacktop
+  }
+
+
   funcall(x :ast.CallExpr) :Value {
+    // See https://rsms.me/co/doc/stack/
     const s = this
 
     if (x.hasRest) {
       dlog(`TODO: handle call with hasRest`)
-    }
-
-    // first unroll argument values
-    let argvals :Value[] = []
-    for (let arg of x.args) {
-      argvals.push(s.expr(arg))
-    }
-
-    // push params
-    if (
-      s.flags & IRBuilderFlags.Comments &&
-      x.receiver instanceof ast.Ident &&
-      x.receiver.ent
-    ) {
-      // include comment with name of parameter, when available
-      let fx = x.receiver.ent.decl as ast.FunExpr
-      let funstr = x.receiver.toString() + '/'
-      for (let i = 0; i < argvals.length; i++) {
-        let v = argvals[i]
-        let v2 = s.b.newValue1(ops.CallArg, v.type, v)
-        if (s.flags & IRBuilderFlags.Comments) {
-          let param = fx.sig.params[i]
-          if (param.name) {
-            v2.comment = funstr + param.name.toString()
-          }
-        }
-      }
-    } else {
-      for (let v of argvals) {
-        s.b.newValue1(ops.CallArg, v.type, v)
-      }
     }
 
     // TODO: handle any function by
@@ -1087,11 +1114,29 @@ export class IRBuilder {
     let ft = funid.type as FunType
     assert(ft, "unresolved function type")
 
-
-    let rt = ft.result as BasicType
+    // TODO: support other types like strings etc
     assert(ft.result instanceof BasicType,
       `non-basic type ${ft.result.constructor.name} not yet supported`)
-    return s.b.newValue0(ops.Call, rt, 0, funid.value)
+
+    // first unroll argument values in order (LTR)
+    let argvals :Value[] = []
+    for (let arg of x.args) {
+      argvals.push(s.expr(arg))
+    }
+
+    // let stacksize = ft.argWidth() // includes receiver, args, and results
+
+    // push params on stack
+    for (let i = argvals.length; i > 0;) {
+      let arg = argvals[--i]
+      s.stackPush(arg)
+    }
+
+    // generate call op
+    s.stacktop = s.b.newValue1(ops.Call, types.t_uintptr, s.stacktop, x.args.length, funid.value)
+
+    // load return value off of the stack
+    return s.stackPop(s.concreteType(ft.result as BasicType)) // == s.stacktop
   }
 
 

@@ -221,15 +221,32 @@ export class RegAllocator {
     assert(f.regAlloc == null, `registers already allocated for ${f}`)
     f.regAlloc = new Array<Location>(f.numValues())  // TODO: fill this
 
-    // Add SP (stack pointer) value to the top of the entry block.
-    // TODO: track the need for this when generating the initial IR.
-    // Some functions do not need SP.
-    const SP = f.newValue(f.entry, ops.SP, a.addrtype, 0, null)
-    SP.reg = a.registers[this.SPReg]
-    f.entry.pushValueFront(SP)
+    // Assign stack pointer (SP) and static base pointer (SB) registers.
+    // Note that dead-code elimination might have removed SP, SB or both.
+    // However, we know that they are always in the same order (SP, SB), so
+    // we look at the two first values in the block.
+    let v1 = f.entry.values[1]
+    let v2 = f.entry.values[2]
+    if (v1) {
+      if (v1.op == ops.SP) {
+        v1.reg = a.registers[this.SPReg]
+        if (v2 && v2.op == ops.SB) {
+          v2.reg = a.registers[this.SBReg]
+        }
+      } else if (v1.op == ops.SB) {
+        v1.reg = a.registers[this.SBReg]
+      }
+    }
+    // TODO: if we spill and we don't have SP, reintroduce SP.
 
-    // Linear scan register allocation can be influenced by the order in which
-    // blocks appear.
+    // // Add SP (stack pointer) value to the top of the entry block.
+    // // TODO: track the need for this when generating the initial IR.
+    // // Some functions do not need SP.
+    // const SP = f.newValue(f.entry, ops.SP, a.addrtype, 0, null)
+    // SP.reg = a.registers[this.SPReg]
+    // f.entry.pushValueFront(SP)
+    // dlog("TODO: assign SP reg to SP")
+
     // Decouple the register allocation order from the generated block order.
     // This also creates an opportunity for experiments to find a better order.
     // DISABLED
@@ -258,7 +275,7 @@ export class RegAllocator {
         let val = new ValState(v)
         a.values[v.id] = val
         // if (!t.isMemory() && !t.isVoid() && !t.isFlags() && !t.isTuple())
-        if (t.mem > 0 && !t.isTuple() && v !== SP) {
+        if (t.mem > 0 && !t.isTuple() && !v.reg && !opinfo[v.op].zeroWidth) {
           val.needReg = true
           val.rematerializeable = v.rematerializeable()
           // a.orig[v.id] = v
@@ -387,8 +404,8 @@ export class RegAllocator {
     // general-purpose and floating-point registers.
     let gpk = countRegs(this.config.gpRegMask)
     // let fpk = countRegs(this.config.fpRegMask)
-    gpk = 4 // DEBUG XXX OVERRIDE
-    // fpk = 4 // DEBUG XXX OVERRIDE
+    // gpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
+    // fpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
 
     // Stack of values
     let valstack :{id:ID, edges:Set<ID>}[] = []
@@ -711,7 +728,9 @@ export class RegAllocator {
           // very first value.
           // we know there are no live values; this is the first.
           assert(live.size == 0, "empty graph but has live set")
-          g.add(v.id)
+          if (!v.reg) {
+            g.add(v.id)
+          }
         } else {
           // remove definition from live set
           live.delete(v.id)
@@ -724,7 +743,9 @@ export class RegAllocator {
             // update interference graph to add an edge from the definition v
             // to each other value alive at this point
             for (let id2 of live) {
-              g.connect(v.id, id2)
+              if (a.values[id2].needReg) {
+                g.connect(v.id, id2)
+              }
             }
           }
         }

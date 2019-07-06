@@ -1,0 +1,37 @@
+
+fun f_int_f32_u32_(int, f32, ...u32)
+fun f_u32_(...u32)
+
+fun entry(y ...u32) {
+  ls u32[]
+
+  // ok:
+  f_int_f32_u32_(1, 2.3)          // ok (empty rest)
+  f_int_f32_u32_(1, 2.3, y...)    // ok (spread y int[] as rest)
+  f_int_f32_u32_(1, 2.3, ls...)   // ok (spread ls int[] as rest)
+  f_int_f32_u32_(1, 2.3, u32[][3, 4]...)  // ok (spread _ int[] as rest); explicit list type
+  f_int_f32_u32_(1, 2.3, [3, 4]...)  // ok (spread _ int[] as rest); list type inferred
+  f_int_f32_u32_(1, 2.3, 3, 4.0)       // ok (synthetic rest; sugar for above)
+
+  // aaand just to make sure single-rest-arg works too
+  f_u32_()
+  f_u32_(1, 2, 3.0)
+  f_u32_(y...)
+  f_u32_(ls...)
+  f_u32_(u32[][3, 4]...)
+  f_u32_([3, 4]...)
+
+  // errors, argument count:
+  // f_int_f32_u32_(1, y...) // E: not enough arguments
+  // f_int_f32_u32_(1) // E: not enough arguments
+  // f_int_f32_u32_(1, 2, 3, y...) // E: too many arguments
+
+  // errors, argument types:
+  // f_int_f32_u32_(1, 2.3, y) // E: passing y (type ...u32) as argument where u32 is expected
+
+
+  // TODO: maybe
+  // // spread of tuples onto fixed arguments --TODO--
+  // t1 = (1, 2.3, 3, 4)
+  // f_int_f32_u32_(t1...)
+}

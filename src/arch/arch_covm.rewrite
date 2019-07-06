@@ -1,20 +1,29 @@
-
+// Lowering checks
 NilCheck -> LowNilCheck
 
+// Lowering arithmetic
 MulI32 -> MUL32
-
-// (ConstI32 [_]) -> (
-//   MOV32const [4] (ADD32 (ConstI32 [3]) (ConstI32 [1])) )
-
-// (TruncI16to8 x) -> x
-
-// (AddI64 x y) 'v.aux' -> (ADD64 y x) // xxx
-// (AddI64 _ y) 'v.aux != y' -> (ADD64 y)
-// (AddI64 x y) 'v.auxInt > x' -> (ADD64 x y)
-// (AddI64 x y) -> (ADD64 x y)
-
 (AddI(32|16|8) x y) -> (ADD32 x y)
 AddI64 -> ADD64
+
+// Lowering calls
+Call -> CALL
+
+// Lowering pointer arithmetic
+(OffPtr [off] ptr) -> (ADD32const [off] ptr)
+
+// Lowering loads
+(Load <t> ptr mem) "t.isI32() || t.isPtr()" -> (Load32 ptr mem)
+// (Load <t> ptr mem) && is16BitInt(t) -> (MOV16load ptr mem)
+// (Load <t> ptr mem) && (t.IsBoolean() || is8BitInt(t)) -> (MOVBload ptr mem)
+// (Load <t> ptr mem) && is32BitFloat(t) -> (MOVSSload ptr mem)
+// (Load <t> ptr mem) && is64BitFloat(t) -> (MOVSDload ptr mem)
+
+// Lowering stores
+(Store {t} ptr val mem) "(t as types.BasicType).isI32()" -> (Store32 ptr val mem)
+// (Store {t} ptr val mem) && t.(*types.Type).Size() == 2 -> (MOVWstore ptr val mem)
+// (Store {t} ptr val mem) && t.(*types.Type).Size() == 1 -> (MOVBstore ptr val mem)
+
 
 // // (NilCheck ptr mem) -> (LowNilCheck ptr mem)
 // // (ConstI32 [val]) -> (MOV32const [val])
@@ -30,3 +39,35 @@ AddI64 -> ADD64
 // optimizations
 (ADD64 (ConstI64 [x]) (ConstI64 [y])) -> (ConstI64 [x + y])
 (ADD32 (ConstI32 [x]) (ConstI32 [y])) -> (ConstI32 [x + y])
+
+// // fold constants into instructions
+// (ADDL x (MOVLconst [c])) -> (ADDLconst [c] x)
+// (ADDLcarry x (MOVLconst [c])) -> (ADDLconstcarry [c] x)
+// (ADCL x (MOVLconst [c]) f) -> (ADCLconst [c] x f)
+// (ADCL (MOVLconst [c]) x f) -> (ADCLconst [c] x f)
+
+// fold constants into memory operations
+(Load32 [off1] {sym} (ADD32const [off2] ptr) mem) "isI32(off1+off2)" ->
+  (Load32 [off1+off2] {sym} ptr mem)
+(Store32 [off1] {sym} (ADD32const [off2] ptr) val mem) "isI32(off1+off2)" ->
+  (Store32 [off1+off2] {sym} ptr val mem)
+
+// TODO: expand gen program to support unions on the right-hand side:
+// (Store(8|32|64) [off1] {sym} (ADD32const [off2] ptr) val mem)
+//   "isI32(off1+off2)" ->
+//   (Store(8|32|64) [off1+off2] {sym} ptr val mem)
+
+// (Load32  [off1] {sym} (ADDLconst [off2] ptr) mem) && is32Bit(off1+off2) -> (MOV(L|W|B|SS|SD)load  [off1+off2] {sym} ptr mem)
+// (MOV(L|W|B|SS|SD)store  [off1] {sym} (ADDLconst [off2] ptr) val mem) && is32Bit(off1+off2) -> (MOV(L|W|B|SS|SD)store  [off1+off2] {sym} ptr val mem)
+
+
+// misc
+// (ConstI32 [_]) -> (
+//   MOV32const [4] (ADD32 (ConstI32 [3]) (ConstI32 [1])) )
+
+// (TruncI16to8 x) -> x
+
+// (AddI64 x y) 'v.aux' -> (ADD64 y x) // xxx
+// (AddI64 _ y) 'v.aux != y' -> (ADD64 y)
+// (AddI64 x y) 'v.auxInt > x' -> (ADD64 x y)
+// (AddI64 x y) -> (ADD64 x y)

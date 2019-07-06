@@ -43,7 +43,7 @@ export interface Int64 {
   and(x :Int64) :Int64     // this & x
   or(x :Int64) :Int64      // this | x
   xor(x :Int64) :Int64     // this ^ x
-  shl(nbits :int) :Int64   // 
+  shl(nbits :int) :Int64   //
   shr_s(nbits :int) :Int64 // sign-replicating/arithmetic shift right
   shr_u(nbits :int) :Int64 // zero-replicating/logical shift right
   shr(nbits :int) :Int64 // shr_s for SInt64, shr_u for UInt64
@@ -808,7 +808,7 @@ export class SInt64 extends Int64Base implements Int64 {
   toSigned() {
     return this
   }
-  
+
   toUnsigned() {
     return new UInt64(this._low, this._high)
   }
@@ -848,7 +848,7 @@ export class SInt64 extends Int64Base implements Int64 {
 
 export class UInt64 extends Int64Base {
   static readonly MIN  :UInt64  //
-  static readonly MAX  :UInt64  // 
+  static readonly MAX  :UInt64  //
   static readonly ZERO :UInt64  // 0
   static readonly ONE  :UInt64  // 1
 

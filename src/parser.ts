@@ -74,6 +74,7 @@ import {
   t_nil,
   t_u32, t_i32, t_u64, t_i64,
   t_f64, t_f32,
+  t_int, t_uint,
   t_str0,
   t_list,
 } from './types'
@@ -2007,7 +2008,7 @@ export class Parser extends scanner.Scanner {
         x = new IntLit(p.pos, p.scope, p.int64val, t_u64, tok)
       }
     } else {
-      const t = p.int32val <= 0x7fffffff ? t_i32 : t_u32
+      const t = p.int32val <= 0x7fffffff ? t_int : t_uint
       x = new IntLit(p.pos, p.scope, p.int32val, t, tok)
     }
 

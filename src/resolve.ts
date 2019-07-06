@@ -472,10 +472,10 @@ export class TypeResolver extends ErrorReporter {
           x = convarg(x, wantRest)
           rest.push(x)
         }
-        if (rest.length == 0) {
-          // nil denotes empty rest
-          n.args.push(ast.builtInValues.nil)
-        }
+        // if (rest.length == 0) {
+        //   // nil denotes empty rest
+        //   n.args.push(ast.builtInValues.nil)
+        // }
       }
     }
 

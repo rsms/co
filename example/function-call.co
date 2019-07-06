@@ -1,35 +1,7 @@
+fun callee(a, b, c int) int {
+  a + b + c
+}
 
-// fun f_int_int_(z int, x ...int) int
-// fun f_int_(x ...int) int
-// fun f_int_int(x, y int) int
-fun f_int_f32_u32_(int, f32, ...u32) int
-
-fun entry(x int, y ...u32) f32 {
-  type t tuple
-  ls u32[]
-
-  // ok:
-  f_int_f32_u32_(1, 2.3)          // ok (empty rest)
-  f_int_f32_u32_(1, 2.3, y...)    // ok (spread y int[] as rest)
-  f_int_f32_u32_(1, 2.3, ls...)   // ok (spread ls int[] as rest)
-  f_int_f32_u32_(1, 2.3, u32[][3, 4]...)  // ok (spread _ int[] as rest); explicit list type
-  f_int_f32_u32_(1, 2.3, [3, 4]...)  // ok (spread _ int[] as rest); list type inferred
-  f_int_f32_u32_(1, 2.3, 3, 4.0)       // ok (synthetic rest; sugar for above)
-
-
-  // errors, argument count:
-  // f_int_f32_u32_(1, y...) // E: not enough arguments
-  // f_int_f32_u32_(1) // E: not enough arguments
-  // f_int_f32_u32_(1, 2, 3, y...) // E: too many arguments
-
-  // errors, argument types:
-  // f_int_f32_u32_(1, 2.3, y) // E: passing y (type ...u32) as argument where u32 is expected
-
-
-  // TODO: maybe
-  // // spread of tuples onto fixed arguments --TODO--
-  // t1 = (1, 2.3, 3, 4)
-  // f_int_f32_u32_(t1...)
-
-  0
+fun entry() int {
+  callee(1, 2, 3)
 }

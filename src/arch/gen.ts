@@ -19,6 +19,7 @@ import { ArchDescr, OpDescription, parseOpDescr, t as dtypes } from './describe'
 import * as sexpr from "../sexpr"
 import arch_generic from "./arch_generic_ops"
 import arch_covm from "./arch_covm_ops"
+import nummath from "../nummath"
 
 const archs :ArchDescr[] = [
   arch_generic,
@@ -197,7 +198,7 @@ function ruleGen(a :ArchDescr) {
     `}\n`
   )
 
-  print("---------------------\n" + tscode)
+  // print("---------------------\n" + tscode)
 
   print(`write ${rpath(outFile)}`)
   writeFileSync(outFile, tscode, "utf8")
@@ -500,6 +501,11 @@ interface RewriteRule {
 }
 
 
+const nmathFunctions = new Set<string>(
+  Object.keys(nummath).filter(k => typeof nummath[k] == "function")
+)
+
+
 // returns [transpiled code, helpers]
 function transpileCode(code :string, helpers :{[k:string]:string}) :string {
   let f :ts.SourceFile = ts.createSourceFile(
@@ -518,7 +524,7 @@ function transpileCode(code :string, helpers :{[k:string]:string}) :string {
   let transformers :ts.TransformerFactory<ts.Node>[] = [
     (context: ts.TransformationContext) :ts.Transformer<ts.Node> => {
       const visit: ts.Visitor = n => {
-        print(`visit ${ts.SyntaxKind[n.kind]}`)
+        // print(`visit ${ts.SyntaxKind[n.kind]}`)
         if (ts.isBinaryExpression(n)) {
           let fname = ""
           switch (n.operatorToken.kind) {
@@ -554,7 +560,7 @@ function transpileCode(code :string, helpers :{[k:string]:string}) :string {
               fname = "nmath.rshift";  break // >>
             case ts.SyntaxKind.GreaterThanGreaterThanGreaterThanToken:
               fname = "nmath.rshiftz";  break // >>>
-            default: print("BinaryExpression", n.operatorToken)
+            // default: print("BinaryExpression", n.operatorToken)
           }
           if (fname != "") {
             needsNumMath = true
@@ -575,6 +581,12 @@ function transpileCode(code :string, helpers :{[k:string]:string}) :string {
             needsNumMath = true
             let operand = ts.visitNode(n.operand, visit)
             return ts.createCall(ts.createIdentifier(fname), undefined, [operand])
+          }
+        } else if (ts.isCallExpression(n) && ts.isIdentifier(n.expression)) {
+          // remap functions
+          let fname = n.expression.escapedText.toString()
+          if (nmathFunctions.has(fname)) {
+            n.expression = ts.createIdentifier("nmath." + fname)
           }
         }
         return ts.visitEachChild(n, visit, context)
