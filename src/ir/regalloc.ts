@@ -17,8 +17,8 @@ import {
   nilRegInfo,
 } from './reg'
 
-// import { debuglog as dlog } from '../util'
-const dlog = function(..._ :any[]){} // silence dlog
+import { debuglog as dlog } from '../util'
+// const dlog = function(..._ :any[]){} // silence dlog
 
 const allocatorCache = new Map<Config,RegAllocator>()
 let allocator :RegAllocator|null = null
@@ -275,7 +275,8 @@ export class RegAllocator {
         let val = new ValState(v)
         a.values[v.id] = val
         // if (!t.isMemory() && !t.isVoid() && !t.isFlags() && !t.isTuple())
-        if (t.mem > 0 && !t.isTuple() && !v.reg && !opinfo[v.op].zeroWidth) {
+        if (!t.isMemory && !t.isTuple() && !v.reg) {
+          print(`needReg ${v}`)
           val.needReg = true
           val.rematerializeable = v.rematerializeable()
           // a.orig[v.id] = v
@@ -643,39 +644,6 @@ export class RegAllocator {
   }
 
 
-  // _usermapCache :Map<Value,Set<Value|Block>>|null = null
-
-  // getUserMap() {
-  //   const a = this
-  //   if (a._usermapCache) {
-  //     return a._usermapCache
-  //   }
-  //   let usermap = new Map<Value,Set<Value|Block>>()
-  //   for (let b of a.visitOrder) {
-  //     if (b.control) {
-  //       let s = usermap.get(b.control)
-  //       if (s) {
-  //         s.add(b)
-  //       } else {
-  //         usermap.set(b.control, new Set<Value|Block>([b]))
-  //       }
-  //     }
-  //     for (let v of b.values) {
-  //       for (let arg of v.args) {
-  //         let s = usermap.get(arg)
-  //         if (s) {
-  //           s.add(v)
-  //         } else {
-  //           usermap.set(arg, new Set<Value|Block>([v]))
-  //         }
-  //       }
-  //     }
-  //   }
-  //   a._usermapCache = usermap
-  //   return usermap
-  // }
-
-
   buildInterferenceGraph() :IntGraph {
     const a = this
     const f = a.f
@@ -723,12 +691,13 @@ export class RegAllocator {
       // visit instructions in reverse order
       for (let i = b.values.length-1; i >= 0; --i) {
         let v = b.values[i]
+        let vinfo = a.values[v.id]
 
         if (g.length == 0) {
           // very first value.
           // we know there are no live values; this is the first.
           assert(live.size == 0, "empty graph but has live set")
-          if (!v.reg) {
+          if (vinfo.needReg) {
             g.add(v.id)
           }
         } else {
@@ -739,7 +708,7 @@ export class RegAllocator {
           // `v2 = Copy v1` does not create an interference between v1 and v2
           // because the two live ranges have the same value and
           // therefore can occupy the same register.
-          if (v.op != ops.Copy) {
+          if (vinfo.needReg && v.op != ops.Copy) {
             // update interference graph to add an edge from the definition v
             // to each other value alive at this point
             for (let id2 of live) {
@@ -1047,5 +1016,37 @@ export class RegAllocator {
     return s.trimRight()
   }
 
+
+  // _usermapCache :Map<Value,Set<Value|Block>>|null = null
+
+  // getUserMap() {
+  //   const a = this
+  //   if (a._usermapCache) {
+  //     return a._usermapCache
+  //   }
+  //   let usermap = new Map<Value,Set<Value|Block>>()
+  //   for (let b of a.visitOrder) {
+  //     if (b.control) {
+  //       let s = usermap.get(b.control)
+  //       if (s) {
+  //         s.add(b)
+  //       } else {
+  //         usermap.set(b.control, new Set<Value|Block>([b]))
+  //       }
+  //     }
+  //     for (let v of b.values) {
+  //       for (let arg of v.args) {
+  //         let s = usermap.get(arg)
+  //         if (s) {
+  //           s.add(v)
+  //         } else {
+  //           usermap.set(arg, new Set<Value|Block>([v]))
+  //         }
+  //       }
+  //     }
+  //   }
+  //   a._usermapCache = usermap
+  //   return usermap
+  // }
 }
 

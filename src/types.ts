@@ -37,6 +37,7 @@ export class Type {
   isSignedInt = false    // true for signed integers
   isUnsignedInt = false  // true for unsigned integers
   isUnresolved = false   // true for unresolved types
+  isMemory = false       // true for special mem type
 
   constructor(mem :Mem = Mem.None) {
     this.mem = mem
@@ -156,6 +157,12 @@ export class UIntType extends IntType {
   isUnsignedInt = true
 }
 
+// mem type is a special type used by SSA IR to indicate an operation which
+// affects memory and thus does not write to a register.
+export class MemType extends UIntType {
+  isMemory = true
+}
+
 // basic type constants
 // Their names MUST BE THE SAME as their exported variable names sans "t_".
 // i.e. a type exported as t_foo should be named "foo".
@@ -177,6 +184,7 @@ export const
 , t_uint    = new UIntType(Mem.Int,  'uint')
 , t_int     = new SIntType(Mem.Int,  'int')
 , t_uintptr = new UIntType(Mem.Ptr,  'uintptr')
+, t_mem     = new MemType(Mem.Ptr,  'mem')
   // floating-point types
 , t_f32     = new FloatType(Mem.f32, 'f32')
 , t_f64     = new FloatType(Mem.f64, 'f64')

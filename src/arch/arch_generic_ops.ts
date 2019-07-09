@@ -30,7 +30,7 @@ const ops :OpDescription[] = [
   ["Phi", -1, ZeroWidth], // select an argument based on which predecessor block we came from
   ["Copy", 1],  // output = arg0
   ["Arg", ZeroWidth, {aux: "Int32"}], // argument to current function. aux=position.
-  ["InitMem", ZeroWidth],                               // memory input to the function.
+  ["InitMem", 0, ZeroWidth, t.mem],  // memory input to a function.
   ["CallArg", 1, ZeroWidth], // argument for function call
   ["NilCheck", 2, NilCheck, FaultOnNilArg0], // panic if arg0 is nil. arg1=mem.
 
@@ -70,10 +70,10 @@ const ops :OpDescription[] = [
 
   // memory
   ["Load", 2],          // Load from arg0. arg1=mem
-  ["Store", 3, t.addr, {aux: "Type"}], // Store arg1 to arg0.  arg2=mem, aux=type. Ret mem.
-  ["Move", 3, t.addr],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
-  ["Zero", 2, t.addr],  // arg0=destptr, arg1=addr, auxInt=size, aux=type
-  ["OffPtr", 1, t.addr, {aux: "Int64"}], // offset pointer. arg0 + auxint. arg0 and res is mem
+  ["Store", 3, t.mem, {aux: "Type"}], // Store arg1 to arg0.  arg2=mem, aux=type. Ret mem.
+  ["Move", 3, t.mem],  // arg0=destptr, arg1=srcptr, arg2=addr, aux=type
+  ["Zero", 2, t.mem],  // arg0=destptr, arg1=addr, auxInt=size, aux=type
+  ["OffPtr", 1, t.mem, {aux: "Int64"}], // offset pointer. arg0 + auxint. arg0 and res is mem
 
   // resgiter allocation spill and restore
   ["StoreReg", 1],
