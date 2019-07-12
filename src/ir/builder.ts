@@ -4,17 +4,26 @@ import { token } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
 import * as ast from '../ast'
 import * as types from '../types'
-import { Type, BasicType, FunType, t_nil, t_bool, UIntType } from '../types'
+import { Type, BasicType, FunType, t_nil, t_bool, t_mem, UIntType } from '../types'
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops, opinfo } from "./ops"
-import { Value, Block, BlockKind, Fun, Pkg, nilValue } from './ssa'
+import { Value, Block, BlockKind, Fun, Pkg, BranchPrediction, nilValue } from './ssa'
 import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'
 import { printir } from './repr'
 import { LocalSlot } from './localslot'
 
+
+// debug logging
 import { debuglog as dlog } from '../util'
 // const dlog = function(..._ :any[]){} // silence dlog
+
+// const dlogPhi = dlog
+const dlogPhi = function(..._ :any[]){} // silence
+
+// const dlogVar = dlog
+const dlogVar = function(..._ :any[]){}
+
 
 const bitypes = ast.builtInTypes
 
@@ -59,6 +68,9 @@ export class IRBuilder {
     // blocks that are sealed after they have started. This happens when preds
     // are not known at the time a block starts, but is known and registered
     // before the block ends.
+
+  breakTo :Block|null = null
+    // Nearest block. For unlabeled "break".
 
   startmem :Value  // initial function memory  (InitMem)
   sp       :Value  // current function's SP (stack pointer)
@@ -160,7 +172,7 @@ export class IRBuilder {
       let entries = s.incompletePhis.get(b)
       if (entries) {
         for (let [name, phi] of entries) {
-          dlog(`complete pending phi ${phi} (${name})`)
+          dlogPhi(`complete pending phi ${phi} (${name})`)
           s.addPhiOperands(name, phi)
         }
         s.incompletePhis.delete(b)
@@ -281,13 +293,14 @@ export class IRBuilder {
 
     let funtype = x.type as FunType
     let f = new Fun(
+      r.config,
       funtype,
       x.name ? x.name.value : null,
       x.sig.params.length
     )
 
     // Add initial memory state, SP and SB to top of entry block
-    r.startmem = f.entry.newValue0(ops.InitMem, r.addrtype)
+    r.startmem = f.entry.newValue0(ops.InitMem, t_mem)
     r.sp = f.entry.newValue0(ops.SP, r.addrtype)
     r.sb = f.entry.newValue0(ops.SB, r.addrtype)
 
@@ -313,6 +326,9 @@ export class IRBuilder {
 
     let bodyval = r.block(x.body as ast.Expr)
 
+    printir(f)
+    dlog(`r.b = ${r.b}`)
+
     if (r.b as any) {
       // end last block if not already ended
       r.b.kind = BlockKind.Ret
@@ -331,8 +347,12 @@ export class IRBuilder {
     assert((r as any).b == null,
       "function exit block not ended")
 
-    assert(f.blocks[f.blocks.length-1].kind == BlockKind.Ret,
-      "last block in function is not BlockKind.Ret")
+    assert(
+      f.blocks[f.blocks.length-1].kind == BlockKind.Ret,
+      `last block ${f.blocks[f.blocks.length-1]} in function ` +
+      `is not BlockKind.Ret ` +
+      `(instead it is ${BlockKind[f.blocks[f.blocks.length-1].kind]})`
+    )
     // assert(f.tailb.kind == BlockKind.Ret,
     //   "last block in function is not BlockKind.Ret")
 
@@ -356,28 +376,15 @@ export class IRBuilder {
   block(x :ast.Expr) :Value|null {
     const r = this
     if (x instanceof ast.Block) {
-      let end = x.list.length
-      let lasti = end - 1
-      for (let i = 0; i != end; ++i) {
-        if (!r.b) {
-          dlog('block ended early')
-          // block ended early (i.e. from "return")
-          r.diag('warn', `unreachable code`, x.list[i].pos)
-          break
-        }
-        r.stmt(x.list[i], i == lasti)
-      }
-      return null
-    } else {
-      return r.expr(x)
-      // r.stmt(x, /*isLast=*/true)
+      return r.stmtList(x.list) // returns last expr, or null
     }
+    return r.expr(x)
   }
 
 
   // stmt adds one or more TAC to block b in function f from statement s
   //
-  stmt(s :ast.Stmt, isLast :bool = false) {
+  stmt(s :ast.Stmt, isLast :bool = false) :Value|null {
     const r = this
 
     if (s instanceof ast.IfExpr) {
@@ -386,15 +393,11 @@ export class IRBuilder {
     } else if (s instanceof ast.ReturnStmt) {
       r.ret(r.expr(s.result))
 
-    } else if (s instanceof ast.WhileStmt) {
-      r.while_(s)
+    } else if (s instanceof ast.ForStmt) { // includes WhileStmt
+      r.for_(s)
 
     } else if (s instanceof ast.Expr) {
-      if (!isLast && s instanceof ast.Ident) {
-        r.diag('warn', `unused expression`, s.pos)
-      } else {
-        r.expr(s)
-      }
+      return r.expr(s)
 
     } else if (s instanceof ast.VarDecl) {
       if (s.values) {
@@ -417,22 +420,38 @@ export class IRBuilder {
           r.vars.set(id.value, v)
         }
       }
-
+    // } else if (s instanceof ast.InlineMark) {
+    //   s.newValue1I(ssa.OpInlMark, types.TypeVoid, n.Xoffset, s.mem())
     } else {
       dlog(`TODO: handle ${s.constructor.name}`)
     }
+    return null
+  }
+
+
+  stmtList(v :ast.Stmt[]) :Value|null {
+    const s = this
+    let i = 0
+    if (v.length > 0) while (true) {
+      assert(s.b)
+      let x = s.stmt(v[i++])
+      if (i == v.length) {
+        return x
+      }
+    }
+    return null
   }
 
 
   ret(val :Value|null) {
-    const r = this
-    let b = r.endBlock()
+    const s = this
+    let b = s.endBlock()
     b.kind = BlockKind.Ret
     b.setControl(val)
   }
 
 
-  // while_ builds a conditional loop.
+  // for_ builds a conditional loop.
   //
   // The current block is first ended as a simple "cont" and a new block
   // is created for the loop condition, which when true branches to
@@ -460,133 +479,122 @@ export class IRBuilder {
   //   ret
   //
   //
-  while_(n: ast.WhileStmt) {
+  for_(n: ast.ForStmt) {
+    // Note: WhileStmt is a ForStmt without init or incr
     const s = this
 
-    // end "entry" block (whatever block comes before "while")
-    let entryb = s.endBlock()
-    assert(entryb.kind == BlockKind.Plain)
-    // create "if" block, for testing the while condition
-    let ifb = s.f.newBlock(BlockKind.If)
-    entryb.succs = [ifb] // entry -> if
-    ifb.preds = [entryb] // if <- entry[, then]
-    // start "if" block
-    s.startBlock(ifb) // note: not sealed
-    let control = s.expr(n.cond) // condition for looping
-
-    // potentially inline or eliminate branches when control is constant
-    if (s.config.optimize && opinfo[control.op].constant) {
-      if (control.auxIsZero()) {
-        // while loop never taken
-
-        // convert condition block to continuation block and seal it
-        ifb.kind = BlockKind.Plain
-        s.sealBlock(ifb)  // no more preds
-
-        printir(entryb)
-
-        // Note: later fuse pass will combine the two immediately-adjacent
-        // blocks into one, so no need to do that here. It's non-trivial.
-
-        return
-      }
-      // else:
-      //   "then" branch always taken.
-      //
-      //   TODO:
-      //     - search body for a break condition
-      //     - search body for mutations of control
-      //
-      //   If no break or no control mutation is found, then the loop is
-      //   infinite and we should either emit an error (or a warning and
-      //   remove the branch)
-      //
-      //   For now, we have to assume there's a break or control mutation
-      //   in the loop body, so continue with generating the branch.
+    // initializing code (may be none)
+    if (n.init) {
+      s.stmt(n.init)
     }
-    // else:
-    //   control is probably not constant
-    //
-    //   Later on when we have completed building the while construct, we
-    //   traverse possible Phi args of control to see if that makes it
-    //   constant If an arg of the control is used in the while loop, which
-    //   is common, it will be referenced by an incomplete Phi, which would
-    //   cause the constant-evaluator run in expr() to see that the operator
-    //   is variable, since the constant-evaluator doesn't have knowledge of
-    //   the fact that the arg is mutated only in the loop body.
-    //
-    //   But we know that. So, look at control.args and if an arg is an
-    //   incomplete Phi, then jump to the partial phi.arg and temporarily
-    //   replace the control.arg[N] with the phi.arg and attempt to run
-    //   the constant-evaluator. If the result is constant, we can perform
-    //   the steps above in the `if (opinfo[control.op].constant) {...}` block.
-    //
 
-    // end "if" block and assign condition
-    ifb = s.endBlock()
-    ifb.setControl(control)
+    let bCond = s.f.newBlock(BlockKind.Plain)
+    let bBody = s.f.newBlock(BlockKind.Plain)
+    let bIncr = s.f.newBlockNoAdd(BlockKind.Plain)
+    let bEnd  = s.f.newBlockNoAdd(BlockKind.Plain)
 
-    // create "then" block, to be visited on each loop iteration
-    let thenb = s.f.newBlock(BlockKind.Plain)
-    thenb.preds = [ifb]
-    // start "then" block (seal as well; preds are complete)
-    s.startSealedBlock(thenb)
-    s.block(n.body) // body (note: ignore return value)
-    // end "then" block
-    thenb = s.endBlock()
-    thenb.succs = [ifb] // thenb -> ifb
+    bBody.pos = n.pos
 
-    // complete & seal "if" block late, since it depends on "then" block
-    ifb.preds = [entryb, thenb] // if <- entry, then
-    s.sealBlock(ifb) // "if" block sealed here
+    // end "entry" block (whatever block comes before "while")
+    let bEntry = s.endBlock()
+    dlog(`for ${n} endBlock => ${bEntry}`)
+    if (!bEntry.sealed) {
+      s.sealBlock(bEntry) // all preds of bEntry are known
+    }
 
-    // create "next" block, for whatever comes after the "while"
-    let nextb = s.f.newBlock(BlockKind.Plain)
-    nextb.preds = [ifb] // next <- if, then
-    ifb.succs = [thenb, nextb] // if -> next, then
-    // start "next" block and return
-    s.startSealedBlock(nextb)
+    // connect entry -> condition
+    bEntry.addEdgeTo(bCond)
 
-    // possibly eliminate dead while loop.
-    // (See notes earlier in this function.)
-    // if (s.config.optimize && !opinfo[control.op].constant && opinfo[control.op].argLen > 0) {
-    //   let args :Value[]|undefined
-    //   for (let i = 0; i < control.args.length; i++) {
-    //     let arg = control.args[i]
-    //     if (arg.op === ops.Phi && arg.b === ifb) {
-    //       if (!args) {
-    //         args = control.args.slice() // copy
-    //       }
-    //       assert(ifb.preds[0] === entryb, `entryb not at expected index`)
-    //       args[i] = arg.args[0]
-    //     }
-    //   }
-    //   // args will be set only if we found at least one Phi in control.args
-    //   if (args) {
-    //     // attempt constant evaluation of control value
-    //     let constctrl :Value|null = null
-    //     if (args.length == 2) {
-    //       constctrl = optcf_op2(ifb, control.op, args[0], args[1])
-    //     } else if (args.length == 1) {
-    //       constctrl = optcf_op1(ifb, control.op, args[0])
-    //     }
-    //     if (constctrl && constctrl.auxIsZero()) {
-    //       // while loop never taken -- shortcut entryb -> nextb
-    //       removeEdge(entryb, 0)
-    //       entryb.succs = [nextb]
-    //       removeEdge(ifb, 0)
-    //       nextb.preds = [entryb]
-    //       // s.f.removeBlock(ifb)
-    //       // s.f.removeBlock(thenb)
-    //     }
-    //   }
-    // }
+    // condition
+    s.startBlock(bCond)
+    let unconditional = true
+    if (n.cond) {
+      unconditional = false
+      let cond = s.expr(n.cond) // condition for looping
+      if (s.config.optimize && opinfo[cond.op].constant) {
+        // constant condition
+        if (cond.auxIsZero()) {
+          // while loop never taken
+          // convert condition block to continuation block and seal it
+          bCond.kind = BlockKind.Plain
+          s.sealBlock(bCond)  // no more preds
+          s.f.removeBlock(bBody)
+          s.f.freeBlock(bIncr)
+          s.f.freeBlock(bEnd)
+          return
+        } else {
+          // loop unconditionally
+          unconditional = true
+          // TODO: produce error if there is no break or labeled continue
+          // inside the body.
+        }
+      }
+      if (!unconditional) {
+        let b = s.endBlock()
+        b.kind = BlockKind.If
+        b.setControl(cond)
+        b.likely = BranchPrediction.Likely
+        b.addEdgeTo(bBody) // yes
+        b.addEdgeTo(bEnd) // no
+      }
+    }
+    if (unconditional) {
+      let b = s.endBlock()
+      b.kind = BlockKind.Plain
+      b.addEdgeTo(bBody) // yes (unconditional)
+    }
+
+    // break/continue
+    let prevBreak = s.breakTo
+    s.breakTo = bEnd
+    // TODO: continue
+    // TODO: labels
+
+    // body
+    s.startSealedBlock(bBody) // all preds of bBody are known
+    s.block(n.body) // note: intentionally ignore return value
+
+    // break/continue
+    s.breakTo = prevBreak
+
+    // end body
+    let bodyEnd = s.endBlock()
+    if (bodyEnd.values.length == 0) {
+      assert(bodyEnd.preds.length == 1)
+      let pred0 = bodyEnd.preds[0]!
+      s.f.removeBlock(bodyEnd)
+      bodyEnd = pred0
+    }
+
+    // incr?
+    if (n.incr) {
+      bodyEnd.addEdgeTo(bIncr)
+      s.f.blocks.push(bIncr)
+      s.startSealedBlock(bIncr)
+      if (n.incr) {
+        s.stmt(n.incr)
+      }
+      let b = s.endBlock()
+      b.addEdgeTo(bCond)
+    } else {
+      bodyEnd.addEdgeTo(bCond)
+      s.f.freeBlock(bIncr)
+    }
+
+    // seal cond block
+    s.sealBlock(bCond) // all preds of bCond are known
+
+    // start continuation block
+    s.f.blocks.push(bEnd)
+    s.startSealedBlock(bEnd)
 
     // add comments
     if (s.flags & IRBuilderFlags.Comments) {
-      ifb.comment = 'while'
-      thenb.comment = 'then'
-      nextb.comment = 'endwhile'
+      let prefix = n instanceof ast.WhileStmt ? "while" : "for"
+      bCond.comment = `${prefix}.b${bCond.id}.cond`
+      bIncr.comment = `${prefix}.b${bCond.id}.incr`
+      bBody.comment = `${prefix}.b${bCond.id}.body`
+      bEnd.comment  = `${prefix}.b${bCond.id}.end`
     }
   }
 
@@ -644,6 +652,7 @@ export class IRBuilder {
 
     // create blocks for then and else branches
     let thenb = r.f.newBlock(BlockKind.Plain)
+    let elsebidx = r.f.blocks.length
     let elseb = r.f.newBlock(BlockKind.Plain)
     ifb.succs = [thenb, elseb] // if -> then, else
 
@@ -657,6 +666,7 @@ export class IRBuilder {
       // if cond then A else B end
 
       // allocate "cont" block
+      let contbidx = r.f.blocks.length
       let contb = r.f.newBlock(BlockKind.Plain)
 
       // create "else" block
@@ -670,6 +680,11 @@ export class IRBuilder {
       contb.preds = [thenb, elseb] // cont <- then, else
       r.startSealedBlock(contb)
 
+      // move ending block to end
+      r.f.moveBlockToEnd(contbidx)
+      // r.f.blocks.copyWithin(contbidx, contbidx+1)
+      // r.f.blocks[r.f.blocks.length-1] = contb
+
       if (r.flags & IRBuilderFlags.Comments) {
         thenb.comment = 'then'
         elseb.comment = 'else'
@@ -681,6 +696,10 @@ export class IRBuilder {
       elseb.preds = [ifb, thenb] // else <- if, then
       elseb.succs = []
       r.startSealedBlock(elseb)
+
+      // move ending block to end
+      r.f.blocks.copyWithin(elsebidx, elsebidx+1)
+      r.f.blocks[r.f.blocks.length-1] = elseb
 
       if (r.flags & IRBuilderFlags.Comments) {
         thenb.comment = 'then'
@@ -1069,10 +1088,10 @@ export class IRBuilder {
     assert(v.type instanceof BasicType)
 
     // compute address (SP + stack offset)
-    let addr = s.b.newValue1(ops.OffPtr, s.addrtype, s.sp, s.spoffs)
+    let addr = s.b.newValue1(ops.OffPtr, t_mem, s.sp, s.spoffs)
 
     // Store v to addr. arg2=mem, aux=type
-    s.stacktop = s.b.newValue3(ops.Store, s.addrtype, addr, v, s.stacktop, 0, v.type)
+    s.stacktop = s.b.newValue3(ops.Store, t_mem, addr, v, s.stacktop, 0, v.type)
 
     // increment offset to stack pointer
     s.spoffs += v.type.size
@@ -1083,7 +1102,7 @@ export class IRBuilder {
     assert(t.size <= s.addrtype.size)
 
     // compute address (SP + stack offset)
-    let addr = s.b.newValue1(ops.OffPtr, s.addrtype, s.sp, s.spoffs)
+    let addr = s.b.newValue1(ops.OffPtr, t_mem, s.sp, s.spoffs)
 
     // load return value at spoffs of type rt
     s.stacktop = s.b.newValue2(ops.Load, t, addr, s.stacktop)
@@ -1133,7 +1152,7 @@ export class IRBuilder {
     }
 
     // generate call op
-    s.stacktop = s.b.newValue1(ops.Call, types.t_uintptr, s.stacktop, x.args.length, funid.value)
+    s.stacktop = s.b.newValue1(ops.Call, t_mem, s.stacktop, x.args.length, funid.value)
 
     // load return value off of the stack
     return s.stackPop(s.concreteType(ft.result as BasicType)) // == s.stacktop
@@ -1182,7 +1201,7 @@ export class IRBuilder {
 
   writeVariable(name :ByteStr, v :Value, b? :Block) {
     const s = this
-    dlog(`${b || s.b} ${name} = ${v.op} ${v}`)
+    dlogVar(`${b || s.b} ${name} = ${v.op} ${v}`)
     if (!b || b === s.b) {
       s.vars.set(name, v)
     } else {
@@ -1216,7 +1235,7 @@ export class IRBuilder {
 
   addIncompletePhi(phi :Value, name :ByteStr, b :Block) {
     const s = this
-    dlog(`${b} ${phi} var=${name}`)
+    dlogPhi(`${b} ${phi} var=${name}`)
     let names = s.incompletePhis ? s.incompletePhis.get(b) : null
     if (!names) {
       names = new Map<ByteStr,Value>()
@@ -1235,25 +1254,25 @@ export class IRBuilder {
 
     if (!b.sealed) {
       // incomplete CFG
-      dlog(`${b} ${name} not yet sealed`)
+      dlogPhi(`${b} ${name} not yet sealed`)
       val = b.newPhi(t)
       s.addIncompletePhi(val, name, b)
 
     } else if (b.preds.length == 1) {
-      dlog(`${b} ${name} common case: single predecessor ${b.preds[0]}`)
+      dlogPhi(`${b} ${name} common case: single predecessor ${b.preds[0]}`)
       // Optimize the common case of one predecessor: No phi needed
       val = s.readVariable(name, t, b.preds[0])
-      dlog(`found ${name} : ${val}`)
+      dlogPhi(`found ${name} : ${val}`)
 
     } else if (b.preds.length == 0) {
-      dlog(`${b} ${name} uncommon case: outside of function`)
+      dlogPhi(`${b} ${name} uncommon case: outside of function`)
       // entry block
       val = s.readGlobal(name)
       // TODO: consider just returning the value here instead of falling
       // through and causing writeVariable.
 
     } else {
-      dlog(`${b} ${name} uncommon case: multiple predecessors`)
+      dlogPhi(`${b} ${name} uncommon case: multiple predecessors`)
       // Break potential cycles with operandless phi
       val = b.newPhi(t)
       s.writeVariable(name, val, b)
@@ -1269,12 +1288,12 @@ export class IRBuilder {
     assert(phi.op === ops.Phi)
     assert(phi.b.preds.length > 0, 'phi in block without predecessors')
     // Determine operands from predecessors
-    dlog(`${name} phi=${phi}`)
+    dlogPhi(`${name} phi=${phi}`)
     for (let pred of phi.b.preds) {
-      dlog(`  ${pred}`)
+      dlogPhi(`  ${pred}`)
       let v = s.readVariable(name, phi.type, pred)
       if (v !== phi) {
-        dlog(`  ${pred} ${v}<${v.op}>`)
+        dlogPhi(`  ${pred} ${v}<${v.op}>`)
         phi.addArg(v)
       }
     }

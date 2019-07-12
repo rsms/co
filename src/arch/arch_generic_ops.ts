@@ -32,13 +32,17 @@ const ops :OpDescription[] = [
   ["Arg", ZeroWidth, {aux: "Int32"}], // argument to current function. aux=position.
   ["InitMem", 0, ZeroWidth, t.mem],  // memory input to a function.
   ["CallArg", 1, ZeroWidth], // argument for function call
-  ["NilCheck", 2, NilCheck, FaultOnNilArg0], // panic if arg0 is nil. arg1=mem.
+  ["NilCheck", 2, t.nil, NilCheck, FaultOnNilArg0], // panic if arg0 is nil. arg1=mem.
+
+  // InlMark marks the start of an inlined function body. Its AuxInt field
+  // distinguishes which entry in the local inline tree it is marking.
+  ["InlMark", 1, t.nil, {aux: "Int32"}], // arg[0]=mem, returns void.
 
   // function calls
   // Arguments to the call have already been written to the stack.
   // Return values appear on the stack.
-  ["Call", 1, Call, t.addr, {aux: "SymOff"}], // call function at aux. auxint=arglen, arg0=mem, returns mem
-  ["TailCall", 1, Call, t.addr, {aux: "SymOff"}], // call function
+  ["Call", 1, Call, t.mem, {aux: "SymOff"}], // call function at aux. auxint=arglen, arg0=mem, returns mem
+  ["TailCall", 1, Call, t.mem, {aux: "SymOff"}], // call function
   // ["ClosureCall", 3, Call, {aux: "Int64"}] // arg0=code pointer, arg1=context ptr, arg2=memory.  aux=arg size.
   // ["ICall", 2, Call, {aux: "Int64"}] // interface call.  arg0=code pointer, arg1=memory, aux=arg size.
 
@@ -75,10 +79,9 @@ const ops :OpDescription[] = [
   ["Zero", 2, t.mem],  // arg0=destptr, arg1=addr, auxInt=size, aux=type
   ["OffPtr", 1, t.mem, {aux: "Int64"}], // offset pointer. arg0 + auxint. arg0 and res is mem
 
-  // resgiter allocation spill and restore
+  // register allocation spill and restore
   ["StoreReg", 1],
   ["LoadReg", 1],
-
 
   // 2-input arithmetic
   // Types must be consistent with typing.

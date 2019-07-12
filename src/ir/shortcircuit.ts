@@ -129,7 +129,7 @@ export function shortcircuit(f :Fun) {
       let ti = t.preds.indexOf(b)
 
       // Remove b's incoming edge from p.
-      b.removeNthPred(i)
+      b.removePred(i)
       let n = b.preds.length
       v.args[i].uses--
       v.args[i] = v.args[n]

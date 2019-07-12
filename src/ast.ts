@@ -322,12 +322,55 @@ export class ReturnStmt extends Stmt {
 }
 
 
-export class WhileStmt extends Stmt {
-  constructor(pos :Pos, scope :Scope,
-  public cond :Expr, // condition for executing the body
-  public body :Expr,
-  ) {
+// "for" init ; cond ; incr { body }
+export class ForStmt extends Stmt {
+  init :Stmt|null
+  cond :Expr|null // condition for executing the body. null=unconditional
+  incr :Stmt|null
+  body :Expr
+  constructor(pos :Pos, scope :Scope, init :Stmt|null, cond :Expr|null, incr :Stmt|null, body :Expr) {
     super(pos, scope)
+    this.init = init
+    this.cond = cond
+    this.incr = incr
+    this.body = body
+  }
+}
+
+
+// "while" cond { body }
+export class WhileStmt extends ForStmt {
+  constructor(pos :Pos, scope :Scope, cond :Expr|null, body :Expr) {
+    super(pos, scope, null, cond, null, body)
+  }
+}
+
+
+// // "for" assignment "in" expr { body }
+// export class ForInStmt extends Stmt {
+//   init :Stmt|null
+//   cond :Expr|null // condition for executing the body. null=unconditional
+//   incr :Stmt|null
+//   body :Expr
+//   constructor(pos :Pos, scope :Scope, init :Stmt|null, cond :Expr|null, incr :Stmt|null, body :Expr) {
+//     super(pos, scope)
+//     this.cond = cond
+//     this.body = body
+//   }
+// }
+
+
+// BranchStmt = BreakStmt | ContStmt
+// BreakStmt  = "break" label?
+// ContStmt   = "continue" label?
+//
+export class BranchStmt extends Stmt {
+  tok   :token // BREAK | CONTINUE
+  label :Ident|null = null
+
+  constructor(pos :Pos, scope :Scope, tok :token) {
+    super(pos, scope)
+    this.tok = tok
   }
 }
 

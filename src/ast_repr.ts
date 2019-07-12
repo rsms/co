@@ -13,6 +13,8 @@ import {
   Field,
   ReturnStmt,
   WhileStmt,
+  ForStmt,
+  BranchStmt,
 
   ImportDecl,
   VarDecl,
@@ -237,10 +239,29 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     )
   }
 
-  if (n instanceof WhileStmt) {
+  if (n instanceof ForStmt) {
+    if (n instanceof WhileStmt) {
+      //
+      return (
+        "(while " +
+        (n.cond ? repr1(n.cond, nl2, c) + " " : "") +
+        repr1(n.body, nl2, c) + newline + ')'
+      )
+    }
     return (
-      '(while ' + repr1(n.cond, nl2, c) + ' ' +
-      repr1(n.body, nl2, c) + newline + ')'
+      "(for " +
+      (n.init ? repr1(n.init, nl2, c) + " " : "() ") +
+      (n.cond ? repr1(n.cond, nl2, c) + " " : "() ") +
+      (n.incr ? repr1(n.incr, nl2, c) + " " : "() ") +
+      repr1(n.body, nl2, c) + newline + ")"
+    )
+  }
+
+  if (n instanceof BranchStmt) {
+    return (
+      `(${tokstr(n.tok)}` +
+      (n.label ? " " + repr1(n.label, nl2, c) : "") +
+      ")"
     )
   }
 

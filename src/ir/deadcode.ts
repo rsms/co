@@ -2,9 +2,10 @@ import { Value, Block, BlockKind, Fun, BranchPrediction } from './ssa'
 import { phielimValue } from './phielim'
 import { copyelim } from './copyelim'
 import { ops, opinfo } from "./ops"
+import { printir } from './repr'
 
-// import { debuglog as dlog } from '../util'
-const dlog = function(..._ :any[]){} // silence dlog
+import { debuglog as dlog } from '../util'
+// const dlog = function(..._ :any[]){} // silence dlog
 
 
 // deadcode removes dead code from f
@@ -17,11 +18,13 @@ export function deadcode(f :Fun) {
 
   // Find reachable blocks.
   let reachable = reachableBlocks(f)
-  dlog(`reachable blocks:`,
+
+  // debug log
+  dlog(`reachable blocks:  ` +
     reachable
-      .map((reachable, id) => reachable ? id : undefined)
+      .map((reachable, id) => reachable ? "b"+id : undefined)
       .filter(id => id !== undefined)
-      .join('  ')
+      .join("  ")
   )
 
   // remove edges from dead to live code
@@ -29,12 +32,14 @@ export function deadcode(f :Fun) {
     if (reachable[b.id]) {
       continue
     }
-    let nsuccs = b.succs ? b.succs.length : 0
-    for (let i = 0; i < nsuccs; ) {
-      let e = b.succs[i]
-      if (reachable[e.id]) {
+    dlog(`${b} is dead; remove edges to live blocks`)
+    for (let i = 0; i < b.succs.length;) {
+      let sb = b.succs[i]
+      if (reachable[sb.id]) {
+        dlog(`  remove edge ${sb} -> ${b}`)
         removeEdge(b, i)
       } else {
+        // sb not reachable (no need to disconnect)
         i++
       }
     }
@@ -60,43 +65,96 @@ export function deadcode(f :Fun) {
   let live = liveValues(f, reachable)
   dlog(`live values:`, Object.keys(live).map(k => 'v' + k).join(', '))
 
-
   // Remove dead & duplicate entries from namedValues map.
-  let s = new Set<Value>()
+  let s = new Set<int>()
+  // let i = 0
   for (let [key, e] of f.namedValues) {
-    // let loc = e.local
     let j = 0
     s.clear()
-    for (let v of e.values) {
-      if (live[v.id] && !s.has(v)) {
-        e.values[j] = v
+    let values = e.values
+    for (let v of values) {
+      if (live[v.id] && !s.has(v.id)) {
+        values[j] = v
         j++
-        s.add(v)
+        s.add(v.id)
       }
     }
     if (j == 0) {
       f.namedValues.delete(key)
     } else {
-      for (let k = e.values.length - 1; k >= j; k--) {
-        e.values[k] = undefined as any as Value
-      }
-      e.values.length = j
+      // f.names[i] = key
+      // i++
+      // for (let k = values.length - 1; k >= j; k--) {
+      //   // values[k].uses--
+      //   ;(values as any)[k] = null
+      // }
+      // e.values = values.slice(0, j)
+      values.length = j
     }
   }
+  // f.names.length = i
 
-  dlog(`live names':`, Array.from(f.namedValues.keys()).join(', '))
+  dlog(`live names:`, Array.from(f.namedValues.keys()).join(', '))
 
-  // Unlink values and conserve statement boundaries
+  // Unlink values
   for (let b of f.blocks) {
     if (!reachable[b.id]) {
       b.setControl(null)
+      // for (let v of b.values) {
+      //   // v.uses = 0
+      //   v.resetArgs()
+      // }
+      // continue
     }
+    // dlog(`${b}`)
     for (let v of b.values) {
       if (!live[v.id]) {
+        // dlog(`  ${v}.resetArgs() ${v.args}`)
+        // for (let arg of v.args) {
+        //   // dlog(`  ${arg}.resetArgs()`)
+        //   arg.resetArgs()
+        // }
         v.resetArgs()
+      } //else dlog(`  ${v}   (keep live)`)
+    }
+  }
+
+  print('———————————————————————————-')
+  printir(f)
+
+  // decrement use counters of unused args and reduce Phis
+  for (let b of f.blocks) {
+    if (!reachable[b.id]) {
+      continue
+    }
+    for (let v of b.values) {
+      if (v.op == ops.Phi) {
+        let args = v.args
+        if (live[v.id]) {
+          let i = 0
+          for (let a of v.args) {
+            if (live[a.id]) {
+              dlog(`phireduce keep ${v}[${a}]`)
+              v.args[i++] = a
+            } else {
+              dlog(`phireduce remove ${v}[${a}]`)
+              a.uses--
+            }
+          }
+          v.args.length = i
+          phielimValue(v)
+        } else {
+          for (let a of v.args) {
+            dlog(`phireduce remove ${v}[${a}]`)
+            a.uses--
+          }
+        }
       }
     }
   }
+
+  print('———————————————————————————-')
+  printir(f)
 
   // Remove dead values from blocks' value list
   for (let b of f.blocks) {
@@ -119,14 +177,20 @@ export function deadcode(f :Fun) {
       f.blocks[i] = b
       i++
     } else {
-      if (b.values.length > 0) {
-        panic(`live values in unreachable block ${b}: ${b.values.join(', ')}`)
-      }
+      assert(
+        b.values.length == 0,
+        `live values in unreachable block ${b}: ${b.values.join(', ')}`
+      )
       f.freeBlock(b)
     }
   }
 
   f.blocks.length = i
+
+  print('———————————————————————————-')
+  printir(f)
+
+  // process.exit(0)
 
 } // deadcode
 
@@ -137,30 +201,28 @@ export function deadcode(f :Fun) {
 function reachableBlocks(f :Fun) :bool[] {
   let reachable = new Array<bool>(f.numBlocks())
   reachable[f.entry.id] = true
-
   let p :Block[] = [] // stack-like worklist
   p.push(f.entry)
-
   while (p.length > 0) {
     // Pop a reachable block
     let b = p.pop() as Block
 
     // Mark successors as reachable
-    let succs = b.succs
-    if (succs) {
-      if (b.kind == BlockKind.First) {
-        // Drop 2nd block from being considered reachable.
-        // BlockKind.First indicates that only the first path is
-        // ever taken, never the second.
-        succs = succs.slice(0, 1)
-      }
-      for (let c of succs) {
-        assert(c.id < reachable.length,
-          `block ${c} >= f.numBlocks()=${reachable.length}`)
-        if (!reachable[c.id]) {
-          reachable[c.id] = true
-          p.push(c)
-        }
+    let s = b.succs
+    if (b.kind == BlockKind.First) {
+      // Drop 2nd block from being considered reachable.
+      // BlockKind.First indicates that only the first path is
+      // ever taken, never the second.
+      s.splice(1, 1)
+    }
+    for (let c of s) {
+      assert(
+        c.id < reachable.length,
+        `block ${c} >= f.numBlocks()=${reachable.length}`
+      )
+      if (!reachable[c.id]) {
+        reachable[c.id] = true
+        p.push(c)
       }
     }
   }
@@ -170,20 +232,22 @@ function reachableBlocks(f :Fun) :bool[] {
 
 // liveValues returns the live values in f and a list of values that are
 // eligible to be statements in reversed data flow order.
-// reachable is a map from block ID to whether the block is reachable.
+// reachable is a map from block id to whether the block is reachable.
 //
 function liveValues(f :Fun, reachable :bool[]) :bool[] {
-  let live = new Array<bool>(f.numBlocks())
+  let live = new Array<bool>(f.numValues())
 
   // After regalloc, consider all values to be live.
   // See the comment at the top of regalloc.go and in deadcode for details.
   if (f.regAlloc) {
     live.fill(true)
-    // for (let i = 0; i < live.length; i++) {
-    //   live[i] = true
-    // }
     return live
   }
+
+  // TODO: inlining // Record all the inline indexes we need
+  // let liveInlIdx = new Map<int,bool>()
+  // let pt = f.config.ctxt.PosTable
+  // ...
 
   // Find all live values
   let q :Value[] = [] // stack-like worklist of unscanned values
@@ -196,33 +260,49 @@ function liveValues(f :Fun, reachable :bool[]) :bool[] {
     }
     let v = b.control
     if (v && !live[v.id]) {
+      // dlog(`flag live block control ${v}`)
       live[v.id] = true
       q.push(v)
     }
     for (let v of b.values) {
       let info = opinfo[v.op]
       if ((info.call || info.hasSideEffects) && !live[v.id]) {
+        // dlog(`flag live call/side-effect ${v}`)
         live[v.id] = true
         q.push(v)
       }
-      if (info.nilCheck && !live[v.id]) {
-        // nil checks must be kept
+      if (info.type && info.type.isNil() && !live[v.id]) {
+        // The only Void ops are nil checks and inline marks.  We must keep these.
+        // if (v.op == ops.InlMark && !liveInlIdx[v.auxInt]) {
+        //   // We don't need marks for bodies that
+        //   // have been completely optimized away.
+        //   // TODO: save marks only for bodies which
+        //   // have a faulting instruction or a call?
+        //   continue
+        // }
+        // dlog(`flag live niltype ${v}`)
         live[v.id] = true
         q.push(v)
       }
     }
   }
 
-  // Compute transitive closure of live values
+  dlog(`live: ${live.map((v, i) => [v,"v"+i]).filter(v => v[0] !== undefined).map(v => v[1])}`)
+  dlog(`q: ${q}`)
+
+  // Compute transitive closure of live values.
   while (q.length > 0) {
     // pop a reachable value
-    let v = q.pop() as Value
+    let v = q.pop()!
+    dlog(`${v} reachable`)
     for (let i = 0; i < v.args.length; i++) {
       let x = v.args[i]
-      if (v.op === ops.Phi && !reachable[v.b.preds[i].id]) {
+      if (v.op == ops.Phi && !reachable[v.b.preds[i].id]) {
+        dlog(`  args[${i}] = ${x}  --  skip phi`)
         continue
       }
-      if (!live[x.id]) {
+      if (reachable[x.b.id] && !live[x.id]) {
+        dlog(`    args[${i}] = ${x}  --  promote to live`)
         live[x.id] = true
         q.push(x)
       }
@@ -267,44 +347,33 @@ function liveValues(f :Fun, reachable :bool[]) :bool[] {
 // }
 
 
-// removeEdge removes the i'th outgoing edge from b (and the corresponding
-// incoming edge from b.succs[i])
+
+// removeEdge removes the i'th outgoing edge from b
+// (and the corresponding incoming edge from b.succs[i])
 //
 export function removeEdge(b :Block, i :int) {
-  // e := b.Succs[i]
-  // c := e.b
-  // j := e.i
-  //
-  // // Adjust b.Succs
-  // b.removeSucc(i)
-  //
-  // // Adjust c.Preds
-  // c.removePred(j)
-
-  // index of reverse edge.  Invariant:
-  //   e := x.Succs[idx]
-  //   e.b.Preds[e.i] = Edge{x,idx}
-  // and similarly for predecessors.
-  //
-  // index of reverse edge.  Invariant:
-  //   e := x.Preds[idx]
-  //   e.b.Succs[e.i] = Edge{x,idx}
-  //
-
   let c = b.succs[i]
+  let j = c.preds.indexOf(b)
 
-  // Adjust b.succs (see details of Adjust c.preds below)
-  b.removeNthSucc(i)
+  // index of reverse edge.  Invariant:
+  //   e := x.succs[idx]
+  //   e.b.preds[e.i] = Edge(x,idx)
+  assert(b.succs[i] === c)
+  // index of reverse edge.  Invariant:
+  //   e := x.preds[idx]
+  //   e.b.succs[e.i] = Edge(x,idx)
+  assert(b === c.preds[j])
 
-  // Adjust c.preds.
-  // This removes b from c.preds and reduces c.preds.length by 1
-  // The returned value is the index of b as it was in c.preds before removal.
-  let j = c.removePred(b)
+  // Adjust b.succs
+  b.removeSucc(i)
+
+  // Adjust c.preds
+  c.removePred(j)
 
   // Remove phi args from c's phis.
   let n = c.preds.length
   for (let v of c.values) {
-    if (v.op !== ops.Phi) {
+    if (v.op != ops.Phi) {
       continue
     }
     // remove the edge from Phi's args, i.e. (Phi x y) -> (Phi x)
@@ -312,7 +381,7 @@ export function removeEdge(b :Block, i :int) {
     v.args[j] = v.args[n]
     v.args.length = n
 
-    // (Phi x) -> (Copy x)
+    // x = (Phi y _) -> x = (Copy y)
     phielimValue(v)
 
     // [from go/src/cmd/compile/internal/ssa/deadcode.go]

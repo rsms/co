@@ -260,9 +260,9 @@ async function main(options? :MainOptions) :Promise<MainResult> {
         prog.gen()
       }
 
-      for (let [ , f] of irb.pkg.funs) {
-        printir(f)
-      }
+      // for (let [ , f] of irb.pkg.funs) {
+      //   printir(f)
+      // }
 
     }
 
@@ -324,6 +324,7 @@ if (isNodeJsLikeEnv) {
       sources: process.argv.slice(2).filter(v => !v.startsWith('-')),
       noOptimize: process.argv.includes('-no-optimize'),
       genericIR: process.argv.includes('-ir'),
+      noIR: process.argv.includes('-ast'),
     }).catch(err => {
       console.error(err.stack || ''+err)
       process.exit(1)

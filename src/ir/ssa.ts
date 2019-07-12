@@ -2,6 +2,7 @@
 import { ByteStr, asciiByteStr } from '../bytestr'
 import { Num, numIsZero } from '../num'
 import { Pos, NoPos } from '../pos'
+import { Config } from './config'
 import { Op } from './op'
 import { ops, opinfo, fmtop } from "./ops"
 import {
@@ -25,7 +26,9 @@ import {
 import { postorder } from './postorder'
 import { Register } from './reg'
 import { LocalSlot } from './localslot'
-// import { LoopNest, loopnestFun } from './loopnest'
+import { LoopNest, loopnest } from './loopnest'
+import { dominators } from "./dom"
+import { BlockTree } from "./blocktree"
 
 
 const byteStr_main = asciiByteStr("main")
@@ -123,6 +126,13 @@ export class Value {
     v.uses++
   }
 
+  removeArg(i :int) {
+    let v = this.args[i]
+    // v.users.delete(this)
+    v.uses--
+    this.args.splice(i, 1)
+  }
+
   resetArgs() {
     for (let a of this.args) {
       a.uses--
@@ -135,13 +145,6 @@ export class Value {
     v.uses++
     // v.users.add(this)
     this.args.push(v)
-  }
-
-  removeArg(i :int) {
-    let v = this.args[i]
-    // v.users.delete(this)
-    v.uses--
-    this.args.splice(i, 1)
   }
 
   // rematerializeable reports whether a register allocator should recompute
@@ -157,6 +160,40 @@ export class Value {
       }
     }
     return true
+  }
+}
+
+
+// Edge represents a CFG edge.
+// Example edges for b branching to either c or d.
+// (c and d have other predecessors.)
+//   b.Succs = [{c,3}, {d,1}]
+//   c.Preds = [?, ?, ?, {b,0}]
+//   d.Preds = [?, {b,1}, ?]
+// These indexes allow us to edit the CFG in constant time.
+// In addition, it informs phi ops in degenerate cases like:
+// b:
+//    if k then c else c
+// c:
+//    v = Phi(x, y)
+// Then the indexes tell you whether x is chosen from
+// the if or else branch from b.
+//   b.Succs = [{c,0},{c,1}]
+//   c.Preds = [{b,0},{b,1}]
+// means x is chosen if k is true.
+export class Edge {
+  // block edge goes to (in a succs list) or from (in a preds list)
+  block :Block
+
+  // index of reverse edge.  Invariant:
+  //   e := x.succs[idx]
+  //   e.block.preds[e.index] = Edge(x, idx)
+  // and similarly for predecessors.
+  index :int
+
+  constructor(block :Block, index :int) {
+    this.block = block
+    this.index = index
   }
 }
 
@@ -277,8 +314,17 @@ export class Block {
   // insertValue inserts v before refv
   //
   insertValue(refv :Value, v :Value) {
-    assert(this.values.indexOf(refv) != -1)
-    this.values.splice(this.values.indexOf(refv), 0, v)
+    let i = this.values.indexOf(refv)
+    assert(i != -1)
+    this.values.splice(i, 0, v)
+  }
+
+  // insertValue inserts v after refv
+  //
+  insertValueAfter(refv :Value, v :Value) {
+    let i = this.values.indexOf(refv)
+    assert(i != -1)
+    this.values.splice(i + 1, 0, v)
   }
 
   // removeValue removes all uses of v
@@ -351,42 +397,55 @@ export class Block {
     }
   }
 
-  // removeNthPred removes the ith input edge e from b.
+  // removePred removes the ith input edge e from b.
   // It is the responsibility of the caller to remove the corresponding
   // successor edge.
   //
-  removeNthPred(i :int) {
+  removePred(i :int) {
     this.preds.splice(i, 1)
     this.f.invalidateCFG()
   }
 
-  // Like removeNthPred but takes a block reference and returns the index
-  // of that block as it was in this.preds
-  //
-  removePred(e :Block) :int {
-    let i = this.preds.indexOf(e)
-    assert(i > -1, `${e} not a predecessor of ${this}`)
-    this.removeNthPred(i)
-    return i
-  }
-
-  // removeNthSucc removes the ith output edge from b.
+  // removeSucc removes the ith output edge from b.
   // It is the responsibility of the caller to remove
   // the corresponding predecessor edge.
-  removeNthSucc(i :int) {
+  removeSucc(i :int) {
     this.succs.splice(i, 1)
     this.f.invalidateCFG()
   }
 
-  // Like removeNthSucc but takes a block reference and returns the index
-  // of that block as it was in this.succs
-  //
-  removeSucc(s :Block) :int {
-    let i = this.succs.indexOf(s)
-    assert(i > -1, `${s} not a successor of ${this}`)
-    this.removeNthSucc(i)
-    return i
+  // addEdgeTo adds an edge from this block to successor block b.
+  // Used during building of the SSA graph; do not use on an already-completed SSA graph.
+  addEdgeTo(b :Block) {
+    assert(!b.sealed, `cannot modify ${b}.preds after ${b} was sealed`)
+    // let i = this.succs.length
+    // let j = b.preds.length
+    // this.succs.push(new Edge(b, j))
+    // b.preds.push(new Edge(this, i))
+    this.succs.push(b)
+    b.preds.push(this)
+    this.f.invalidateCFG()
   }
+
+  // // Like removeNthPred but takes a block reference and returns the index
+  // // of that block as it was in this.preds
+  // //
+  // removePred(e :Block) :int {
+  //   let i = this.preds.indexOf(e)
+  //   assert(i > -1, `${e} not a predecessor of ${this}`)
+  //   this.removeNthPred(i)
+  //   return i
+  // }
+
+  // // Like removeNthSucc but takes a block reference and returns the index
+  // // of that block as it was in this.succs
+  // //
+  // removeSucc(s :Block) :int {
+  //   let i = this.succs.indexOf(s)
+  //   assert(i > -1, `${s} not a successor of ${this}`)
+  //   this.removeNthSucc(i)
+  //   return i
+  // }
 
   newPhi(t :BasicType) :Value {
     let v = this.f.newValue(this, ops.Phi, t, 0, null)
@@ -407,6 +466,13 @@ export class Block {
     v.args = [arg0]
     arg0.uses++ //; arg0.users.add(v)
     this.values.push(v)
+    return v
+  }
+
+  newValue1NoAdd(op :Op, t :BasicType|null, arg0 :Value, auxInt :Num, aux :Aux|null) :Value {
+    let v = this.f.newValue(this, op, t, auxInt, aux)
+    v.args = [arg0]
+    arg0.uses++ //; arg0.users.add(v)
     return v
   }
 
@@ -446,6 +512,15 @@ export class Block {
     return v
   }
 
+  containsCall() :bool {
+    for (let v of this.values) {
+      if (opinfo[v.op].call) {
+        return true
+      }
+    }
+    return false
+  }
+
   toString() :string {
     return 'b' + this.id
   }
@@ -459,6 +534,7 @@ export interface NamedValueEnt {
 
 
 export class Fun {
+  config :Config
   entry  :Block
   blocks :Block[]
   type   :FunType
@@ -478,11 +554,14 @@ export class Fun {
   regAlloc :Location[]|null = null
 
   // Cached CFG data
-  _cachedPostorder :Block[] | null = null
-  // _cachedLoopnest  :LoopNest | null = null
+  _cachedPostorder :Block[]|null = null
+  _cachedLoopnest  :LoopNest|null = null
+  _cachedIdom      :(Block|null)[]|null = null    // cached immediate dominators
+  _cachedSdom      :BlockTree|null = null // cached dominator tree
 
 
-  constructor(type :FunType, name :ByteStr|null, nargs :int) {
+  constructor(config :Config, type :FunType, name :ByteStr|null, nargs :int) {
+    this.config = config
     this.entry = new Block(BlockKind.Plain, this.bid++, this)
     this.blocks = [this.entry]
     this.type = type
@@ -491,10 +570,14 @@ export class Fun {
   }
 
   newBlock(k :BlockKind) :Block {
-    assert(this.bid < 0xFFFFFFFF, "too many block IDs generated")
-    let b = new Block(k, this.bid++, this)
+    let b = this.newBlockNoAdd(k)
     this.blocks.push(b)
     return b
+  }
+
+  newBlockNoAdd(k :BlockKind) :Block {
+    assert(this.bid < 0xFFFFFFFF, "too many block IDs generated")
+    return new Block(k, this.bid++, this)
   }
 
   freeBlock(b :Block) {
@@ -525,6 +608,10 @@ export class Fun {
       auxInt,
       aux
     )
+  }
+
+  newValueNoBlock(op :Op, t :BasicType|null, auxInt :Num, aux :Aux|null) :Value {
+    return this.newValue(null as any as Block, op, t, auxInt, aux)
   }
 
   newValueID() :ID {
@@ -585,8 +672,31 @@ export class Fun {
   removeBlock(b :Block) {
     let i = this.blocks.indexOf(b)
     assert(i != -1, `block ${b} not part of function`)
+    this.removeBlockAt(i)
+  }
+
+  removeBlockAt(i :int) {
+    let b = this.blocks[i]!
+    assert(b)
     this.blocks.splice(i, 1)
     this.invalidateCFG()
+    this.freeBlock(b)
+  }
+
+  // moveBlockToEnd moves block at index i to end of this.blocks
+  //
+  moveBlockToEnd(i :int) {
+
+    let b = this.blocks[i]! ; assert(b)
+    this.blocks.copyWithin(i, i + 1)
+    this.blocks[this.blocks.length - 1] = b
+
+    // let endi = this.blocks.length - 1
+    // if (i != endi) {
+    //   let b = this.blocks[i]! ; assert(b)
+    //   this.blocks.copyWithin(i, i + 1)
+    //   this.blocks[endi] = b
+    // }
   }
 
   // numBlocks returns an integer larger than the id of any Block in the Fun.
@@ -609,18 +719,29 @@ export class Fun {
     return this._cachedPostorder
   }
 
-  // loopnest() :LoopNest {
-  //   if (!this._cachedLoopnest) {
-  //     this._cachedLoopnest = loopnestFun(this)
-  //   }
-  //   return this._cachedLoopnest
-  // }
+  loopnest() :LoopNest {
+    return this._cachedLoopnest || (this._cachedLoopnest = loopnest(this))
+  }
+
+  // idom returns a map from block id to the immediate dominator of that block.
+  // f.entry.id maps to null. Unreachable blocks map to null as well.
+  idom() :(Block|null)[] {
+    return this._cachedIdom || (this._cachedIdom = dominators(this))
+  }
+
+  // sdom returns a tree representing the dominator relationships
+  // among the blocks of f.
+  sdom() :BlockTree {
+    return this._cachedSdom || (this._cachedSdom = new BlockTree(this, this.idom()))
+  }
 
   // invalidateCFG tells the function that its CFG has changed
   //
   invalidateCFG() {
     this._cachedPostorder = null
-    // this._cachedLoopnest = null
+    this._cachedLoopnest = null
+    this._cachedIdom = null
+    this._cachedSdom = null
   }
 
   toString() {

@@ -15,10 +15,11 @@ export const t = {
   "uint":    types.t_uint,
   "uintptr": types.t_uintptr,
   "addr":    types.t_addr,
-  "mem":    types.t_mem,
+  "mem":     types.t_mem,
   "f32":     types.t_f32,
   "f64":     types.t_f64,
   "str":     types.t_str,
+  "nil":     types.t_nil,
 }
 
 export const

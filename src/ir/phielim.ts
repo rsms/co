@@ -28,10 +28,9 @@ export function phielim(f :Fun) {
   }
 }
 
-
 // phielimValue tries to convert the phi v to a copy.
 export function phielimValue(v :Value) :bool {
-  if (v.op !== ops.Phi) {
+  if (v.op != ops.Phi) {
     return false
   }
 
@@ -63,6 +62,7 @@ export function phielimValue(v :Value) :bool {
 
   v.op = ops.Copy
   v.setArgs1(w)
-  dlog(`eliminated phi ${v}`) // at v.Pos
+  dlog(`eliminated phi ${v}`)
   return true
 }
+

@@ -135,6 +135,7 @@ export class BasicType extends NativeType {
   isF32() :bool { return this.mem == Mem.f32 }
   isF64() :bool { return this.mem == Mem.f64 }
   isPtr() :bool { return this.mem == Mem.Ptr }
+  isNil() :bool { return this.mem == Mem.None }
 }
 
 export class NumType extends BasicType {
@@ -170,7 +171,7 @@ export class MemType extends UIntType {
 //
 export const
   // special types
-  t_nil     = new BasicType(Mem.Ptr, 'nil')
+  t_nil     = new BasicType(Mem.None, 'nil')
   // integer types
 , t_bool    = new UIntType(Mem.i8,   'bool')
 , t_u8      = new UIntType(Mem.i8,   'u8')

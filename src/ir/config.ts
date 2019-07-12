@@ -8,15 +8,14 @@ import { archs } from "./arch"
 // all compilations.
 //
 export class Config implements ArchInfo {
+  // begin ArchInfo
   arch      :string = '?' // e.g. "covm"
-  optimize  :bool = false  // Do optimization
 
   addrSize  :int = 4  // 4 or 8 bytes
   regSize   :int = 4  // 4 or 8 bytes
   intSize   :int = 4  // 1, 2, 4 or 8 bytes
 
-  registers :Register[] = []   // machine registers
-
+  registers      :Register[] = []      // machine registers
   hasGReg        :bool = false         // has hardware g register
   gpRegMask      :RegSet = emptyRegSet // general purpose integer register mask
   fpRegMask      :RegSet = emptyRegSet // floating point register mask
@@ -24,6 +23,11 @@ export class Config implements ArchInfo {
 
   lowerBlock?    :BlockRewriter = undefined // lowering function
   lowerValue?    :ValueRewriter = undefined // lowering function
+  // end ArchInfo
+
+  // options
+  optimize :bool = false   // Apply optimizations
+  loopstats :bool = false  // log loop statistics
 
 
   constructor(arch :string, props?: Partial<Config>) {

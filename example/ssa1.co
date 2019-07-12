@@ -61,24 +61,51 @@
 // type A i32    // concrete
 // type B = i32  // alias
 
-fun half(x int) int {
-  x / 2
-}
-
 fun foo(x, _, y int) int {
-  a = x + y
-  a = a + 5
-
-  d = half(a + 1)
-
-  if x > y {
-    x *= 2
-  } else {
-    y *= 2
+  z int = 0
+  while x < 5 {
+    x++
+    for i = 0; x > i; i++ {
+      z++
+    }
   }
-
-  x + y + a + d
+  return x + z
 }
+
+// fun half(x int) int {
+//   x / 2
+// }
+
+// fun foo(x, _, y int) int {
+//   a = x + y
+//   d = half(a + 1)
+//   // if x > y {
+//   //   x *= 2
+//   // } else {
+//   //   y *= 2
+//   // }
+//   if x > y {
+//     while x > y {
+//       x *= 2
+//     }
+//   }
+//   x + y + a + d
+// }
+
+// fun foo(x, _, y int) int {
+//   a = x + y
+//   a = a + 5
+
+//   d = half(a + 1)
+
+//   if x > y {
+//     x *= 2
+//   } else {
+//     y *= 2
+//   }
+
+//   x + y + a + d
+// }
 
 
 // fun foo(x, _, y int) int {

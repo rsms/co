@@ -1,4 +1,4 @@
-import { Fun, Block } from './ssa'
+import { Fun, Block } from "./ssa"
 
 interface blockAndIndex {
   b     :Block

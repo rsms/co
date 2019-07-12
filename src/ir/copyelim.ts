@@ -15,7 +15,7 @@ export function copyelim(f :Fun) {
   // Update block control values
   for (let b of f.blocks) {
     let v = b.control
-    if (v && v.op === ops.Copy) {
+    if (v && v.op == ops.Copy) {
       b.setControl(v.args[0])
     }
   }
@@ -25,7 +25,7 @@ export function copyelim(f :Fun) {
     let values = e.values
     for (let i = 0; i < values.length; i++) {
       let v = values[i]
-      if (v.op === ops.Copy) {
+      if (v.op == ops.Copy) {
         values[i] = v.args[0]
       }
     }
@@ -36,7 +36,7 @@ export function copyelim(f :Fun) {
 // ultimate source of v.  v must be a copy op.
 //
 export function copySource(v :Value) :Value {
-  assert(v.op === ops.Copy)
+  assert(v.op == ops.Copy)
   assert(v.args.length == 1)
 
   let w = v.args[0]
@@ -51,7 +51,7 @@ export function copySource(v :Value) :Value {
   // (TODO: or can they? Needs a test.)
   let slow = w
   let advance :bool = false
-  while (w.op === ops.Copy) {
+  while (w.op == ops.Copy) {
     w = w.args[0]
     if (w === slow) {
       w.reset(ops.Unknown)
@@ -81,7 +81,7 @@ export function copySource(v :Value) :Value {
 export function copyelimValue(v :Value) {
   for (let i = 0; i < v.args.length; i++) {
     let a = v.args[i]
-    if (a.op === ops.Copy) {
+    if (a.op == ops.Copy) {
       v.setArg(i, copySource(a))
     }
   }

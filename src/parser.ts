@@ -21,6 +21,8 @@ import {
   Stmt,
   ReturnStmt,
   WhileStmt,
+  ForStmt,
+  BranchStmt,
 
   Decl,
   ImportDecl,
@@ -77,6 +79,7 @@ import {
   t_int, t_uint,
   t_str0,
   t_list,
+  t_bool,
 } from './types'
 
 import { debuglog as dlog } from './util'
@@ -1071,6 +1074,14 @@ export class Parser extends scanner.Scanner {
     return p.bad(pos)
   }
 
+  blockWithNewScope() :Block {
+    const p = this
+    p.pushScope()
+    const b = p.block()
+    p.popScope()
+    return b
+  }
+
   // block parses a block expression.
   // The caller manages scope (push/pop if required)
   //
@@ -1417,10 +1428,7 @@ export class Parser extends scanner.Scanner {
         return p.simpleStmt(p.exprList(/*ctx=*/null))
 
       case token.LBRACE:
-        p.pushScope()
-        const s = p.block()
-        p.popScope()
-        return s
+        return p.blockWithNewScope()
 
       case token.TYPE:
         return p.multiDecl(p.typeDecl)
@@ -1440,8 +1448,8 @@ export class Parser extends scanner.Scanner {
       // case token.ARROW: // receive operator
         return p.simpleStmt(p.exprList(/*ctx=*/null))
 
-      // case token.FOR:
-      //   return p.forStmt()
+      case token.FOR:
+        return p.forStmt()
 
       // case token.SWITCH:
       //   return p.switchStmt()
@@ -1462,15 +1470,9 @@ export class Parser extends scanner.Scanner {
       //   s.Tok = _Fallthrough
       //   return s
 
-      // case token.BREAK, token.CONTINUE:
-      //   s := new(BranchStmt)
-      //   s.pos = p.pos()
-      //   s.Tok = p.tok
-      //   p.next()
-      //   if p.tok == _Name {
-      //     s.Label = p.name()
-      //   }
-      //   return s
+      case token.BREAK:
+      case token.CONTINUE:
+        return p.branchStmt()
 
       // case token.GO, token.DEFER:
       //   return p.callStmt()
@@ -1500,22 +1502,72 @@ export class Parser extends scanner.Scanner {
     return null
   }
 
+  branchStmt() :BranchStmt {
+    const p = this
+    let s = new BranchStmt(p.pos, p.scope, p.tok)
+    p.next()
+    if (p.tok == token.NAME) {
+      s.label = p.resolveVal(p.ident())
+    }
+    return s
+  }
+
+  // WhileStmt = "while" Expression? Block
+  //
   whileStmt() :WhileStmt {
-    //
-    // WhileStmt = "while" Expression Block
-    //
     const p = this
     const pos = p.pos
-    const scope = p.scope
 
     p.want(token.WHILE)
+    p.pushScope()
 
-    const cond = p.expr(/*ctx=*/null)
-    p.types.resolve(cond)
+    let cond :Expr|null = null
+    if (p.tok != token.LBRACE) {
+      cond = p.expr(t_bool)
+      p.types.resolve(cond)
+    }
 
-    const body = p.expr(/*ctx=*/null)
+    const body = p.block()
 
-    return new WhileStmt(pos, scope, cond, body)
+    p.popScope()
+
+    return new WhileStmt(pos, p.scope, cond, body)
+  }
+
+  // "for" init ; cond ; incr { body }
+  forStmt() :ForStmt {
+    const p = this
+    const pos = p.pos
+
+    p.want(token.FOR)
+    p.pushScope()
+
+    let init = p.maybeStmt()
+    p.want(token.SEMICOLON)
+
+    let cond :Expr|null = null
+    if (p.tok != token.SEMICOLON) {
+      cond = p.expr(t_bool)
+      p.types.resolve(cond)
+    }
+    p.want(token.SEMICOLON)
+
+    let incr :Stmt|null = null
+    if (p.tok != token.LBRACE) {
+      incr = p.maybeStmt()
+      if (!incr) {
+        p.syntaxError("expecting statement or block")
+        p.next()
+      }
+    }
+
+    const body = p.block()
+
+    p.popScope()
+
+    print(`for ${init}; ${cond}; ${incr}`)
+
+    return new ForStmt(pos, p.scope, init, cond, incr, body)
   }
 
   ifExpr(ctx :exprCtx) :IfExpr {
@@ -1921,10 +1973,7 @@ export class Parser extends scanner.Scanner {
         return p.funExpr(ctx)
 
       case token.LBRACE:
-        p.pushScope()
-        const b = p.block()
-        p.popScope()
-        return b
+        return p.blockWithNewScope()
 
       case token.IF:
         return p.ifExpr(ctx)
@@ -2022,7 +2071,7 @@ export class Parser extends scanner.Scanner {
   // numLitConv may convert x (in-place) to a different type as requested by reqt.
   //
   numLitConv(x :NumLit, reqt :Type|null) :NumLit {
-    if (!reqt) {
+    if (!reqt || reqt === t_bool) {
       return x
     }
     const p = this

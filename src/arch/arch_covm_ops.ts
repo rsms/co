@@ -124,7 +124,7 @@ const ops :OpDescription[] = [
   ["CALL", 1, Call, ClobberFlags, { reg: regInfo([], [], /*clobbers*/ callerSave), aux: "SymOff" }], // call static function aux.(SB). arg0=mem, auxint=argsize, returns mem
 
   // misc
-  ["LowNilCheck", 2, NilCheck, FaultOnNilArg0, { reg: gp10 }], // panic if arg0 is nil. arg1=mem.
+  ["LowNilCheck", 2, t.nil, NilCheck, FaultOnNilArg0, { reg: gp10 }], // panic if arg0 is nil. arg1=mem.
   ["ZeroLarge", 2, { reg: gp10, aux: "Int64" }],  // large zeroing. arg0=start, arg1=mem, auxInt=len/8, returns mem
 ]
 

@@ -104,9 +104,9 @@ function printblock(f :IRFmt, b :Block, indent :string) {
     preds = f.larr + b.preds.map(b =>
       f.style.lightyellow(b.toString())
     ).join(', ')
-
-    f.println('')
   } // else: entry block
+
+  f.println('')
 
   let comment = b.comment ? f.style.grey('  // ' + b.comment) : ''
   f.println(indent + f.style.lightyellow(label + ':') + preds + meta + comment)

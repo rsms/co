@@ -1,12 +1,13 @@
 import { UInt64 } from '../int64'
 import { Pos } from '../pos'
-import { Mem, t_u32, intTypes } from '../types'
-import { ID, Fun, Block, Value, BranchPrediction, Location } from './ssa'
+import { Mem, t_u32, t_mem, intTypes } from '../types'
+import { ID, Fun, Block, Value, BranchPrediction, Location, BlockKind } from './ssa'
 import { Config } from './config'
 import { DesiredState } from './reg_desiredstate'
 import { IntGraph } from '../intgraph'
 import { Op } from './op'
 import { ops, opinfo } from "./ops"
+import { BlockTree } from "./blocktree"
 import {
   Register,
   Reg,
@@ -58,6 +59,19 @@ interface ValMapEntry {
   pos :Pos
 }
 
+class StartReg {
+  r   :Register
+  v   :Value   // pre-regalloc value needed in this register
+  c   :Value   // cached version of the value
+  pos :Pos // source position of use of this register
+}
+
+class EndReg {
+  r :Register
+  v :Value // pre-regalloc value held in this register (TODO: can we use ID here?)
+  c :Value // cached version of the value
+}
+
 
 const maxregs = 64  // maximum number of registers we can manage
 const noReg :Reg = 255 >>> 0  // symbolizes "none"
@@ -99,15 +113,14 @@ function pickReg(m :RegSet) :Reg {
 
 // ValState records the register allocation state for a (pre-regalloc) value.
 class ValState {
-  v          :Value
-  regs       = emptyRegSet as RegSet
+  v :Value
+  regs = emptyRegSet as RegSet
     // the set of registers holding a Value (usually just one)
   // uses       = null as Use|null   // list of uses in this block
-  // spill      = null as Value|null // spilled copy of the Value (if any)
-  // restoreMin = 0 as int  // minimum of all restores' blocks' sdom.entry
-  // restoreMax = 0 as int  // maximum of all restores' blocks' sdom.exit
-  needReg    = false as bool // cached value of
-    // !v.Type.IsMemory() && !v.Type.IsVoid() && !.v.Type.IsFlags()
+  spill = null as Value|null // spilled copy of the Value (if any)
+  restoreMin = 0 as int  // minimum of all restores' blocks' sdom.entry
+  restoreMax = 0 as int  // maximum of all restores' blocks' sdom.exit
+  needReg = false as bool
   rematerializeable = false as bool  // cached value of v.rematerializeable()
 
   mindist :int = 0  // distance between definition and first use
@@ -115,6 +128,10 @@ class ValState {
 
   constructor(v :Value) {
     this.v = v
+  }
+
+  toString() :string {
+    return `ValState{${this.v}, regs=${this.regs}}`
   }
 }
 
@@ -139,7 +156,12 @@ export class RegAllocator {
   readonly allocatable :RegSet      // registers we are allowed to allocate
 
   f          :Fun  // function being processed
+  sdom       :BlockTree // initially the result of f.sdom()
   visitOrder :Block[] = []
+
+  // For each Value, map from its value id back to the
+  // preregalloc Value it was derived from.
+  orig :(Value|null)[]
 
   SPReg :Reg  // the SP register
   SBReg :Reg  // the SB register
@@ -148,8 +170,8 @@ export class RegAllocator {
   // current state of each (preregalloc) Value
   values :ValState[] = []
 
-  sp :int // ID of SP register Value
-  sb :int // ID of SB register Value
+  sp :Value|null = null // ID of SP register Value
+  sb :Value|null = null // ID of SB register Value
 
   // current state of each register
   // regs :RegState[]
@@ -158,13 +180,23 @@ export class RegAllocator {
   used    :RegSet  // registers currently in use
   tmpused :RegSet  // registers used in the current instruction
 
-  gpSpillReg :Reg = -1  // reserved spill register. -1 = nothing reserved
+  // reserved spill registers
+  gpSpillRegs   :Reg[] = []
+  gpSpillRegIdx :int = 0
 
   // live and desired holds information about block's live values at the end
   // of the block, and those value's desired registers (if any.)
   // These are created by computeLive()
   live    :LiveInfo[][] = []  // indexed by block
   desired :DesiredState[] = []
+
+  // startRegs[blockid] is the register state at the start of merge blocks.
+  // saved state does not include the state of phi ops in the block.
+  startRegs :StartReg[][]
+
+  // endRegs[blockid] is the register state at the end of each block.
+  // encoded as a set of endReg records.
+  endRegs :EndReg[][]
 
 
   constructor(config :Config) {
@@ -211,12 +243,29 @@ export class RegAllocator {
   }
 
 
+  // reserveGpSpillRegs reserves count regs starting with r for spills
+  reserveGpSpillRegs(...regs :Reg[]) {
+    this.gpSpillRegs = regs
+    this.gpSpillRegIdx = 0
+    dlog(`reserved spill registers ${regs.map(r => `R${r}`).join(",")}`)
+  }
+
+
+  nextSpillReg() :Reg {
+    const a = this
+    return a.gpSpillRegs[a.gpSpillRegIdx++ % a.gpSpillRegs.length]
+  }
+
+
   regallocFun(f :Fun) {
     const a = this
     a.f = f
 
     // reset spill reg
-    a.gpSpillReg = -1
+    a.gpSpillRegs.length = 0
+    a.gpSpillRegIdx = 0
+    a.sp = null
+    a.sb = null
 
     assert(f.regAlloc == null, `registers already allocated for ${f}`)
     f.regAlloc = new Array<Location>(f.numValues())  // TODO: fill this
@@ -230,14 +279,16 @@ export class RegAllocator {
     if (v1) {
       if (v1.op == ops.SP) {
         v1.reg = a.registers[this.SPReg]
+        a.sp = v1
         if (v2 && v2.op == ops.SB) {
           v2.reg = a.registers[this.SBReg]
+          a.sb = v2
         }
       } else if (v1.op == ops.SB) {
         v1.reg = a.registers[this.SBReg]
+        a.sb = v1
       }
     }
-    // TODO: if we spill and we don't have SP, reintroduce SP.
 
     // // Add SP (stack pointer) value to the top of the entry block.
     // // TODO: track the need for this when generating the initial IR.
@@ -266,8 +317,9 @@ export class RegAllocator {
     // }
 
     // s.regs = make([]regState, s.numRegs)
-    a.values = new Array<ValState>(f.numValues())
-    // s.orig = make([]*Value, f.NumValues())
+    let nvals = f.numValues()
+    a.values = new Array<ValState>(nvals)
+    a.orig = new Array<Value>(nvals)
     // s.copies = make(map[*Value]bool)
     for (let b of a.visitOrder) {
       for (let v of b.values) {
@@ -276,10 +328,9 @@ export class RegAllocator {
         a.values[v.id] = val
         // if (!t.isMemory() && !t.isVoid() && !t.isFlags() && !t.isTuple())
         if (!t.isMemory && !t.isTuple() && !v.reg) {
-          print(`needReg ${v}`)
           val.needReg = true
           val.rematerializeable = v.rematerializeable()
-          // a.orig[v.id] = v
+          a.orig[v.id] = v
         }
       }
     }
@@ -305,6 +356,10 @@ export class RegAllocator {
       }
     }
 
+    a.startRegs = new Array<StartReg[]>(f.numBlocks()) // TODO: populate
+    a.endRegs = new Array<EndReg[]>(f.numBlocks()) // TODO: populate
+    a.sdom = f.sdom()
+
     // We then build an interference graph of values that interfere.
     // Two values interfere if one of them is live at a definition point of
     // the other.
@@ -325,70 +380,269 @@ export class RegAllocator {
 
     let spills = a.pickValues(ig)
 
-    // place LoadReg at spill users
-    if (spills.length) {
-      dlog(`spills:`,
-        spills.length == 0 ? '(none)' :
-        spills.reverse().map(id => `v${id}`).join(" ")
-      )
+    // handle spilling, creating load and stores
+    if (spills.size > 0) {
+      this.handleSpills(spills)
+    }
+  }
 
-      // build map of dependency => dependant
-      let usermap = new Map<Value,Set<Value|Block>>()
-      for (let b of a.visitOrder) {
-        if (b.control) {
-          let s = usermap.get(b.control)
-          if (s) {
-            s.add(b)
-          } else {
-            usermap.set(b.control, new Set<Value|Block>([b]))
-          }
-        }
-        for (let v of b.values) {
-          for (let arg of v.args) {
-            let s = usermap.get(arg)
-            if (s) {
-              s.add(v)
-            } else {
-              usermap.set(arg, new Set<Value|Block>([v]))
-            }
-          }
+
+  handleSpills(spills :Set<ID>) {
+    const a = this
+    const f = a.f
+
+    a.reserveGpSpillRegs(4, 5) // XXX
+    dlog(`spills:`, Array.from(spills).reverse().map(id => `v${id}`).join(" "))
+
+    // make sure we have SP (stack pointer) value
+    if (!a.sp) {
+      a.sp = f.newValue(f.entry, ops.SP, a.addrtype, 0, null)
+      a.sp.reg = a.registers[a.SPReg]
+      f.entry.values.splice(1, 0, a.sp) // InitMem is always at 0
+    }
+
+    // map dependency => dependant
+    let usermap = a.buildDepMap()
+
+    // TODO: figure out how to compute spill addresses on the stack.
+    // A really simple approach would be to add on top of the stack, i.e.
+    // beyond the last address in the entire function.
+    let spoffs = 30  // XXX
+    let stacktop = a.sp
+    let stores = new Map<ID,{spoffs:int}>()
+
+    for (let sid of spills) {
+      let v = a.values[sid].v
+      v.comment = (v.comment ? "; " : "") + "spill"
+
+      // // Insert store code for spill operation
+      // //
+      // // First allocate a temporary spill reg to the operation for storing
+      // // its result.
+      // v.reg = a.registers[a.nextSpillReg()]
+      // //
+      // // Compute address where to store spill (SP + stack offset)
+      // let addr = v.b.newValue1(ops.OffPtr, t_mem, a.sp, spoffs)
+      // v.b.insertValueAfter(v, v.b.values.pop()!) // move from end of block to after v
+
+      // // Store v to addr. arg2=mem, aux=type
+      // stacktop = v.b.newValue3(ops.Store, t_mem, addr, v, stacktop, 0, v.type)
+      // v.b.insertValueAfter(addr, v.b.values.pop()!) // move from end of block to after v
+
+      // // increment offset to stack pointer
+      // spoffs += v.type.size
+
+
+      //   stores.set(v.id, {spoffs})
+      // }
+      // for (let sid of spills) {
+      //   let v = a.values[sid].v
+
+
+      let users = usermap.get(v)!
+      assert(users, `${v} is spilled but has no users`)
+      for (let user of users) {
+        if (user instanceof Value) {
+          // Load v from its spill location.
+          let spill = a.makeSpill(v, user.b)
+          dlog(`load spill for ${v} from ${spill}`)
+          let aidx = user.args.indexOf(v)
+          assert(aidx != -1)
+          let loadreg = user.b.newValue1NoAdd(ops.LoadReg, v.type, spill, 0, null)
+          user.setArg(aidx, loadreg)
+        } else {
+          dlog(`TODO user of type ${user.constructor.name}`)
         }
       }
+    }
 
-      // dlog(`usermap:\n  ` +
-      //   Array.from(usermap).map(
-      //     ([v, us]) => ( `${v}\t` + Array.from(us).join(", "))
-      //   ).join("\n  ")
-      // )
+    a.placeSpills(spills)
+  }
 
-      for (let sid of spills) {
-        let v = a.values[sid].v
-        let users = usermap.get(v)
-        if (users) {
-          for (let user of users) {
-            if (user instanceof Value) {
-              let load = user.b.f.newValue(user.b, ops.LoadReg, v.type, 0, null)
-              load.addArg(v)
-              load.reg = a.registers[a.gpSpillReg]
-              let idx = user.b.values.indexOf(user)
-              assert(idx != -1)
-              user.b.values.splice(idx, 0, load)
-              let aidx = user.args.indexOf(v)
-              assert(aidx != -1)
-              user.setArg(aidx, load)
+
+  placeSpills(spills :Set<ID>) {
+    const a = this
+    const f = a.f
+
+    // Start maps block IDs to the list of spills
+    // that go at the start of the block (but after any phis).
+    let start = new Map<ID,Value[]>()
+    // After maps value IDs to the list of spills
+    // that go immediately after that value ID.
+    let after = new Map<ID,Value[]>()
+
+    let loopnest = f.loopnest()
+
+    for (let i = 0; i < a.values.length; i++) {
+      let vi = a.values[i]
+      if (!vi) {
+        continue
+      }
+      let spill = vi.spill
+      if (!spill) {
+        continue
+      }
+      if (spill.b) {
+        // Some spills are already fully set up, like ops.Args
+        dlog(`spill already complete ${vi}`)
+        continue
+      }
+      let v = a.orig[i]! ; assert(v)
+      dlog(`place spill ${v}`)
+
+      // Walk down the dominator tree looking for a good place to
+      // put the spill of v.  At the start "best" is the best place
+      // we have found so far.
+      // TODO: find a way to make this O(1) without arbitrary cutoffs.
+      let best = v.b
+      let bestArg = v
+      let bestDepth :int = 0
+      let l = loopnest.b2l[best.id]
+      if (l) {
+        bestDepth = l.depth
+      }
+      let b :Block|null = best
+      const maxSpillSearch = 100
+      for (let i = 0; i < maxSpillSearch; i++) {
+        // Find the child of b in the dominator tree which
+        // dominates all restores.
+        let p = b! ; assert(p)
+        b = null
+        for (let c = a.sdom.child(p); c && i < maxSpillSearch; ) {
+          if (a.sdom.t[c.id].entry <= vi.restoreMin && a.sdom.t[c.id].exit >= vi.restoreMax) {
+            // c also dominates all restores.  Walk down into c.
+            b = c
+            break
+          }
+          c = a.sdom.sibling(c)
+          i++
+        }
+        if (!b) {
+          // Ran out of blocks which dominate all restores.
+          break
+        }
+
+        let depth :int = 0
+        let l = loopnest.b2l[b.id]
+        if (l) {
+          depth = l.depth
+        }
+        if (depth > bestDepth) {
+          // Don't push the spill into a deeper loop.
+          continue
+        }
+
+        // If v is in a register at the start of b, we can
+        // place the spill here (after the phis).
+        if (b.preds.length == 1) {
+          //for _, e := range s.endRegs[b.Preds[0].b.ID]
+          for (let e of a.endRegs[b.preds[0].id]) {
+            if (e.v == v) {
+              // Found a better spot for the spill.
+              best = b
+              bestArg = e.c
+              bestDepth = depth
+              break
             }
           }
         } else {
-          assert(false, `${v} is spilled but has no users`)
+          // for _, e := range s.startRegs[b.ID]
+          for (let e of a.startRegs[b.id]) {
+            if (e.v == v) {
+              // Found a better spot for the spill.
+              best = b
+              bestArg = e.c
+              bestDepth = depth
+              break
+            }
+          }
         }
       }
     }
   }
 
 
-  reserveGpSpillReg(r :Reg) {
-    this.gpSpillReg = r
-    dlog(`reserved spill register ${this.registers[r].name}`)
+  // makeSpill returns a Value which represents the spilled value of v.
+  // b is the block in which the spill is used.
+  makeSpill(v :Value, b :Block) :Value {
+    const a = this
+    let vi = a.values[v.id]
+    if (vi.spill) {
+      // Final block not known - keep track of subtree where restores reside.
+      vi.restoreMin = Math.min(vi.restoreMin, a.sdom.t[b.id].entry)
+      vi.restoreMax = Math.max(vi.restoreMax, a.sdom.t[b.id].exit)
+      return vi.spill
+    }
+    // Make a spill for v. We don't know where we want
+    // to put it yet, so we leave it blockless for now.
+    let spill = a.f.newValueNoBlock(ops.StoreReg, v.type, 0, null)
+    // We also don't know what the spill's arg will be.
+    // Leave it argless for now.
+
+    a.setOrig(spill, v)
+
+    vi.spill = spill
+    vi.restoreMin = a.sdom.t[b.id].entry
+    vi.restoreMax = a.sdom.t[b.id].exit
+    return spill
+  }
+
+
+  // setOrig records that c's original value is the same as v's original value.
+  setOrig(c :Value, v :Value) {
+    const a = this
+    while (c.id >= a.orig.length) {
+      a.orig.push(null)
+    }
+    assert(!a.orig[c.id], `orig value set twice ${c} ${v}`)
+    a.orig[c.id] = a.orig[v.id]
+  }
+
+
+  // buildDepMap creates mappings of dependency => dependant
+  //
+  buildDepMap() :Map<Value,Set<Value|Block>> {
+    const a = this
+    let m = new Map<Value,Set<Value|Block>>()
+    const addDep = (dependant :Value|Block, dependency :Value) => {
+      // if (!spills.has(dependency.id)) { return }
+      let s = m.get(dependency)
+      if (s) {
+        s.add(dependant)
+      } else {
+        m.set(dependency, new Set<Value|Block>([dependant]))
+      }
+    }
+    for (let b of a.visitOrder) {
+      if (b.kind == BlockKind.If) {
+        // if-block branch depends on control value
+        assert(b.control, `if block ${b} missing control value`)
+        addDep(b, b.control!)
+      }
+      for (let v of b.values) {
+        for (let arg of v.args) {
+          // value v depends on argument value
+          addDep(v, arg)
+        }
+      }
+    }
+
+    // print usermap
+    if (DEBUG) {
+      let mv = Array.from(m)
+      let dependants = mv.map(([, us]) => Array.from(us).join(", "))
+      let longestLeft = dependants.reduce((a, v) => Math.max(a, v.length), 0)
+      let spaces = "                                                "
+      dlog(`depmap:\n  ` +
+        mv.map(([v, ], i) => (
+          dependants[i] +
+          spaces.substr(0, longestLeft - dependants[i].length) +
+          `  depends on  ${v}`
+        )).join("\n  ") + "\n"
+      )
+    }
+
+    return m
   }
 
 
@@ -398,15 +652,17 @@ export class RegAllocator {
   // available registers. This should have no side effects or negative impact,
   // though it's good to know, would you wonder why many registers are used.
   //
-  pickValues(ig :IntGraph) :ID[] {
+  pickValues(ig :IntGraph) :Set<ID> {
     const a = this
 
     // {gp,fp}k is the maximum number of registers we have available for
     // general-purpose and floating-point registers.
     let gpk = countRegs(this.config.gpRegMask)
     // let fpk = countRegs(this.config.fpRegMask)
-    // gpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
+    gpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
     // fpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
+
+    let multiPass = true
 
     // Stack of values
     let valstack :{id:ID, edges:Set<ID>}[] = []
@@ -424,9 +680,9 @@ export class RegAllocator {
     sortIds()
 
     // reserve preemptively.
-    // When disabled, the reserveGpSpillReg function is called at the first
+    // When disabled, the reserveGpSpillRegs function is called at the first
     // sight of what might lead to spill during the picking phase.
-    // this.reserveGpSpillReg(--gpk)
+    // this.reserveGpSpillRegs(--gpk, --gpk)
 
     dlog('\n---------------------------------------------------------')
 
@@ -446,7 +702,7 @@ export class RegAllocator {
         let edges = ig.edges(id) as Set<ID>
         assert(edges, `missing edge data for v${id}`)
         if (edges.size < gpk) {
-          dlog(`pick v${id} with degree ${edges.size} < R`)
+          // dlog(`pick v${id} with degree ${edges.size} < R`)
           sortedIds.splice(i, 1)
           ig.remove(id)
           valstack.push({ id, edges })
@@ -455,56 +711,62 @@ export class RegAllocator {
       }
 
       if (ig.length == 0) {
-        dlog(`picking done`)
-        break
+        break  // picking done
       }
 
       // we didn't find a node with degree < R.
       // Optimistically pick next and continue
       let id = sortedIds.shift() as ID
       let edges = ig.edges(id) as Set<ID>
-      dlog(`pick v${id} with degree ${edges.size} >= R (may spill)`)
+      // dlog(`pick v${id} with degree ${edges.size} >= R (may spill)`)
       ig.remove(id as ID)
       valstack.push({ id, edges })
 
       isSpilling = true
     }
 
+    dlog(`picking done. isSpilling=${isSpilling}`)
     dlog('valstack:', valstack.map(v => `v${v.id}`).join(' '))
 
-    // possible spill?
-    // This branch trades compilation time for smaller code size and better
-    // code efficiency. It can be avoided to speed up compilation.
-    // TODO: consider only taking this branch if config.optimize==true
+    // Determine if spilling is avoidable.
+    //
+    // At this point we don't know if we will need to spill, but we may need
+    // to as the picking phase encountered at least one case where it was
+    // unable to find a node with <R interference edges. However, our picking
+    // phase is pessimistic and the next phase, where we move nodes back into
+    // the interference graph, is where we know for certain if we will spill.
+    //
+    // This branch is taken only when we _might_ spill and performs a partial
+    // "move back" phase to determine if spilling can be avoided if we avoid
+    // reserving spill registers, which reduces the amount of total amount of
+    // registers.
+    //
+    // Thus, this branch trades compilation time for smaller code size and
+    // better code. It can be avoided to speed up compilation at the cost of
+    // more spills.
     if (isSpilling) {
       isSpilling = false
-      // register number (round-robin incremented by loops)
       let reg = -1
-      let rallocmap = new Map<ID,int>()
+      let rallocmap = new Array<int>(sortedIds.length)
       spill_check_loop: for (let i = valstack.length; i > 0;) {
         let v = valstack[--i]
-
-        // pick next register (round-robin)
         reg = (reg + 1) % gpk
-
         let gpcount = gpk
-        reg_conflict_loop1: while (gpcount--) {
+        while (gpcount--) {
           for (let id2 of v.edges) {
-            let reg2 = rallocmap.get(id2)
+            let reg2 = rallocmap[id2]
             if (reg2 != -1 && reg2 == reg) {
-              // conflict
-              // definitely spilling
+              // conflict -- definitely spilling
               isSpilling = true
               break spill_check_loop
-              // reg = (reg + 1) % gpk
-              // continue reg_conflict_loop1
             }
           }
-          // ok -- picked reg does not conflict with interfering values
-          break
+          break  // ok -- picked reg does not conflict with interfering values
         }
-
-        rallocmap.set(v.id, reg)
+        rallocmap[v.id] = reg
+      }
+      if (!isSpilling) {
+        dlog(`isSpilling check was useful: avoided spill`)
       }
     }
 
@@ -524,20 +786,29 @@ export class RegAllocator {
       // TODO: Consider a multi-pass approach, perhaps when config.optimize
       // is set. We would trade compilation time for possibly much better
       // code, but how much better remains to be tested & researched.
-      this.reserveGpSpillReg(--gpk)
+      // this.reserveGpSpillRegs(--gpk, --gpk)
     }
 
     // Values that definitely spill (returned from this function)
-    let spills = [] as ID[]
+    let spills = new Set<ID>()
 
     // rebuild ig by moving back values from the stack
-    let reg = -1  // register number (round-robin incremented by loops)
+    // let reg = -1  // register number used by round-robin sparse allocation
     for (let i = valstack.length; i > 0;) {
       let v = valstack[--i]
 
-      // pick next register (round-robin)
-      reg = (reg + 1) % gpk
-
+      // pick register
+      //
+      // Note: We always start with the first register and search from there
+      // for a free register. This way we can use a minimal amount of
+      // registers.
+      //
+      // A slightly more efficient method which instead leads to a sparse
+      // allocation is to memorize reg outside this loop and to advance
+      // the initial reg using round-robin, e.g.
+      //   reg = (reg + 1) % gpk
+      //
+      let reg = 0
       // now, often round-robin is not enough. Resolve
       let gpcount = gpk
       let conflict = true
@@ -545,7 +816,7 @@ export class RegAllocator {
         for (let id2 of v.edges) {
           let reg2 = a.values[id2].v.reg
           if (reg2 && reg2.num == reg) {
-            // dlog(`conflict -- interfering v${id2} already assigned r${reg}`)
+            // conflict -- interfering v${id2} already assigned r${reg}
             reg = (reg + 1) % gpk
             continue reg_conflict_loop
           }
@@ -555,8 +826,8 @@ export class RegAllocator {
         break
       }
 
+      // if there was no assignable register, we need to spill
       if (conflict) {
-        // no assignable register -- spill
         // dlog(`unable to find register for v${v.id}`)
 
         reg = noReg
@@ -577,7 +848,7 @@ export class RegAllocator {
           )
           if (idx == x.b.values.length - 1) {
             // x is already last in b
-            reg = a.gpSpillReg
+            // reg = a.nextSpillReg()
           } else {
             let live = a.live[x.b.id]  // live values at end of b
             if (live) {
@@ -594,7 +865,7 @@ export class RegAllocator {
                 // move value to end of block
                 x.b.values.splice(idx, 1)
                 x.b.values.push(x)
-                reg = a.gpSpillReg
+                // reg = a.nextSpillReg()
               }
             }
           }
@@ -603,22 +874,22 @@ export class RegAllocator {
         if (reg == noReg) {
           // spill
           // rewrite value as StoreReg with the original value as arg0
-          assert(a.gpSpillReg != -1)
-          spills.push(v.id)
-          let y = x.clone()
-          y.reg = a.registers[a.gpSpillReg]
-          x.reset(ops.StoreReg)
-          x.addArg(y)
-          x.b.insertValue(x, y)
-          dlog(`spill ${x} -> ${y}`)
+          spills.add(v.id)
+          // let y = x.clone()
+          // assert(a.gpSpillRegs.length > 0, `no spill registers allocated`)
+          // y.reg = a.registers[a.nextSpillReg()]
+          // x.reset(ops.StoreReg)
+          // x.addArg(y)
+          // x.b.insertValue(x, y)
+          // dlog(`spill ${x} -> ${y}`)
         }
       }
 
-      dlog(
-        `pop v${v.id}`,
-        `${reg == noReg ? "spill" : a.registers[reg].name} edges:`,
-        Array.from(v.edges).map(id => `v${id}`).join(" ")
-      )
+      // dlog(
+      //   `pop v${v.id}`,
+      //   `${reg == noReg ? "spill" : a.registers[reg].name} edges:`,
+      //   Array.from(v.edges).map(id => `v${id}`).join(" ")
+      // )
 
       // add back into graph
       ig.add(v.id)
@@ -634,11 +905,16 @@ export class RegAllocator {
         // Note: computeLive() consults a.values and only includes values
         // which needReg.
       } else {
-        assert(!a.values[v.id].v.reg, `v${v.id}.reg != null; reg=noReg`)
+        assert(
+          !a.values[v.id].v.reg,
+          `spilling but reg is assigned. v${v.id}.reg != null; reg=noReg`
+        )
       }
 
+      // print interference graph at this point
       // dlog(`ig.fmt():\n` + ig.fmt())
-    }
+
+    } // for (let i = valstack.length; i > 0;)
 
     return spills
   }
@@ -696,7 +972,6 @@ export class RegAllocator {
         if (g.length == 0) {
           // very first value.
           // we know there are no live values; this is the first.
-          assert(live.size == 0, "empty graph but has live set")
           if (vinfo.needReg) {
             g.add(v.id)
           }
