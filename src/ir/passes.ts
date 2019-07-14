@@ -42,8 +42,8 @@ function required(name :string, fn :PassFun) : Pass {
 // All IR passes run over functions
 //
 const passes :Pass[] = [
-  // optional("early phielim", phielim),
-  // optional("early copyelim", copyelim),
+  optional("early phielim", phielim),
+  optional("early copyelim", copyelim),
   optional("early deadcode", deadcode),
 
   optional("short circuit", shortcircuit),

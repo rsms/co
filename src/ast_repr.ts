@@ -28,7 +28,6 @@ import {
   StringLit,
   FunExpr,
   FunSig,
-  NoOpStmt,
   Block,
   IfExpr,
   Assignment,
@@ -298,11 +297,23 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
 
   if (n instanceof Assignment) {
     let s = newline + "(assign "
-    if (n.lhs.length == 1) {
-      s += repr1(n.lhs[0], nl2, c)
-    } else {
-      s += reprv(n.lhs, nl2, c)
+    if (n.lhs.length > 1) { s += "(" }
+    for (let i = 0; i < n.lhs.length; i++) {
+      let n2 = n.lhs[i]
+      s += repr1(n.lhs[i], nl2, c)
+      if (n.decls[i]) {
+        s += "*"
+      }
+      if (i < n.lhs.length-1) {
+        s += " "
+      }
     }
+    if (n.lhs.length > 1) { s += ")" }
+
+    //   s += repr1(n.lhs[0], nl2, c)
+    // } else {
+    //   s += reprv(n.lhs, nl2, c)
+    // }
     if (n.op == token.ILLEGAL) {
       s += ' = '
     } else {
@@ -445,9 +456,9 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
     return s + ' ' + reprv(n.entries, nl2, c, '') + ')'
   }
 
-  if (n.constructor === NoOpStmt) {
-    return 'noop'
-  }
+  // if (n.constructor === NoOpStmt) {
+  //   return 'noop'
+  // }
 
   return '(???'+ reprcons(n, c) + ' ' + repr(n) + ')'
 }

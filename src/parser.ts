@@ -3,7 +3,7 @@ import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
 import { TypeResolver } from './resolve'
-import { strings } from './bytestr'
+import { strings, str__ } from './bytestr'
 import { Universe } from './universe'
 import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
@@ -87,7 +87,6 @@ import { debuglog as dlog } from './util'
 
 const kEmptyByteArray = new Uint8Array(0) // used for empty string
 
-const str__    = strings.get(new Uint8Array([0x5f])) // "_"
 const str_dot  = strings.get(new Uint8Array([0x2e])) // "."
 const str_init = strings.get(new Uint8Array([0x69, 0x6e, 0x69, 0x74])) // "init"
 
@@ -277,7 +276,7 @@ export class Parser extends scanner.Scanner {
   declare(scope :Scope, ident: Ident, decl :Node, x: Expr|null) {
     const p = this
 
-    if (ident.value === str__) {
+    if (ident.value.isEmpty) {
       // "_" is never declared
       return
     }
@@ -308,7 +307,7 @@ export class Parser extends scanner.Scanner {
 
   resolveEnt(id :Ident) :Ent|null {
     const p = this
-    // if (id.value === str__) {
+    // if (id.value.isEmpty) {
     //   return null  // "_" never resolves
     // }
     assert(id.ent == null, "already resolved")
@@ -357,7 +356,7 @@ export class Parser extends scanner.Scanner {
 
 
   resolveVal<N extends Expr>(x :N) :N {
-    if (!(x instanceof Ident) || x.value === str__) { // ignore "_"
+    if (!(x instanceof Ident) || x.value.isEmpty) { // ignore "_"
       return x
     }
     const p = this
@@ -579,11 +578,6 @@ export class Parser extends scanner.Scanner {
     // ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
-    // if (p.scope !== p.filescope && p.tok == token.ASSIGN) {
-    //   // produce Assignment instead
-    //   return p.assignment(idents, typ ? p.types.resolve(typ) : null)
-    // }
-
     const d = new VarDecl(pos, scope, idents, null, typ, null)
 
     if (p.got(token.ASSIGN)) {
@@ -603,7 +597,7 @@ export class Parser extends scanner.Scanner {
     }
 
     const reqt = d.type ? p.types.resolve(d.type) : null
-    p.processAssign(d.idents, d.values, d, reqt, /*onlyDef=*/true)
+    p.processAssign(d.idents, d.values, d, reqt, null)
 
     return d
   }
@@ -784,7 +778,7 @@ export class Parser extends scanner.Scanner {
     const funtype = p.types.resolve(f) as FunType
     assert(funtype.constructor === FunType) // funtype always resolves
 
-    if (name && name.value !== str__ && !isInitFun) {
+    if (name && !name.value.isEmpty && !isInitFun) {
       // since we declared the name of the function, the name now represents
       // the function and thus its type.
       name.type = funtype
@@ -1185,37 +1179,9 @@ export class Parser extends scanner.Scanner {
     rhs :Expr[]|null,
     decl :Node,
     reqt :Type|null,
-    onlyDef :bool,
+    decls :bool[]|null,
   ) {
     const p = this
-
-    // // TODO refactor this and move this function (that has a closure)
-    // function maybeConvRVal(typ :Type, rval :Expr, index :int) {
-    //   if (
-    //     !(rval.type instanceof UnresolvedType) &&
-    //     !(typ instanceof UnresolvedType)
-    //   ) {
-    //     const convx = p.types.convert(typ, rval)
-    //     if (!convx) {
-    //       if (rval.type instanceof UnresolvedType) {
-    //         // unresolved
-    //         return
-    //       }
-    //       p.error(
-    //         (rval.type instanceof UnresolvedType ?
-    //           `cannot convert "${rval}" to type ${typ}` :
-    //           `cannot convert "${rval}" (type ${rval.type}) to type ${typ}`
-    //         ),
-    //         rval.pos
-    //       )
-    //     } else if (convx !== rval) {
-    //       // no error and conversion is needed.
-    //       // replace original expression with conversion expression
-    //       assert(rhs != null)
-    //       ;(rhs as any)[index] = convx
-    //     }
-    //   }
-    // }
 
     // Check each left-hand identifier against scope and unresolved.
     // Note that exprList already has called p.resolve on all ids.
@@ -1237,16 +1203,16 @@ export class Parser extends scanner.Scanner {
       }
 
       // Decide to store to an existing ent, or declare a new one
-      if (!onlyDef && rhs && id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
+      if (decls && rhs && id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
+        // assign to existing ent
         const rval = rhs[i]
 
         id.incrWrite()
 
         let typ = id.ent.type
         if (!typ) {
-          const typexpr = id.ent.getTypeExpr()
-          assert(typexpr != null, 'null ent (internal parser error)')
-          typ = p.types.resolve(typexpr as Expr)
+          const typexpr = id.ent.getTypeExpr()! ; assert(typexpr)
+          typ = p.types.resolve(typexpr)
         }
 
         // const typexpr = id.ent.getTypeExpr()
@@ -1277,7 +1243,7 @@ export class Parser extends scanner.Scanner {
         }
       } else {
         assert(rval, "processAssign called with no reqt and no rvals")
-        id.type = p.types.resolve(rval as Expr)
+        id.type = p.types.resolve(rval!)
       }
 
       if (p.unresolved) { p.unresolved.delete(id) } // may be noop
@@ -1287,22 +1253,26 @@ export class Parser extends scanner.Scanner {
         id.type.addRef(id)
       }
 
+      if (decls && !id.value.isEmpty) {
+        decls[i] = true
+      }
+
     } // end for loop
   }
 
 
-  assignment(lhs :Expr[], reqt :Type|null = null) :Assignment {
+  assignment(lhs :Expr[]) :Expr {
     // Assignment = ExprList "=" ExprList
     const p = this
     p.want(token.ASSIGN) // "="
 
-    const s = new Assignment(lhs[0].pos, p.scope, token.ASSIGN, lhs, [])
+    const decls = new Array<bool>(lhs.length)
+    const s = new Assignment(lhs[0].pos, p.scope, token.ASSIGN, lhs, [], decls)
 
     // parse right-hand side in context of the function
     s.rhs = p.exprList(/*ctx=*/s)
 
-    p.processAssign(s.lhs, s.rhs, s, /*reqt=*/reqt, /*onlyDef=*/false)
-
+    p.processAssign(s.lhs, s.rhs, s, /*reqt=*/null, decls)
     p.types.resolve(s)
 
     return s
@@ -1331,7 +1301,7 @@ export class Parser extends scanner.Scanner {
         let x = lhs[i] as Ident
         if (x.ent) {
           x.unrefEnt()
-        } else if (x.value !== str__) {
+        } else if (!x.value.isEmpty) {
           assert(p.unresolved != null)
           ;(p.unresolved as Set<Ident>).delete(x)
         }
@@ -1376,7 +1346,8 @@ export class Parser extends scanner.Scanner {
           assert(false, `unexpected operator token ${token[op]}`)
       }
 
-      const s = new Assignment(pos, p.scope, op, lhs, [])
+      // e.g. x += 2
+      const s = new Assignment(pos, p.scope, op, lhs, [], [])
       s.rhs = p.exprList(/*ctx=*/s)
       p.types.resolve(s)
       return s
@@ -1392,7 +1363,7 @@ export class Parser extends scanner.Scanner {
         this.syntaxError(`cannot mutate ${lhs[0]} of type ${t}`, lhs[0].pos)
       }
 
-      let s = new Assignment(pos, p.scope, op, lhs, emptyExprList)
+      let s = new Assignment(pos, p.scope, op, lhs, emptyExprList, [])
       p.types.resolve(s)
       return s
     }

@@ -26,7 +26,7 @@ import * as types from './types'
 //  Node
 //    Field
 //    Stmt
-//      NoOpStmt
+//      //NoOpStmt
 //      Decl
 //        MultiDecl
 //        ImportDecl
@@ -308,8 +308,8 @@ export class Package {
 //
 export class Stmt extends Node {}
 
-// no operation / blank / filler
-export class NoOpStmt extends Stmt {}
+// // no operation / blank / filler
+// export class NoOpStmt extends Stmt {}
 
 
 export class ReturnStmt extends Stmt {
@@ -753,9 +753,10 @@ export class StringLit extends LiteralExpr {
 export class Assignment extends Expr {
   // e.g. "x = y", "x++"
   constructor(pos :Pos, scope :Scope,
-  public op  :token, // ILLEGAL means no operation
-  public lhs :Expr[],
-  public rhs :Expr[], // empty == lhs++ or lhs--
+  public op    :token, // ILLEGAL means no operation
+  public lhs   :Expr[],
+  public rhs   :Expr[], // empty == lhs++ or lhs--
+  public decls :bool[],  // index => bool: new declaration?
   ) {
     super(pos, scope)
   }

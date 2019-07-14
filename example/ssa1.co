@@ -61,8 +61,11 @@
 // type A i32    // concrete
 // type B = i32  // alias
 
+fun bar(int) int
+
 fun foo(x, _, y int) int {
   z int = 0
+  _ = z + 1
   while x < 5 {
     x++
     for i = 0; x > i; i++ {

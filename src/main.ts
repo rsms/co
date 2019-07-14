@@ -203,6 +203,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   console.log('available target archs:', Array.from(archs.keys()).join(', '))
   const config = new Config("covm", {
     optimize: !options.noOptimize,
+    loopstats: true, // debug
   })
   console.log(`selected target config: ${config}`)
 

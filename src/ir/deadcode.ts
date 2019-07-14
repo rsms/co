@@ -2,10 +2,10 @@ import { Value, Block, BlockKind, Fun, BranchPrediction } from './ssa'
 import { phielimValue } from './phielim'
 import { copyelim } from './copyelim'
 import { ops, opinfo } from "./ops"
-import { printir } from './repr'
 
-import { debuglog as dlog } from '../util'
-// const dlog = function(..._ :any[]){} // silence dlog
+// import { printir } from './repr'
+// import { debuglog as dlog } from '../util'
+const dlog = function(..._ :any[]){} // silence dlog
 
 
 // deadcode removes dead code from f
@@ -119,8 +119,8 @@ export function deadcode(f :Fun) {
     }
   }
 
-  print('———————————————————————————-')
-  printir(f)
+  // print('———————————————————————————-')
+  // printir(f)
 
   // decrement use counters of unused args and reduce Phis
   for (let b of f.blocks) {
@@ -153,8 +153,8 @@ export function deadcode(f :Fun) {
     }
   }
 
-  print('———————————————————————————-')
-  printir(f)
+  // print('———————————————————————————-')
+  // printir(f)
 
   // Remove dead values from blocks' value list
   for (let b of f.blocks) {
@@ -187,9 +187,8 @@ export function deadcode(f :Fun) {
 
   f.blocks.length = i
 
-  print('———————————————————————————-')
-  printir(f)
-
+  // print('———————————————————————————-')
+  // printir(f)
   // process.exit(0)
 
 } // deadcode

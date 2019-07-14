@@ -18,6 +18,7 @@ import {
   nilRegInfo,
 } from './reg'
 
+import { printir } from './repr'
 import { debuglog as dlog } from '../util'
 // const dlog = function(..._ :any[]){} // silence dlog
 
@@ -290,17 +291,9 @@ export class RegAllocator {
       }
     }
 
-    // // Add SP (stack pointer) value to the top of the entry block.
-    // // TODO: track the need for this when generating the initial IR.
-    // // Some functions do not need SP.
-    // const SP = f.newValue(f.entry, ops.SP, a.addrtype, 0, null)
-    // SP.reg = a.registers[this.SPReg]
-    // f.entry.pushValueFront(SP)
-    // dlog("TODO: assign SP reg to SP")
-
+    // DISABLED
     // Decouple the register allocation order from the generated block order.
     // This also creates an opportunity for experiments to find a better order.
-    // DISABLED
     // a.visitOrder = layoutOrder(f)
     // if (a.config.optimize) {
     //   // update function block order with new layout
@@ -308,19 +301,19 @@ export class RegAllocator {
     // }
     a.visitOrder = f.blocks
 
+    // DISABLED
     // Compute block order. This array allows us to distinguish forward edges
     // from backward edges and compute how far they go.
-    // DISABLED
     // let blockOrder = new Array<int>(f.numBlocks())
     // for (let i = 0; i < a.visitOrder.length; i++) {
     //   blockOrder[a.visitOrder[i].id] = i >>> 0
     // }
 
-    // s.regs = make([]regState, s.numRegs)
+    // s.regs = new Array<regState>(s.numRegs)
     let nvals = f.numValues()
     a.values = new Array<ValState>(nvals)
     a.orig = new Array<Value>(nvals)
-    // s.copies = make(map[*Value]bool)
+    // s.copies = new Map<Value,bool>()
     for (let b of a.visitOrder) {
       for (let v of b.values) {
         let t = v.type
@@ -341,6 +334,9 @@ export class RegAllocator {
     // to a set of values alive at the point of the definition.
     a.computeLive()
     dlog("\nlive values at end of each block\n" + a.fmtLive())
+
+    // printir(f)
+    // process.exit(0)
 
     // debug valstate
     if (DEBUG) {
@@ -767,6 +763,8 @@ export class RegAllocator {
       }
       if (!isSpilling) {
         dlog(`isSpilling check was useful: avoided spill`)
+      } else {
+        dlog(`isSpilling check was not useful: no spills avoided`)
       }
     }
 
@@ -1155,7 +1153,7 @@ export class RegAllocator {
           }
         }
 
-        // dlog(`desired: ${desired}`)
+        // dlog(`${b} desired: ${desired}`)
 
 
         // For each predecessor of b, expand its list of live-at-end values.

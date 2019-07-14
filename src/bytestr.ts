@@ -1,13 +1,13 @@
-import { bufcmp, asciibuf } from './util'
-import * as utf8 from './utf8'
 //
 // Interned byte strings
 //
+import { bufcmp, asciibuf } from './util'
+import * as utf8 from './utf8'
 
-// let _nextId = 0
 
 export class ByteStr {
-  // readonly _id :int = _nextId++ // only for debugging
+  readonly isEmpty = false  // true for "_"
+
   constructor(
   readonly hash  :int,
   readonly bytes :Uint8Array,
@@ -69,6 +69,9 @@ export class ByteStrSet {
 
 // process-wide shared instance
 export const strings = new ByteStrSet()
+
+export const str__ = strings.get(new Uint8Array([0x5f])) // "_"
+;(str__ as any).isEmpty = true
 
 
 // hashBytes returns an unsigned 31 bit integer hash of an array of bytes.

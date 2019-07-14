@@ -179,6 +179,8 @@ export function loopnest(f :Fun) :LoopNest {
   let visited = new Array<bool>(numblocks)
   let sawIrred = false
 
+  po = f.blocks.slice().reverse()
+
   // Reducible-loop-nest-finding.
   for (let b of po) {
     dlog(`loop finding at ${b}`)
@@ -208,7 +210,7 @@ export function loopnest(f :Fun) :LoopNest {
         }
       } else if (!visited[bb.id]) { // Found an irreducible loop
         sawIrred = true
-        dlog(`loop finding    succ ${bb} of ${b} is IRRED, in ${f}`)
+        dlog(`loop finding    succ ${bb} of ${b} is IRREDUCABLE, in ${f}`)
       } else if (l) {
         // TODO handle case where l is irreducible.
         // Perhaps a loop header is inherited.
@@ -216,13 +218,13 @@ export function loopnest(f :Fun) :LoopNest {
         if (!sdom.isAncestorEq(l.header, b)) {
           l = l.nearestOuterLoop(sdom, b)
         }
-        if (!l) {
-          dlog(`loop finding    succ ${bb} of ${b} has no loop`)
-        } else {
+        if (l) {
           dlog(`loop finding    succ ${bb} of ${b} provides loop with header ${l.header}`)
+        // } else {
+        //   dlog(`loop finding    succ ${bb} of ${b} has no loop`)
         }
-      } else { // No loop
-        dlog(`loop finding    succ ${bb} of ${b} has no loop`)
+      // } else { // No loop
+      //   dlog(`loop finding    succ ${bb} of ${b} has no loop`)
       }
 
       if (!l || innermost === l) {
@@ -306,6 +308,8 @@ export function loopnest(f :Fun) :LoopNest {
       l.containsUnavoidableCall = true
     }
   }
+
+  dlog(`f.config.loopstats=${f.config.loopstats}, loops.length=${loops.length}`)
 
   if (f.config.loopstats && loops.length > 0) {
     ln.assembleChildren()

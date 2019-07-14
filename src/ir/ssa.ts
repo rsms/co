@@ -161,6 +161,14 @@ export class Value {
     }
     return true
   }
+
+  addComment(comment :string) {
+    if (this.comment.length > 0) {
+      this.comment += "; " + comment
+    } else {
+      this.comment = comment
+    }
+  }
 }
 
 
@@ -449,7 +457,11 @@ export class Block {
 
   newPhi(t :BasicType) :Value {
     let v = this.f.newValue(this, ops.Phi, t, 0, null)
-    this.values.push(v)
+    if (this.values.length > 0 && this.values[this.values.length-1].op != ops.Phi) {
+      this.values.unshift(v)
+    } else {
+      this.values.push(v)
+    }
     return v
   }
 

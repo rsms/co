@@ -229,16 +229,19 @@ export class IRBuilder {
     const s = this
     assert(s.f, "ending function without a current function")
 
-    dlog(`s.f.namedValues:`)
-    for (let name of s.f.namedValues.keys()) {
-      let e = s.f.namedValues.get(name)
-      let line = `  {${name}}\t=> `
-      if (e && e.values.length) {
-        line += e.values.join(', ')
-      } else {
-        line += '-'
+    if (DEBUG) {
+      let dloglines :string[] = []
+      for (let name of s.f.namedValues.keys()) {
+        let e = s.f.namedValues.get(name)
+        let line = `  ${name}\t=> `
+        if (e && e.values.length) {
+          line += Array.from(new Set(e.values)).join(', ')
+        } else {
+          line += '-'
+        }
+        dloglines.push(line)
       }
-      dlog(line)
+      dlog(`s.f.namedValues:\n` + dloglines.join("\n") + "\n")
     }
 
     // TODO: run passes on s.f here
@@ -307,16 +310,13 @@ export class IRBuilder {
     // stack starts at startmem
     r.stacktop = r.startmem
 
-    // initialize locals
+    // initialize arguments
     for (let i = 0; i < x.sig.params.length; i++) {
       let p = x.sig.params[i]
       if (p.name && !p.name.value.isUnderscore()) {
         let t = r.concreteType(funtype.args[i])
         let name = p.name.value
-        let v = f.entry.newValue0(ops.Arg, t, i)
-        if (r.flags & IRBuilderFlags.Comments) {
-          v.comment = name.toString()
-        }
+        let v = f.entry.newValue0(ops.Arg, t, i, name)
         r.vars.set(name, v)
       }
     }
@@ -326,8 +326,7 @@ export class IRBuilder {
 
     let bodyval = r.block(x.body as ast.Expr)
 
-    printir(f)
-    dlog(`r.b = ${r.b}`)
+    // printir(f); dlog(`r.b = ${r.b}`); process.exit(0)  // XXX
 
     if (r.b as any) {
       // end last block if not already ended
@@ -405,8 +404,7 @@ export class IRBuilder {
         for (let i = 0; i < s.idents.length; i++) {
           let id = s.idents[i]
           let v = r.expr(s.values[i])
-          assert(!r.vars.has(id.value), `redeclaration of var ${id.value}`)
-          r.vars.set(id.value, v)
+          r.varDef(id.value, v)
         }
       } else {
         // default value; e.g. "x i32"  =>  "x = 0"
@@ -414,10 +412,9 @@ export class IRBuilder {
         let t = (s.type as ast.Expr).type as BasicType
         assert(t, 'unresolved type')
         assert(t instanceof BasicType, 'non-basic type not yet supported')
-        let v = r.f.constVal(t, 0)
+        let v = r.f.constVal(t, 0)  // nil
         for (let id of s.idents) {
-          assert(!r.vars.has(id.value), `redeclaration of var ${id.value}`)
-          r.vars.set(id.value, v)
+          r.varDef(id.value, v)
         }
       }
     // } else if (s instanceof ast.InlineMark) {
@@ -426,6 +423,15 @@ export class IRBuilder {
       dlog(`TODO: handle ${s.constructor.name}`)
     }
     return null
+  }
+
+
+  varDef(name :ByteStr, init :Value) :Value {
+    const s = this
+    let v = s.b.newValue1(ops.VarDef, init.type, init, 0, name)
+    assert(!s.vars.has(name), `redeclaration of var ${name}`)
+    s.vars.set(name, v)
+    return v
   }
 
 
@@ -497,10 +503,11 @@ export class IRBuilder {
 
     // end "entry" block (whatever block comes before "while")
     let bEntry = s.endBlock()
-    dlog(`for ${n} endBlock => ${bEntry}`)
-    if (!bEntry.sealed) {
-      s.sealBlock(bEntry) // all preds of bEntry are known
-    }
+    dlog(`for ${n} endBlock() => ${bEntry}`)
+    assert(bEntry.sealed)
+    // if (!bEntry.sealed) {
+    //   s.sealBlock(bEntry) // all preds of bEntry are known
+    // }
 
     // connect entry -> condition
     bEntry.addEdgeTo(bCond)
@@ -559,9 +566,35 @@ export class IRBuilder {
 
     // end body
     let bodyEnd = s.endBlock()
-    if (bodyEnd.values.length == 0) {
+    if (bodyEnd.values.length == 0 && bodyEnd.sealed) {
+      // short-circuit empty body
+      //
+      // Example where b2->b3->b2 is short-circuited to b2->b2:
+      //   b2: <— b1, b3
+      //     ...
+      //   if v1 —> b4, b3
+      //   b3: <— b2
+      //   cont —> b2
+      //   b4: <— b2
+      //     ...
+      //
+      // After short-circuit:
+      //   b2: <— b1, b2
+      //     ...
+      //   if v1 —> b4, b2
+      //   b4: <— b2
+      //     ...
+      //
       assert(bodyEnd.preds.length == 1)
       let pred0 = bodyEnd.preds[0]!
+      assert(pred0.succs.length > 0)
+      let idx = pred0.succs.indexOf(bodyEnd)
+      assert(
+        idx != -1,
+        `${bodyEnd}.preds contains ${pred0}, ` +
+        `but ${pred0}.succs doesn't contain ${bodyEnd}`
+      )
+      pred0.succs.splice(idx)
       s.f.removeBlock(bodyEnd)
       bodyEnd = pred0
     }
@@ -571,9 +604,7 @@ export class IRBuilder {
       bodyEnd.addEdgeTo(bIncr)
       s.f.blocks.push(bIncr)
       s.startSealedBlock(bIncr)
-      if (n.incr) {
-        s.stmt(n.incr)
-      }
+      s.stmt(n.incr)
       let b = s.endBlock()
       b.addEdgeTo(bCond)
     } else {
@@ -587,6 +618,7 @@ export class IRBuilder {
     // start continuation block
     s.f.blocks.push(bEnd)
     s.startSealedBlock(bEnd)
+    dlog(`bEnd ${bEnd}`)
 
     // add comments
     if (s.flags & IRBuilderFlags.Comments) {
@@ -717,29 +749,26 @@ export class IRBuilder {
     assert(left instanceof ast.Ident, `${left.constructor.name} not supported`)
     let name = (left as ast.Ident).value
 
-    // s.addNamedValue(left, right)
-    // let t = rhs.type as BasicType
-    // assert(t instanceof BasicType, "not a basic type")
-    // let op = storeop(t)
-    // v = r.b.newValue1(op, t, src, dst)
-    // return right
+    if (name.isEmpty) { // "_"
+      return right
+    }
 
-    // // Issue a "copy" to indicate "store to variable"
+    // // copy right -> left
     // let v = s.b.newValue1(ops.Copy, right.type, right)
     // if (s.flags & IRBuilderFlags.Comments) {
-    //   v.comment = name.toString()
+    //   v.addComment(name.toString())
     // }
     // s.writeVariable(name, v)
     // return v
-    // //
-    // // TODO: when we implement register allocation and stack allocation,
-    // // we can remove the "Copy" op and just do the following to track the
-    // // assignment:
-    // //
 
-    // instead of issuing an intermediate "store", simply associate variable
+    // instead of issuing an intermediate "copy", simply associate variable
     // name with the value on the right-hand side.
     s.writeVariable(name, right)
+
+    if (s.flags & IRBuilderFlags.Comments) {
+      right.addComment(name.toString())
+    }
+
     return right
   }
 
@@ -806,13 +835,13 @@ export class IRBuilder {
       let leftnames = new Map<ByteStr,int>() // name => position
       for (let i = 0; i < z; i++) {
         let x = s.lhs[i]
-        if (x instanceof ast.Ident) {
+        if (x.isIdent()) {
           leftnames.set(x.value, i)
         }
       }
       for (let i = 0; i < z; i++) {
         let x = s.rhs[i]
-        if (x instanceof ast.Ident) {
+        if (x.isIdent()) {
           let Li = leftnames.get(x.value)
           if (Li == i) {
             // e.g. "x, y = x, 2"
@@ -838,12 +867,18 @@ export class IRBuilder {
       } else {
         v = r.expr(s.rhs[i])
       }
-      v = r.assign(left, v)
-      if (r.flags & IRBuilderFlags.Comments && left.isIdent()) {
-        v.comment = left.toString()
+      if (s.decls[i]) {
+        // declares a new variable
+        assert(left.isIdent())
+        assert(!(left as ast.Ident).value.isEmpty, `AST contains vardef "_"`)
+        v = r.varDef((left as ast.Ident).value, v)
+      } else {
+        // write to existing variable
+        v = r.assign(left, v)
       }
     }
 
+    // last value represents the assignment expression
     return v as Value
   }
 
@@ -1205,10 +1240,6 @@ export class IRBuilder {
     if (!b || b === s.b) {
       s.vars.set(name, v)
     } else {
-      // while (s.defvars.length <= b.id) {
-      //   // fill any holes
-      //   s.defvars.push(null)
-      // }
       let m = s.defvars[b.id]
       if (m) {
         m.set(name, v)
@@ -1220,9 +1251,7 @@ export class IRBuilder {
     if (!(name instanceof TmpName)) {
       // TODO: find a better and more efficient way to map a LocalSlot
       // in a map structure. For now, we use a string representation of its
-      // internal state, but that's pretty slow.
-      // Also, when we find a way to actually key with a LocalSlot, we can
-      // simplify Fun.namedValues to be Map<LocalSlot,Value[]>
+      // internal state.
       let local = new LocalSlot(name, v.type, 0)
       let e = s.f.namedValues.get(local.key())
       if (e) {

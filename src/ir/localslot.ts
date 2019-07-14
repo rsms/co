@@ -9,25 +9,24 @@ import { Type } from '../types'
 //           stack layout              LocalSlots
 //
 // Optimizations are disabled. s is on the stack and represented in its entirety.
-// [ ------- s string ---- ] { N: s, type: string, Off: 0 }
+// [ ------- s string ---- ] { N: s, Type: string, Off: 0 }
 //
 // s was not decomposed, but the SSA operates on its parts individually, so
-// there is a LocalSlot for each of its fields that points into the single
-// stack slot.
-// [ ------- s string ---- ] { N: s, type: *uint8, Off: 0 }, {N: s, type: int, Off: 8}
+// there is a LocalSlot for each of its fields that points into the single stack slot.
+// [ ------- s string ---- ] { N: s, Type: *uint8, Off: 0 }, {N: s, Type: int, Off: 8}
 //
 // s was decomposed. Each of its fields is in its own stack slot and has its own LocalSLot.
-// [ ptr *uint8 ] [ len int] { N: ptr, type: *uint8, Off: 0, splitOf: parent, splitOffset: 0},
-//                           { N: len, type: int, Off: 0, splitOf: parent, splitOffset: 8}
-//                           parent = &{N: s, type: string}
+// [ ptr *uint8 ] [ len int] { N: ptr, Type: *uint8, Off: 0, SplitOf: parent, SplitOffset: 0},
+//                           { N: len, Type: int, Off: 0, SplitOf: parent, SplitOffset: 8}
+//                           parent = &{N: s, Type: string}
 //
 export class LocalSlot {
   n    :any   // an ONAME *gc.Node representing a stack location.
   type :Type  // type of slot
   offs :int   // offset of slot in N
 
-  // splitOf     :LocalSlot  // slot is a decomposition of splitOf
-  // splitOffset :int64      // .. at this offset.
+  // splitOf     :LocalSlot|null  // slot is a decomposition of splitOf
+  // splitOffset :int             // .. at this offset.
 
   constructor(n :any, type :Type, offs :int) {
     this.n = n
@@ -40,7 +39,7 @@ export class LocalSlot {
   key() :string {
     // HACK to derive a unique key of the state of this object
     if (!this._key) {
-      this._key = `${this.n} ${this.type} ${this.offs}`
+      this._key = `${this.n}(${this.offs})`
     }
     return this._key
   }

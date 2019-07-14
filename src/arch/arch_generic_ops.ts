@@ -21,6 +21,7 @@ import {
   Generic,
 } from "./describe"
 import { emptyRegSet } from "../ir/reg"
+import { SymEffect } from "../ir/op"
 
 const ops :OpDescription[] = [
 
@@ -29,7 +30,8 @@ const ops :OpDescription[] = [
   ["Unknown"], // Unknown value. Used for Values whose values don't matter because they are dead code.
   ["Phi", -1, ZeroWidth], // select an argument based on which predecessor block we came from
   ["Copy", 1],  // output = arg0
-  ["Arg", ZeroWidth, {aux: "Int32"}], // argument to current function. aux=position.
+  ["Arg", 0, ZeroWidth, {aux: "SymOff", symEffect: SymEffect.Read}], // argument to current function. aux=name, auxInt=position.
+  ["VarDef", 1, ZeroWidth, t.mem, {aux: "Sym", symEffect: SymEffect.None}], // aux=name
   ["InitMem", 0, ZeroWidth, t.mem],  // memory input to a function.
   ["CallArg", 1, ZeroWidth], // argument for function call
   ["NilCheck", 2, t.nil, NilCheck, FaultOnNilArg0], // panic if arg0 is nil. arg1=mem.
