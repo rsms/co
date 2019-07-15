@@ -89,7 +89,7 @@ export interface ReprOptions {
 }
 
 
-export function astRepr(n :Package|File|Node, options? :ReprOptions) :string {
+export function astRepr(n :Node, options? :ReprOptions) :string {
   let ctx = defaultCtx
   if (options) {
     ctx = new ReprCtx()
@@ -202,7 +202,7 @@ function repr1(n :Node, newline :string, c :ReprCtx, flag :int = 0) :string {
   }
 
   if (n instanceof TypeExpr) {
-    return `(type ${c.style.blue(`${n.type}`)})`
+    return `(type ${c.style.blue(`${n.type || "nil"}`)})`
     // return reprt(n.type, newline, c)
   }
 

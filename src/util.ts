@@ -167,7 +167,14 @@ if (typeof Buffer != 'undefined') {
 }
 
 
-export class AppendBuffer {
+export interface ByteWriter {
+  writeByte(b :int) :void
+  writeNbytes(b :int, n :int) :void
+  write(src :Uint8Array, srcStart? :int, srcEnd? :int) :int
+}
+
+
+export class AppendBuffer implements ByteWriter {
   buffer :Uint8Array
   length :int // current offset
 
@@ -187,13 +194,20 @@ export class AppendBuffer {
     }
   }
 
-  subarray() :Uint8Array {
+  // bytes returns a Uint8Array of the written bytes which references the underlying storage.
+  // Further modifications are observable both by the receiver and the returned array.
+  // Use
+  //
+  bytes() :Uint8Array {
     return this.buffer.subarray(0, this.length)
   }
 
-  // slice() :Uint8Array {
-  //   return this.buffer.slice(0, this.length)
-  // }
+  // bytesCopy returns a Uint8Array of the written bytes as a copy.
+  //
+  bytesCopy() :Uint8Array {
+    return this.buffer.slice(0, this.length)
+  }
+
   // slice(start :int = 0, end? :int) :Uint8Array {
   //   const _end = end === undefined ? this.length : Math.min(this.length, end)
   //   if (this.buffer.length - (_end - start) < 128) {
@@ -203,14 +217,27 @@ export class AppendBuffer {
   //   return this.buffer.slice(start, _end)
   // }
 
-  append(b :int) :void {
+  writeByte(b :int) :void {
     if (this.length >= this.buffer.length) {
-      this._grow()
+      this._grow(8)
     }
     this.buffer[this.length++] = b
   }
 
-  appendRange(src :Uint8Array, srcStart :int, srcEnd? :int) :void {
+  // write b n times
+  writeNbytes(b :int, n :int) :void {
+    if (this.length + n >= this.buffer.length) {
+      this._grow(n)
+    }
+    let end = this.length + n
+    this.buffer.fill(b, this.length, end)
+    this.length = end
+  }
+
+  write(src :Uint8Array, srcStart? :int, srcEnd? :int) :int {
+    if (srcStart === undefined) {
+      srcStart = 0
+    }
     const end = (srcEnd === undefined) ? src.length : srcEnd
     const size = end - srcStart
     if (this.length + size >= this.buffer.length) {
@@ -218,9 +245,10 @@ export class AppendBuffer {
     }
     this.buffer.set(src.subarray(srcStart, srcEnd), this.length)
     this.length += size
+    return size
   }
 
-  private _grow(minAddlSize :int = 8) {
+  private _grow(minAddlSize :int) {
     this.buffer = bufcopy(
       this.buffer,
       Math.min(minAddlSize, this.buffer.length)

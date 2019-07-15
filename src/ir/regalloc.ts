@@ -1,6 +1,6 @@
 import { UInt64 } from '../int64'
 import { Pos } from '../pos'
-import { Mem, t_u32, t_mem, intTypes } from '../types'
+import { Mem, t_u32, intTypes } from '../types'
 import { ID, Fun, Block, Value, BranchPrediction, Location, BlockKind } from './ssa'
 import { Config } from './config'
 import { DesiredState } from './reg_desiredstate'
@@ -18,7 +18,7 @@ import {
   nilRegInfo,
 } from './reg'
 
-import { printir } from './repr'
+// import { printir } from './repr'
 import { debuglog as dlog } from '../util'
 // const dlog = function(..._ :any[]){} // silence dlog
 

@@ -878,7 +878,7 @@ export class Scanner extends ErrorReporter {
 
         case 0x22: // "
           if (buf) {
-            buf.appendRange(s.sdata, chunkStart, s.offset)
+            buf.write(s.sdata, chunkStart, s.offset)
           }
           s.readchar()
           break loop1
@@ -890,7 +890,7 @@ export class Scanner extends ErrorReporter {
           }
 
           if (chunkStart != s.offset) {
-            buf.appendRange(s.sdata, chunkStart, s.offset)
+            buf.write(s.sdata, chunkStart, s.offset)
           }
 
           s.readchar()
@@ -909,7 +909,7 @@ export class Scanner extends ErrorReporter {
               buf.reserve(utf8.UTFMax)
               buf.length += utf8.encode(buf.buffer, buf.length, n)
             } else {
-              buf.append(n)
+              buf.writeByte(n)
             }
           }
 
@@ -922,7 +922,7 @@ export class Scanner extends ErrorReporter {
           // start interpolated string
 
           if (buf) {
-            s.byteval = buf.subarray()
+            s.byteval = buf.bytes()
           }
 
           if (s.gotchar(0x28)) { // (
@@ -956,7 +956,7 @@ export class Scanner extends ErrorReporter {
     }
 
     if (buf) {
-      s.byteval = buf.subarray()
+      s.byteval = buf.bytes()
     } else {
       s.endoffs = s.offset - 1
     }

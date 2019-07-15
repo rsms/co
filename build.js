@@ -221,12 +221,12 @@ const mapfile = outfile + ".map"
 
 // setup version info
 const githashShort = getGitHashSync().substr(0, 10)
-const VERSION = (
-  pkg.version + (githashShort ?
-    "-" + (debug ? ("debug+" + githashShort) : githashShort) :
-    ""
-  )
+const VERSION = pkg.version
+const VERSION_TAG = (
+  githashShort ? (debug ? ("debug+" + githashShort) : githashShort) :
+  ""
 )
+const VERSION_FULL = VERSION + (VERSION_TAG ? "-" + VERSION_TAG : "")
 
 // constant definitions that may be inlined
 const defines_inline = {
@@ -236,6 +236,8 @@ const defines_inline = {
 // constant defintions (will be available as `const name = value` at runtime)
 const defines_all = Object.assign({
   VERSION,
+  VERSION_FULL,
+  VERSION_TAG,
 }, defines_inline)
 
 // typescript config
@@ -277,7 +279,7 @@ const rin = {
   },
 }
 
-let versionBanner = `/* ${pkg.name} ${VERSION} */\n`
+let versionBanner = `/* ${pkg.name} ${VERSION_FULL} */\n`
 let execBanner = ""
 if (productIsExectuable) {
   execBanner = (
@@ -556,8 +558,8 @@ function startDiagnostics() {  // :CancellableProcess<void>
     }
   }
 
-  let errorCount = 0
-    // incremented by reportDiagnostics, cleared by finalizeReport
+  let errors = []
+    // populated by reportDiagnostics, cleared by finalizeReport
 
   let endTimer = null
 
@@ -565,7 +567,7 @@ function startDiagnostics() {  // :CancellableProcess<void>
     clearTimeout(endTimer)
     endTimer = setTimeout(() => {
       if (!diagScheduled) {
-        let errcount = errorCount // copy before it's cleared
+        let errcount = errors.length // copy before it's cleared
         finalizeReport()
         if (cancelled || (tswatcher && !watchForChanges)) {
           tswatcher.close()
@@ -599,11 +601,14 @@ function startDiagnostics() {  // :CancellableProcess<void>
     }
     hasFinalizedReport = true
 
-    if (errorCount > 0) {
+    if (errors.length > 0) {
       println(
-        (errorCount > 10 ? "\n" : "") +
-        style.red(`${errorCount} errors`)
+        (errors.length > 10 ? "\n" : "") +
+        style.red(`${errors.length} errors`)
       )
+      for (let { d, msg } of errors) {
+        printDiag(d, msg)
+      }
     } else {
       println(style.green(`no errors`))
     }
@@ -612,7 +617,7 @@ function startDiagnostics() {  // :CancellableProcess<void>
       println(hline())
     }
     flushReportBuf()
-    errorCount = 0
+    errors = []
   }
 
 
@@ -647,13 +652,18 @@ function startDiagnostics() {  // :CancellableProcess<void>
 
       // sort
       diagQueue = ts.sortAndDeduplicateDiagnostics(diagQueue)
+      // diagQueue.sort((a, b) => {
+      //   // sort errors at the bottom, so they appear close to the end of the report
+      //   let aLevel = rules[a.code] !== undefined ? rules[a.code] : a.category
+      //   let bLevel = rules[b.code] !== undefined ? rules[b.code] : b.category
+      //   return (
+      //     aLevel != ERR && bLevel == ERR ? -1 :
+      //     aLevel == ERR && bLevel != ERR ? 1 :
+      //     0
+      //   )
+      // })
       let diagPerFile = new Map() // filename => Diagnostic[]
       for (let d of diagQueue) {
-        let level = rules[d.code] !== undefined ? rules[d.code] : d.category
-        if (level == ERR) {
-          errorCount++
-        }
-
         // simplify filename to be relative to src dir
         d.fileName = d.file ? relpath(dirname(srcdir), d.file.fileName) : ""
 
@@ -683,6 +693,10 @@ function startDiagnostics() {  // :CancellableProcess<void>
       // print
       for (let [file, e] of diagPerFile) {
         for (let { d, msg } of e.dv) {
+          let level = rules[d.code] !== undefined ? rules[d.code] : d.category
+          if (level == ERR) {
+            errors.push({ d, msg })
+          }
           printDiag(d, msg)
           let msgcount = e.msgcount.get(msg)
           if (msgcount > 1) {
@@ -690,7 +704,6 @@ function startDiagnostics() {  // :CancellableProcess<void>
           }
         }
       }
-
     }
 
     // reset
@@ -904,7 +917,7 @@ function buildIncrementally() {
       case 'BUNDLE_START': // building an individual bundle
       screen.clear()
         const outfiles = ev.output.map(fn => relpath(rootdir, fn)).join(', ')
-        console.log(`build ${outfiles} (${VERSION}) ...`)
+        console.log(`build ${outfiles} (${VERSION_FULL}) ...`)
         break
       case 'BUNDLE_END':   // finished building a bundle
         onBuildCompleted(
@@ -938,7 +951,7 @@ function buildIncrementally() {
 
 function buildOnce() {
   let startTime = Date.now()
-  console.log(`build ${relpath(rootdir, rout.file)} (${VERSION}) ...`)
+  console.log(`build ${relpath(rootdir, rout.file)} (${VERSION_FULL}) ...`)
   rollup.rollup(rin).then(bundle => {
     // console.log(`imports: (${bundle.imports.join(', ')})`)
     // console.log(`exports: (${bundle.exports.join(', ')})`)

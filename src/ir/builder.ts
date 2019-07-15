@@ -10,11 +10,11 @@ import { ops, opinfo } from "./ops"
 import { Value, Block, BlockKind, Fun, Pkg, BranchPrediction, nilValue } from './ssa'
 import { opselect1, opselect2, opselectConv } from './opselect'
 import { Config } from './config'
-import { printir } from './repr'
 import { LocalSlot } from './localslot'
 
 
 // debug logging
+// import { printir } from './repr'
 import { debuglog as dlog } from '../util'
 // const dlog = function(..._ :any[]){} // silence dlog
 
@@ -383,7 +383,7 @@ export class IRBuilder {
 
   // stmt adds one or more TAC to block b in function f from statement s
   //
-  stmt(s :ast.Stmt, isLast :bool = false) :Value|null {
+  stmt(s :ast.Stmt) :Value|null {
     const r = this
 
     if (s instanceof ast.IfExpr) {

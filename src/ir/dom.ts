@@ -4,8 +4,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 //
-import { Fun, Block, Edge } from "./ssa"
-import { postorder } from "./postorder"
+import { Fun, Block } from "./ssa"
 // import { debuglog as dlog } from "../util"
 
 // dominators computes the dominator tree for f. It returns a slice

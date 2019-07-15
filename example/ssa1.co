@@ -1,3 +1,4 @@
+import "fool"
 // fun a -> 4
 // fun b
 // fun c {}
@@ -63,9 +64,12 @@
 
 fun bar(int) int
 
+// _ = fun(x int)int -> x
+
 fun foo(x, _, y int) int {
   z int = 0
-  _ = z + 1
+  _, _, fooz = z + 1, 2, 3
+  _ = "hello"
   while x < 5 {
     x++
     for i = 0; x > i; i++ {

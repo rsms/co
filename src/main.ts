@@ -1,18 +1,20 @@
 import { Parser } from './parser'
 import { bindpkg } from './bind'
 import * as scanner from './scanner'
-import { Position, SrcFileSet } from './pos'
+import { NoPos, Position, SrcFileSet } from './pos'
 import { TypeSet } from './typeset'
-import { Package, Scope, Ent } from './ast'
+import { Package, Scope, Ent, Node, nilScope } from './ast'
 import { astRepr } from './ast_repr'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
+import { strings } from "./bytestr"
+import * as astio from './astio'
+import * as utf8 from './utf8'
 
 import { Pkg as IRPkg } from './ir/ssa'
 import { IRBuilder, IRBuilderFlags } from './ir/builder'
 import { printir, fmtir } from './ir/repr'
-// import { IRVirtualMachine } from './ir/vm'
 import { runPassesDev } from './ir/passes'
 import { Program } from './asm/prog'
 
@@ -38,7 +40,7 @@ try {
   } else {
     readFileSync = (fn :string, options? :{[k:string]:any}) => {
       // FIXME
-      console.log('TODO read', fn, 'options:', options)
+      print('TODO read', fn, 'options:', options)
       return new Uint8Array(0)
     }
   }
@@ -68,7 +70,7 @@ function errh(pos :Position, message :string, errcode :string) {
 function diagh(pos :Position, message :string, type :string) {
   if (isNodeJsLikeEnv) {
     const msg = `${pos}: ${type}: ${message}`
-    console.log(
+    print(
       '[diag] ' +
       ( type == "info" ? stdoutStyle.cyan(msg) :
         stdoutStyle.lightyellow(msg)
@@ -120,24 +122,24 @@ function parsePkg(
 
     if (isNodeJsLikeEnv) {
       if (file.imports) {
-        console.log(`${file.imports.length} imports`)
+        print(`${file.imports.length} imports`)
         for (let imp of file.imports) {
-          console.log(astRepr(imp, reprOptions))
+          print(astRepr(imp, reprOptions))
         }
       }
 
       if (file.unresolved) {
-        console.log(`${file.unresolved.size} unresolved references`)
+        print(`${file.unresolved.size} unresolved references`)
         for (let ident of file.unresolved) {
-          console.log(' - ' + astRepr(ident, reprOptions))
+          print(' - ' + astRepr(ident, reprOptions))
         }
       }
 
-      console.log(`${file.decls.length} declarations`)
+      print(`${file.decls.length} declarations`)
       // for (let decl of file.decls) {
-      //   console.log(astRepr(decl, reprOptions))
+      //   print(astRepr(decl, reprOptions))
       // }
-      console.log(astRepr(file, reprOptions))
+      print(astRepr(file, reprOptions))
     }
   }
 
@@ -149,8 +151,12 @@ function parsePkg(
   if (isNodeJsLikeEnv) {
     banner(`bind & assemble ${pkg}`)
   }
+
   function importer(_imports :Map<string,Ent>, _path :string) :Promise<Ent> {
-    return Promise.reject(new Error(`not found`))
+    // TODO: FIXME implement
+    let name = strings.get(utf8.encodeString(_path))
+    return Promise.resolve(new Ent(name, new Node(NoPos, nilScope), null))
+    // return Promise.reject(new Error(`not found`))
   }
 
   return bindpkg(pkg, fset, importer, typeres, errh)
@@ -196,16 +202,27 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   // skip code generation?
   // options.noIR = true
   if (options.noIR) {
+
+    // serialize ast
+    let buf = astio.encode(r.pkg)
+    print("astio.encode => " + buf)
+    let ast = astio.decode(buf)
+    print("decoding complete")
+    for (let n of ast) {
+      print(astRepr(n, reprOptions))
+    }
+    print("astio.decode => " + astio.encode(...ast))
+
     return { success: true, diagnostics, ast: r.pkg }
   }
 
   // select target arch and build configuration
-  console.log('available target archs:', Array.from(archs.keys()).join(', '))
+  print('available target archs:', Array.from(archs.keys()).join(', '))
   const config = new Config("covm", {
     optimize: !options.noOptimize,
     loopstats: true, // debug
   })
-  console.log(`selected target config: ${config}`)
+  print(`selected target config: ${config}`)
 
 
   const irb = new IRBuilder()  // reusable
@@ -220,9 +237,9 @@ async function main(options? :MainOptions) :Promise<MainResult> {
         banner(
           `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`
         )
-        console.log(astRepr(r.pkg, reprOptions))
+        print(astRepr(r.pkg, reprOptions))
         // for (let decl of file.decls) {
-        //   console.log(astRepr(decl, reprOptions))
+        //   print(astRepr(decl, reprOptions))
         // }
         banner(`ssa-ir ${file.sfile.name}`)
       }
@@ -232,9 +249,9 @@ async function main(options? :MainOptions) :Promise<MainResult> {
       for (let d of file.decls) {
         let fn = irb.addTopLevel(sfile, d)
         if (isNodeJsLikeEnv && fn) {
-          console.log(`\n-----------------------\n`)
+          print(`\n-----------------------\n`)
           printir(fn)
-          console.log(
+          print(
             `━━━━━━━━━━━━━━━━━━━━━━━━` +
             `━━━━━━━━━━━━━━━━━━━━━━━━`
           )
@@ -242,24 +259,24 @@ async function main(options? :MainOptions) :Promise<MainResult> {
       }
 
 
-      // run IP passes separately for debugging (normally run online)
-      let stopAtPass = options.genericIR ? "lower" : ""
-      // stopAtPass = "lowered deadcode"
+      // // run IP passes separately for debugging (normally run online)
+      // let stopAtPass = options.genericIR ? "lower" : ""
+      // // stopAtPass = "lowered deadcode"
 
-      for (let [ , f] of irb.pkg.funs) {
-        runPassesDev(f, config, stopAtPass, pass => {
-          if (isNodeJsLikeEnv) {
-            console.log(`after ${pass.name}\n`)
-            printir(f)
-            console.log(
-              `━━━━━━━━━━━━━━━━━━━━━━━━` +
-              `━━━━━━━━━━━━━━━━━━━━━━━━`
-            )
-          }
-        })
-        let prog = new Program(f, config)
-        prog.gen()
-      }
+      // for (let [ , f] of irb.pkg.funs) {
+      //   runPassesDev(f, config, stopAtPass, pass => {
+      //     if (isNodeJsLikeEnv) {
+      //       print(`after ${pass.name}\n`)
+      //       printir(f)
+      //       print(
+      //         `━━━━━━━━━━━━━━━━━━━━━━━━` +
+      //         `━━━━━━━━━━━━━━━━━━━━━━━━`
+      //       )
+      //     }
+      //   })
+      //   let prog = new Program(f, config)
+      //   prog.gen()
+      // }
 
       // for (let [ , f] of irb.pkg.funs) {
       //   printir(f)
@@ -305,7 +322,7 @@ function banner(message :string) {
       s('\n\n  ' + message + '\n') + '\n\n'
     )
   } else {
-    console.log(
+    print(
       '\n========================================================\n' +
       message +
       '\n--------------------------------------------------------'
@@ -319,7 +336,7 @@ if (typeof GlobalContext.runAllTests == 'function') {
 
 if (isNodeJsLikeEnv) {
   if (DEBUG && process.argv.includes('-test-only')) {
-    console.log('only running unit tests')
+    print('only running unit tests')
   } else {
     main({
       sources: process.argv.slice(2).filter(v => !v.startsWith('-')),

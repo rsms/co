@@ -29,22 +29,59 @@ const lparen = char("(")
     , ch_t   = char("t")
 
 export type Value = Sym|Pre|List|Union
+export type ListType = "" | "(" | "<" | "[" | "{"
+export type PreType = "'" | '"' | "<" | "[" | "{"
 
 interface IValue {
-  line :int  // 1-based
-  col  :int  // 1-based
+  line   :int  // 1-based
+  col    :int  // 1-based
+
+  isList() : this is List
+  isUnion() : this is Union
+  isSym() : this is Sym
+  isPre() : this is Pre  // note: Pre is a type of Sym
 }
 
 export class List extends Array<Value> implements IValue {
   line :int
   col  :int
-  constructor(line :int, col :int) {
+  type :ListType
+
+  _keychache? :Map<string,List>
+
+  constructor(line :int, col :int, type :ListType) {
     super()
     this.line = line
     this.col  = col
+    this.type = type
   }
+
+  isList() : this is List { return true }
+  isUnion() : this is Union { return false }
+  isSym() : this is Sym { return false }
+  isPre() : this is Pre { return false }
+
   toString() {
     return `(${this.join(" ")})`
+  }
+
+  asMap() :Map<string,List> {
+    if (!this._keychache) {
+      this._keychache = new Map<string,List>()
+      for (let v of this) {
+        if (v instanceof List && v.length > 1) {
+          let s = v[0]
+          if (s instanceof Sym) {
+            this._keychache.set(s.value, v)
+          }
+        }
+      }
+    }
+    return this._keychache
+  }
+
+  get(key :string) :List|null {
+    return this.asMap().get(key) || null
   }
 }
 
@@ -52,12 +89,19 @@ export class Union extends Array<Sym> implements IValue {
   line   :int
   col    :int
   prefix :string
+
   constructor(line :int, col :int, prefix :string) {
     super()
     this.line = line
     this.col  = col
     this.prefix = prefix
   }
+
+  isList() : this is List { return false }
+  isUnion() : this is Union { return true }
+  isSym() : this is Sym { return false }
+  isPre() : this is Pre { return false }
+
   toString() {
     return `${this.prefix}(${this.map(s => s.value.substr(this.prefix.length)).join("|")})`
   }
@@ -67,15 +111,44 @@ export class Sym implements IValue {
   line  :int
   col   :int
   value :string
+
   constructor(line :int, col :int, value :string) {
     this.line  = line
     this.col   = col
     this.value = value
   }
-  toString() { return this.value }
-}
 
-export type PreType = "'" | '"' | "<" | "[" | "{"
+  isList() : this is List { return false }
+  isUnion() : this is Union { return false }
+  isSym() : this is Sym { return true }
+  isPre() : this is Pre { return false }
+
+  toString() { return this.value }
+
+  asMaybeNum() :int|null {
+    let n = Number(this.value)
+    return isNaN(n) ? null : n
+  }
+
+  asNum() :int {
+    let n = this.asMaybeNum()
+    if (n === null) {
+      panic(`${this.value} is not a number (${this.line}:${this.col})`)
+      return 0
+    }
+    return n
+  }
+
+  asBool() :bool {
+    if (this.value === "true") {
+      return true
+    }
+    if (this.value !== "false") {
+      panic(`${this.value} is not a boolean (${this.line}:${this.col})`)
+    }
+    return false
+  }
+}
 
 export class Pre extends Sym {
   type :PreType
@@ -93,6 +166,7 @@ export class Pre extends Sym {
       this.value
     )
   }
+  isPre() : this is Pre { return true }
 }
 
 export class SyntaxError extends Error {
@@ -101,7 +175,21 @@ export class SyntaxError extends Error {
   file :string
 }
 
-export function parse(src :string, filename? :string) :List {
+export interface ParseOptions {
+  filename?     :string
+  brackAsList?  :bool // parse [...] as List instead of Pre
+  braceAsList?  :bool // parse {...} as List instead of Pre
+  ltgtAsList?   :bool // parse <...> as List instead of Pre
+}
+
+export function parse(src :string, options? :ParseOptions) :List
+export function parse(src :string, filename? :string) :List
+export function parse(src :string, arg1? :string|ParseOptions) :List {
+  let options :ParseOptions = (
+    typeof arg1 == "string" ? {filename:arg1} :
+    arg1 ? arg1 :
+    {}
+  )
   let i = 0
     , c = 0
     , nextc = 0
@@ -133,7 +221,7 @@ export function parse(src :string, filename? :string) :List {
 
   const syntaxErr = (msg :string) => {
     let col = i - lineStart
-    let file = filename || "<input>"
+    let file = options.filename || "<input>"
     let e = new SyntaxError(`${file}:${line}:${col}: ${msg}`)
     e.name = "SyntaxError"
     e.file = file
@@ -163,7 +251,6 @@ export function parse(src :string, filename? :string) :List {
 
   const parseUnion = () => {
     let expectingPipe = false
-    let startoffs = i
     let prefix = src.substring(symstart, i - 1)
     symstart = -1
 
@@ -255,8 +342,33 @@ export function parse(src :string, filename? :string) :List {
     return new Pre(startline, startindex - lineStart, value as string, type)
   }
 
-  function parseList(endchar :int) :List {
-    let list = new List(line, i - lineStart)
+  type PreOrListParser = (startc :int, endc :int, type :ListType&PreType)=>Value
+
+  const parseBrack :PreOrListParser = (
+    options.brackAsList ? (_ :int, endc :int, type :ListType&PreType) :Value => {
+      return parseList(endc, type)
+    } : parsePre
+  )
+
+  // brackAsList :bool // parse [...] as List instead of Pre
+  // braceAsList :bool // parse {...} as List instead of Pre
+  // ltgtAsList  :bool // parse <...> as List instead of Pre
+        //   flushSym(list)
+        //   list.push(parsePre(c, rbrack, "["))
+        //   break
+
+        // case lbrace: // {...}
+        //   flushSym(list)
+        //   list.push(parsePre(c, rbrace, "{"))
+        //   break
+
+        // case lt: // <...>
+        //   flushSym(list)
+        //   list.push(parsePre(c, gt, "<"))
+        //   break
+
+  function parseList(endchar :int, type :ListType) :List {
+    let list = new List(line, i - lineStart, type)
 
     while_loop: while (i < src.length) {
       c = src.charCodeAt(i++)
@@ -267,7 +379,7 @@ export function parse(src :string, filename? :string) :List {
             // expansion e.g. foo(bar|baz) => foobar foobaz
             list.push(parseUnion())
           } else {
-            list.push(parseList(rparen))
+            list.push(parseList(rparen, "("))
           }
           break
 
@@ -323,7 +435,8 @@ export function parse(src :string, filename? :string) :List {
 
         case lbrack: // [...]
           flushSym(list)
-          list.push(parsePre(c, rbrack, "["))
+          list.push(parseBrack(c, rbrack, "["))
+          // list.push(parsePre(c, rbrack, "["))
           break
 
         case lbrace: // {...}
@@ -344,5 +457,5 @@ export function parse(src :string, filename? :string) :List {
     return list
   }
 
-  return parseList(0)
+  return parseList(0, "")
 }

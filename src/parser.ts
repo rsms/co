@@ -529,12 +529,12 @@ export class Parser extends scanner.Scanner {
   // reports a syntax error.
   // Returns true if lengths matches.
   //
-  checkDeclLen(idents :Ident[], nvalues: number, kind :string) :bool {
+  checkDeclLen(lhs :Expr[], nvalues: number, kind :string) :bool {
     const p = this
-    if (nvalues != idents.length) {
+    if (nvalues != lhs.length) {
       p.syntaxError(
-        `cannot assign ${nvalues} values to ${idents.length} ${kind}`,
-        idents[0].pos
+        `cannot assign ${nvalues} values to ${lhs.length} ${kind}`,
+        lhs[0].pos
       )
       return false
     }
@@ -951,6 +951,7 @@ export class Parser extends scanner.Scanner {
       for (let f of fields) {
         if (f.type instanceof Ident) {
           p.resolveType(f.type)
+          f.type = new TypeExpr(f.type.pos, f.type.scope, f.type.type)
         }
       }
     } else {
@@ -1272,8 +1273,10 @@ export class Parser extends scanner.Scanner {
     // parse right-hand side in context of the function
     s.rhs = p.exprList(/*ctx=*/s)
 
-    p.processAssign(s.lhs, s.rhs, s, /*reqt=*/null, decls)
-    p.types.resolve(s)
+    if (p.checkDeclLen(lhs, s.rhs.length, 'names')) {
+      p.processAssign(s.lhs, s.rhs, s, /*reqt=*/null, decls)
+      p.types.resolve(s)
+    }
 
     return s
   }

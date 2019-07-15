@@ -10,7 +10,9 @@ interface WArrayLike<T> {
 
 declare var AssertionError :ErrorConstructor
 declare const DEBUG :boolean
-declare const VERSION :string
+declare const VERSION :string      // e.g. "0.1.2"
+declare const VERSION_TAG :string  // e.g. "debug+53be2cb6c3"
+declare const VERSION_FULL :string // e.g. "0.1.2-debug+53be2cb6c3"
 declare const GlobalContext :{[k:string]:any}
 
 // panic prints a message to stderr, equivalent to console.log
