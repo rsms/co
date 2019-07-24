@@ -3,7 +3,7 @@ import { bindpkg } from './bind'
 import * as scanner from './scanner'
 import { NoPos, Position, SrcFileSet } from './pos'
 import { TypeSet } from './typeset'
-import { Package, Scope, Ent, Stmt, nilScope } from './ast'
+import { Node, Package, Scope, Ent, Stmt, nilScope } from './ast'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
@@ -177,6 +177,15 @@ interface MainOptions {
   genericIR?  :bool  // stop IR pipeline early. (don't do regalloc etc.)
 }
 
+function dumpAst(n :Node) {
+  if (isNodeJsLikeEnv) {
+    n.repr("\n", s => process.stdout.write(s))
+    process.stdout.write("\n")
+  } else {
+    console.log(n.repr())
+  }
+}
+
 async function main(options? :MainOptions) :Promise<MainResult> {
   const typeSet = new TypeSet()
   const universe = new Universe(typeSet)
@@ -203,8 +212,7 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   if (options.noIR) {
 
     // print(r.pkg.repr())
-    print(r.pkg.repr2())
-
+    dumpAst(r.pkg)
 
     // serialize ast
     // let buf = astio.encode(r.pkg)

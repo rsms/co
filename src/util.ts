@@ -1,3 +1,5 @@
+export type StrWriter = (s: string) => void
+
 // export function SplitFileExt(path :string) :[string, string] {
 //   let p = path.lastIndexOf('/')
 //   p = path.lastIndexOf('.', p == -1 ? 0 : p)

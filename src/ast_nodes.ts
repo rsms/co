@@ -8,6 +8,7 @@ import { numconv } from "./numconv";
 import { Scope, Ent, nilScope } from "./ast_scope";
 import { Visitable, Visitor } from "./ast_visit";
 import { ReprVisitor } from "./ast_repr";
+import { StrWriter } from "./util";
 // --------------------------------------------------------------------------------
 export interface TypedNode {
     type: Type;
@@ -15,11 +16,19 @@ export interface TypedNode {
 export class Node implements Visitable {
     constructor(public pos: Pos) { }
     toString(): string { return this.constructor.name; }
-    repr(sep: string = ""): string { return "(Node)"; }
-    repr2(sep: string = "\n"): string {
-        let v = new ReprVisitor(sep);
+    // repr returns a human-readable and machine-parsable string representation
+    // of the tree represented by this node.
+    repr(sep?: string): string;
+    repr(sep: string, w: StrWriter): void;
+    repr(sep: string = "\n", w?: StrWriter): string | void {
+        let v = new ReprVisitor(sep, w);
         v.visitNode(this);
-        return v.toString();
+        if (!w) {
+            return v.toString();
+        }
+    }
+    foofoo() {
+        Storage[Storage.Int];
     }
     isUnresolved(): this is UnresolvedType | TypedNode {
         // isUnresolved returns true for any node that references something which is
@@ -266,7 +275,7 @@ export class PrimType extends Type {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class NilType extends PrimType {
@@ -274,7 +283,7 @@ export class NilType extends PrimType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class BoolType extends PrimType {
@@ -282,7 +291,7 @@ export class BoolType extends PrimType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class NumType extends PrimType {
@@ -290,7 +299,7 @@ export class NumType extends PrimType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 } // all number types
 export class FloatType extends NumType {
@@ -298,7 +307,7 @@ export class FloatType extends NumType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class IntType extends NumType {
@@ -306,7 +315,7 @@ export class IntType extends NumType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class SIntType extends IntType {
@@ -314,7 +323,7 @@ export class SIntType extends IntType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class UIntType extends IntType {
@@ -322,7 +331,7 @@ export class UIntType extends IntType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 }
 export class MemType extends UIntType {
@@ -330,7 +339,7 @@ export class MemType extends UIntType {
         if (this.type)
             v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
-        v.visitField("storage", this.storage);
+        v.visitFieldS("storage", Storage[this.storage]);
     }
 } // used by SSA IR to represent memory state
 // predefined constant of all primitive types.

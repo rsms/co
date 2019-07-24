@@ -480,7 +480,7 @@ class Transformer<T extends ts.Node> {
     let body :ts.Statement[] = []
 
     for (let f of fields.values()) {
-      let prop = ts.createPropertyAccess(ts.createThis(), f.name)
+      let prop :ts.Expression = ts.createPropertyAccess(ts.createThis(), f.name)
       let visitFun = "visitField"  // TODO: based on field type
       if (f.nodeType) {
         if (f.nodeType instanceof ArrayNode) {
@@ -488,31 +488,44 @@ class Transformer<T extends ts.Node> {
         } else {
           visitFun = "visitFieldN"
         }
-      } else if (f.type && ts.isArrayTypeNode(f.type)) {
-        let t = f.type.elementType
-        if (ts.isParenthesizedTypeNode(t)) {
-          // unwrap "(A|B)" => "A|B"
-          t = t.type
-        }
-        if (ts.isUnionTypeNode(t)) {
-          let allAreNodeTypes = true
-          for (let t2 of t.types) {
-            if (
-              !ts.isTypeReferenceNode(t2) ||
-              !ts.isIdentifier(t2.typeName) ||
-              !this.nodeInfo.has(t2.typeName.escapedText.toString())
-            ) {
-              allAreNodeTypes = false
-              break
-            }
+      } else if (f.type) {
+        if (ts.isArrayTypeNode(f.type)) {
+          let t = f.type.elementType
+          if (ts.isParenthesizedTypeNode(t)) {
+            // unwrap "(A|B)" => "A|B"
+            t = t.type
           }
-          if (allAreNodeTypes) {
-            visitFun = "visitFieldNA"
+          if (ts.isUnionTypeNode(t)) {
+            let allAreNodeTypes = true
+            for (let t2 of t.types) {
+              if (
+                !ts.isTypeReferenceNode(t2) ||
+                !ts.isIdentifier(t2.typeName) ||
+                !this.nodeInfo.has(t2.typeName.escapedText.toString())
+              ) {
+                allAreNodeTypes = false
+                break
+              }
+            }
+            if (allAreNodeTypes) {
+              visitFun = "visitFieldNA"
+            } else {
+              visitFun = "visitFieldA"
+            }
           } else {
             visitFun = "visitFieldA"
           }
-        } else {
-          visitFun = "visitFieldA"
+        } else if (ts.isTypeReferenceNode(f.type) && ts.isIdentifier(f.type.typeName)) {
+          let typename = f.type.typeName.escapedText.toString()
+          if (typename == "Storage") {
+            // TODO: automatically understand that "Storage" is an enum
+            print(typename)
+            visitFun = "visitFieldS"
+            prop = ts.createElementAccess(
+              ts.createIdentifier(typename),
+              prop
+            )
+          }
         }
       }
       let stmt :ts.Statement = ts.createExpressionStatement(
@@ -802,22 +815,22 @@ class Transformer<T extends ts.Node> {
         continue
       }
 
-      // // debug/print an existing method on a class.
-      // // useful for reverse-engineering TS AST<->code.
-      // if (
-      //   ts.isMethodDeclaration(m) &&
-      //   m.body &&
-      //   ts.isIdentifier(m.name) &&
-      //   m.name.escapedText.toString() == "visit"
-      // ) {
-      //   print(
-      //     repr(
-      //       (m as any).body.statements[0], //.declarationList.declarations[0],
-      //       // (m as any).body.statements[2],
-      //       4
-      //     )
-      //   )
-      // }
+      // debug/print an existing method on a class.
+      // useful for reverse-engineering TS AST<->code.
+      if (
+        ts.isMethodDeclaration(m) &&
+        m.body &&
+        ts.isIdentifier(m.name) &&
+        m.name.escapedText.toString() == "foofoo"
+      ) {
+        print(
+          repr(
+            (m as any).body.statements[0], //.declarationList.declarations[0],
+            // (m as any).body.statements[2],
+            4
+          )
+        )
+      }
 
       if (!ts.isPropertyDeclaration(m)) {
         continue

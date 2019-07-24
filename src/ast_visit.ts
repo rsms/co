@@ -8,4 +8,5 @@ export interface Visitor {
   visitFieldNA(name: string, value :Visitable[]) :void
   visitField(name: string, value :any) :void
   visitFieldA(name: string, value :any[]) :void
+  visitFieldS(name: string, s :any) :void
 }

@@ -7,6 +7,7 @@ import { numconv } from "../numconv"
 import { Scope, Ent, nilScope } from "../ast_scope"
 import { Visitable, Visitor } from "../ast_visit"
 import { ReprVisitor } from "../ast_repr"
+import { StrWriter } from "../util"
 
 // --------------------------------------------------------------------------------
 
@@ -18,12 +19,19 @@ class Node implements Visitable {
   pos :Pos
 
   toString() :string { return this.constructor.name }
-  repr(sep :string = "") :string { return "(Node)" }
 
-  repr2(sep :string = "\n") :string {
-    let v = new ReprVisitor(sep)
+  // repr returns a human-readable and machine-parsable string representation
+  // of the tree represented by this node.
+  repr(sep? :string) :string
+  repr(sep :string, w :StrWriter) :void
+  repr(sep :string = "\n", w? :StrWriter) :string|void {
+    let v = new ReprVisitor(sep, w)
     v.visitNode(this)
-    return v.toString()
+    if (!w) { return v.toString() }
+  }
+
+  foofoo() {
+    Storage[Storage.Int]
   }
 
   isUnresolved() :this is UnresolvedType|TypedNode {
