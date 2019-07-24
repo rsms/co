@@ -21,7 +21,7 @@ declare function print(msg :any, ...v :any[]) :void
 
 // panic prints a message to stderr, stack trace and exits the process
 //
-declare function panic(msg :any, ...v :any[]) :void
+declare function panic(msg :any, ...v :any[]) :never
 
 // assert checks the condition for truth, and if false, prints an optional
 // message, stack trace and exits the process.

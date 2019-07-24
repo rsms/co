@@ -3,8 +3,8 @@
 //
 import { token } from '../token'
 import {
-  Mem,
-  BasicType,
+  Storage,
+  PrimType,
   t_bool,
   t_u8,
   t_i8,
@@ -14,9 +14,10 @@ import {
   t_i32,
   t_u64,
   t_i64,
+  t_uintptr,
   t_f32,
   t_f64,
-} from '../types'
+} from "../ast"
 import { Op } from './op'
 import { ops } from "./ops"
 
@@ -24,18 +25,18 @@ import { ops } from "./ops"
 // opselect1 returns the IR operation for the corresponding token operator
 // and operand type.
 //
-export function opselect1(tok :token, x :BasicType) :Op {
+export function opselect1(tok :token, x :PrimType) :Op {
   switch (tok) {
 
   case token.NOT: return ops.Not
 
-  case token.ADD: switch (x.mem) { // -arg
-    case Mem.i8:  return ops.NegI8
-    case Mem.i16: return ops.NegI16
-    case Mem.i32: return ops.NegI32
-    case Mem.i64: return ops.NegI64
-    case Mem.i32: return ops.NegF32
-    case Mem.i64: return ops.NegF64
+  case token.SUB: switch (x.storage) { // -arg
+    case Storage.i8:  return ops.NegI8
+    case Storage.i16: return ops.NegI16
+    case Storage.i32: return ops.NegI32
+    case Storage.i64: return ops.NegI64
+    case Storage.i32: return ops.NegF32
+    case Storage.i64: return ops.NegF64
   }; break
 
   } // switch
@@ -49,37 +50,37 @@ export function opselect1(tok :token, x :BasicType) :Op {
 // opselect2 returns the IR operator for the corresponding token operator
 // and operand types.
 //
-export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
+export function opselect2(tok :token, x :PrimType, y :PrimType) :Op {
   switch (tok) {
 
   //
   // arithmetic
   //
-  case token.ADD: switch (x.mem) { // +
-    case Mem.i8:   return ops.AddI8
-    case Mem.i16:  return ops.AddI16
-    case Mem.i32:  return ops.AddI32
-    case Mem.i64:  return ops.AddI64
-    case Mem.f32:  return ops.AddF32
-    case Mem.f64:  return ops.AddF64
+  case token.ADD: switch (x.storage) { // +
+    case Storage.i8:   return ops.AddI8
+    case Storage.i16:  return ops.AddI16
+    case Storage.i32:  return ops.AddI32
+    case Storage.i64:  return ops.AddI64
+    case Storage.f32:  return ops.AddF32
+    case Storage.f64:  return ops.AddF64
   }; break
 
-  case token.SUB: switch (x.mem) { // -
-    case Mem.i8:   return ops.SubI8
-    case Mem.i16:  return ops.SubI16
-    case Mem.i32:  return ops.SubI32
-    case Mem.i64:  return ops.SubI64
-    case Mem.f32:  return ops.SubF32
-    case Mem.f64:  return ops.SubF64
+  case token.SUB: switch (x.storage) { // -
+    case Storage.i8:   return ops.SubI8
+    case Storage.i16:  return ops.SubI16
+    case Storage.i32:  return ops.SubI32
+    case Storage.i64:  return ops.SubI64
+    case Storage.f32:  return ops.SubF32
+    case Storage.f64:  return ops.SubF64
   }; break
 
-  case token.MUL: switch (x.mem) { // *
-    case Mem.i8:   return ops.MulI8
-    case Mem.i16:  return ops.MulI16
-    case Mem.i32:  return ops.MulI32
-    case Mem.i64:  return ops.MulI64
-    case Mem.f32:  return ops.MulF32
-    case Mem.f64:  return ops.MulF64
+  case token.MUL: switch (x.storage) { // *
+    case Storage.i8:   return ops.MulI8
+    case Storage.i16:  return ops.MulI16
+    case Storage.i32:  return ops.MulI32
+    case Storage.i64:  return ops.MulI64
+    case Storage.f32:  return ops.MulF32
+    case Storage.f64:  return ops.MulF64
   }; break
 
   case token.QUO: switch (x) { // /
@@ -106,25 +107,25 @@ export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
     case t_u64: return ops.RemU64
   }; break
 
-  case token.AND: switch (x.mem) { // &
-    case Mem.i8:   return ops.AndI8
-    case Mem.i16:  return ops.AndI16
-    case Mem.i32:  return ops.AndI32
-    case Mem.i64:  return ops.AndI64
+  case token.AND: switch (x.storage) { // &
+    case Storage.i8:   return ops.AndI8
+    case Storage.i16:  return ops.AndI16
+    case Storage.i32:  return ops.AndI32
+    case Storage.i64:  return ops.AndI64
   }; break
 
-  case token.OR: switch (x.mem) { // |
-    case Mem.i8:   return ops.OrI8
-    case Mem.i16:  return ops.OrI16
-    case Mem.i32:  return ops.OrI32
-    case Mem.i64:  return ops.OrI64
+  case token.OR: switch (x.storage) { // |
+    case Storage.i8:   return ops.OrI8
+    case Storage.i16:  return ops.OrI16
+    case Storage.i32:  return ops.OrI32
+    case Storage.i64:  return ops.OrI64
   }; break
 
-  case token.XOR: switch (x.mem) { // ^
-    case Mem.i8:   return ops.XorI8
-    case Mem.i16:  return ops.XorI16
-    case Mem.i32:  return ops.XorI32
-    case Mem.i64:  return ops.XorI64
+  case token.XOR: switch (x.storage) { // ^
+    case Storage.i8:   return ops.XorI8
+    case Storage.i16:  return ops.XorI16
+    case Storage.i32:  return ops.XorI32
+    case Storage.i64:  return ops.XorI64
   }; break
 
   case token.AND_NOT: // &^  TODO implement. Emulated by: x & ~y
@@ -134,22 +135,22 @@ export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
   //
   // comparisons
   //
-  case token.EQL: switch (x.mem) { // ==
-    case Mem.i8:   return ops.EqI8
-    case Mem.i16:  return ops.EqI16
-    case Mem.i32:  return ops.EqI32
-    case Mem.i64:  return ops.EqI64
-    case Mem.f32:  return ops.EqF32
-    case Mem.f64:  return ops.EqF64
+  case token.EQL: switch (x.storage) { // ==
+    case Storage.i8:   return ops.EqI8
+    case Storage.i16:  return ops.EqI16
+    case Storage.i32:  return ops.EqI32
+    case Storage.i64:  return ops.EqI64
+    case Storage.f32:  return ops.EqF32
+    case Storage.f64:  return ops.EqF64
   }; break
 
-  case token.NEQ: switch (x.mem) { // !=
-    case Mem.i8:   return ops.NeqI8
-    case Mem.i16:  return ops.NeqI16
-    case Mem.i32:  return ops.NeqI32
-    case Mem.i64:  return ops.NeqI64
-    case Mem.f32:  return ops.NeqF32
-    case Mem.f64:  return ops.NeqF64
+  case token.NEQ: switch (x.storage) { // !=
+    case Storage.i8:   return ops.NeqI8
+    case Storage.i16:  return ops.NeqI16
+    case Storage.i32:  return ops.NeqI32
+    case Storage.i64:  return ops.NeqI64
+    case Storage.f32:  return ops.NeqF32
+    case Storage.f64:  return ops.NeqF64
   }; break
 
   case token.LSS: switch (x) { // <
@@ -207,26 +208,26 @@ export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
   //
   // shifts
   //
-  case token.SHL: switch (x.mem) { // <<
-    case Mem.i8: switch (y) {
+  case token.SHL: switch (x.storage) { // <<
+    case Storage.i8: switch (y) {
       case t_u8:   return ops.ShLI8x8
       case t_u16:  return ops.ShLI8x16
       case t_u32:  return ops.ShLI8x32
       case t_u64:  return ops.ShLI8x64
     } break
-    case Mem.i16: switch (y) {
+    case Storage.i16: switch (y) {
       case t_u8:   return ops.ShLI16x8
       case t_u16:  return ops.ShLI16x16
       case t_u32:  return ops.ShLI16x32
       case t_u64:  return ops.ShLI16x64
     } break
-    case Mem.i32: switch (y) {
+    case Storage.i32: switch (y) {
       case t_u8:   return ops.ShLI32x8
       case t_u16:  return ops.ShLI32x16
       case t_u32:  return ops.ShLI32x32
       case t_u64:  return ops.ShLI32x64
     } break
-    case Mem.i64: switch (y) {
+    case Storage.i64: switch (y) {
       case t_u8:   return ops.ShLI64x8
       case t_u16:  return ops.ShLI64x16
       case t_u32:  return ops.ShLI64x32
@@ -234,7 +235,7 @@ export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
     } break
   }; break
 
-  case token.SHR: assert(y.isUnsignedInt); switch (x) { // >>
+  case token.SHR: assert(y.isUIntType()); switch (x) { // >>
     case t_i8: switch (y) {
       case t_u8:   return ops.ShRS8x8
       case t_u16:  return ops.ShRS8x16
@@ -295,7 +296,7 @@ export function opselect2(tok :token, x :BasicType, y :BasicType) :Op {
 
 // opselectConv returns the IR operation for converting x to y.
 //
-export function opselectConv(src :BasicType, dst :BasicType) :Op {
+export function opselectConv(src :PrimType, dst :PrimType) :Op {
   switch (src) {
 
   case t_i8: switch (dst) {

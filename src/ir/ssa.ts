@@ -5,24 +5,7 @@ import { Pos, NoPos } from '../pos'
 import { Config } from './config'
 import { Op } from './op'
 import { ops, opinfo, fmtop } from "./ops"
-import {
-  BasicType,
-  NumType,
-  FunType,
-
-  t_nil,
-  t_bool,
-  t_u8,
-  t_i8,
-  t_u16,
-  t_i16,
-  t_u32,
-  t_i32,
-  t_u64,
-  t_i64,
-  t_f32,
-  t_f64,
-} from '../types'
+import { PrimType, NumType, FunType, types } from "../ast"
 import { postorder } from './postorder'
 import { Register } from './reg'
 import { LocalSlot } from './localslot'
@@ -44,7 +27,7 @@ export type Location = Register | LocalSlot
 
 // Aux is an auxiliary value of Value
 //
-export type Aux = ByteStr | Uint8Array | BasicType
+export type Aux = ByteStr | Uint8Array | PrimType
 
 
 // Value is a three-address-code operation
@@ -53,7 +36,7 @@ export class Value {
   id      :ID    // unique identifier
   pos     :Pos = NoPos  // source position
   op      :Op    // operation that computes this value
-  type    :BasicType
+  type    :PrimType
   b       :Block // containing block
   aux     :Aux|null // auxiliary info for this value
   auxInt  :Num      // auxiliary integer info for this value
@@ -67,14 +50,14 @@ export class Value {
   // users = new Set<Value|Block>()
 
 
-  constructor(id :ID, b :Block, op :Op, type :BasicType, auxInt :Num, aux :Aux|null) {
+  constructor(id :ID, b :Block, op :Op, type :PrimType, auxInt :Num, aux :Aux|null) {
     this.id = id
     this.op = op
     this.type = type
     this.b = b
     this.auxInt = auxInt
     this.aux = aux
-    assert(type instanceof BasicType)
+    assert(type instanceof PrimType)
     // assert(type.mem > 0, `ir.Value assigned abstract type ${type}`)
   }
 
@@ -455,7 +438,7 @@ export class Block {
   //   return i
   // }
 
-  newPhi(t :BasicType) :Value {
+  newPhi(t :PrimType) :Value {
     let v = this.f.newValue(this, ops.Phi, t, 0, null)
     if (this.values.length > 0 && this.values[this.values.length-1].op != ops.Phi) {
       this.values.unshift(v)
@@ -466,14 +449,14 @@ export class Block {
   }
 
   // newValue0 return a value with no args
-  newValue0(op :Op, t :BasicType|null = null, auxInt :Num = 0, aux :Aux|null = null) :Value {
+  newValue0(op :Op, t :PrimType|null = null, auxInt :Num = 0, aux :Aux|null = null) :Value {
     let v = this.f.newValue(this, op, t, auxInt, aux)
     this.values.push(v)
     return v
   }
 
   // newValue1 returns a new value in the block with one argument
-  newValue1(op :Op, t :BasicType|null, arg0 :Value, auxInt :Num = 0, aux :Aux|null = null) :Value {
+  newValue1(op :Op, t :PrimType|null, arg0 :Value, auxInt :Num = 0, aux :Aux|null = null) :Value {
     let v = this.f.newValue(this, op, t, auxInt, aux)
     v.args = [arg0]
     arg0.uses++ //; arg0.users.add(v)
@@ -481,7 +464,7 @@ export class Block {
     return v
   }
 
-  newValue1NoAdd(op :Op, t :BasicType|null, arg0 :Value, auxInt :Num, aux :Aux|null) :Value {
+  newValue1NoAdd(op :Op, t :PrimType|null, arg0 :Value, auxInt :Num, aux :Aux|null) :Value {
     let v = this.f.newValue(this, op, t, auxInt, aux)
     v.args = [arg0]
     arg0.uses++ //; arg0.users.add(v)
@@ -491,7 +474,7 @@ export class Block {
   // newValue2 returns a new value in the block with two arguments
   newValue2(
     op :Op,
-    t :BasicType|null,
+    t :PrimType|null,
     arg0 :Value,
     arg1 :Value,
     auxInt :Num = 0,
@@ -508,7 +491,7 @@ export class Block {
   // newValue3 returns a new value in the block with three arguments
   newValue3(
     op :Op,
-    t :BasicType|null,
+    t :PrimType|null,
     arg0 :Value,
     arg1 :Value,
     arg2 :Value,
@@ -598,7 +581,7 @@ export class Fun {
     // TODO: put into free list
   }
 
-  newValue(b :Block, op :Op, t :BasicType|null, auxInt :Num, aux :Aux|null) :Value {
+  newValue(b :Block, op :Op, t :PrimType|null, auxInt :Num, aux :Aux|null) :Value {
     assert(this.vid < 0xFFFFFFFF, "too many value IDs generated")
     // TODO we could use a free list and return values when they die
     assert(opinfo[op] !== undefined, `no opinfo for op ${op}`)
@@ -612,17 +595,11 @@ export class Fun {
     //   `(op.type=${opinfo[op].type}, t=${t})`
     // )
 
-    return new Value(
-      this.vid++,
-      b,
-      op,
-      t || opinfo[op].type || t_nil,
-      auxInt,
-      aux
-    )
+    let typ = t || opinfo[op].type || types.nil
+    return new Value(this.vid++, b, op, typ, auxInt, aux)
   }
 
-  newValueNoBlock(op :Op, t :BasicType|null, auxInt :Num, aux :Aux|null) :Value {
+  newValueNoBlock(op :Op, t :PrimType|null, auxInt :Num, aux :Aux|null) :Value {
     return this.newValue(null as any as Block, op, t, auxInt, aux)
   }
 
@@ -645,13 +622,13 @@ export class Fun {
     // Select operation based on type
     let op :Op = ops.Invalid
     switch (t) {
-      case t_bool:             op = ops.ConstBool; break
-      case t_u8:  case t_i8:   op = ops.ConstI8; break
-      case t_u16: case t_i16:  op = ops.ConstI16; break
-      case t_u32: case t_i32:  op = ops.ConstI32; break
-      case t_u64: case t_i64:  op = ops.ConstI64; break
-      case t_f32:              op = ops.ConstF32; break
-      case t_f64:              op = ops.ConstF64; break
+      case types.bool:                 op = ops.ConstBool; break
+      case types.u8:  case types.i8:   op = ops.ConstI8; break
+      case types.u16: case types.i16:  op = ops.ConstI16; break
+      case types.u32: case types.i32:  op = ops.ConstI32; break
+      case types.u64: case types.i64:  op = ops.ConstI64; break
+      case types.f32:                  op = ops.ConstF32; break
+      case types.f64:                  op = ops.ConstF64; break
       default:
         assert(false, `invalid constant type ${t}`)
         break
@@ -678,7 +655,7 @@ export class Fun {
   }
 
   constBool(c :bool) :Value {
-    return this.constVal(t_bool, c ? 1 : 0)
+    return this.constVal(types.bool, c ? 1 : 0)
   }
 
   removeBlock(b :Block) {
@@ -782,7 +759,8 @@ export class Pkg {
 }
 
 
-// export const nilFun = new Fun(new FunType([], t_nil), null, 0)
+// export const nilFun = new Fun(new FunType([], types.nil), null, 0)
 // export const nilBlock = new Block(BlockKind.First, -1, nilFun)
-// export const nilValue = new Value(-1, nilBlock, ops.Invalid, t_nil, 0, null)
-export const nilValue = new Value(-1, null as any as Block, ops.Invalid, t_nil, 0, null)
+// export const nilValue = new Value(-1, nilBlock, ops.Invalid, types.nil, 0, null)
+export const nilValue =
+  new Value(-1, null as any as Block, ops.Invalid, types.nil, 0, null)

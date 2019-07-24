@@ -1,18 +1,20 @@
 import { Num } from '../num'
 import { Int64 } from '../int64'
-import { BasicType } from '../types'
+import { PrimType } from '../ast'
 import { Op } from './op'
 import { ops, fmtop } from "./ops"
 
 
 // consteval2 evaluates the operation op with x and y of result type t
 //
-export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
+export function consteval2(op :Op, t :PrimType, x :Num, y :Num) :Num|null {
   // work around typescript
   const xn = x as number
   const yn = y as number
   const xo = x as Int64
   const yo = y as Int64
+
+  assert(t.storageSize() > 0, `attempt to eval zero-size type ${t}`)
 
   switch (op) {
 
@@ -20,7 +22,7 @@ export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
   case ops.AddI8:
   case ops.AddI16:
   case ops.AddI32:
-    return t.isSignedInt ? (xn + yn | 0) : (xn + yn >>> 0)
+    return t.isSIntType() ? (xn + yn | 0) : (xn + yn >>> 0)
    case ops.AddI64:
     return xo.add(yo)
   case ops.AddF32:
@@ -31,7 +33,7 @@ export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
   case ops.SubI8:
   case ops.SubI16:
   case ops.SubI32:
-    return t.isSignedInt ? (xn - yn | 0) : (xn - yn >>> 0)
+    return t.isSIntType() ? (xn - yn | 0) : (xn - yn >>> 0)
   case ops.SubI64:
     return xo.sub(yo)
   case ops.SubF32:
@@ -42,7 +44,7 @@ export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
   case ops.MulI8:
   case ops.MulI16:
   case ops.MulI32:
-    return t.isSignedInt ? Math.imul(xn, yn) : (Math.imul(xn, yn) >>> 0)
+    return t.isSIntType() ? Math.imul(xn, yn) : (Math.imul(xn, yn) >>> 0)
   case ops.MulI64:
     return xo.mul(yo)
   case ops.MulF32:
@@ -265,7 +267,7 @@ export function consteval2(op :Op, t :BasicType, x :Num, y :Num) :Num|null {
 
 // consteval1 evaluates the operation op with x of result type t
 //
-export function consteval1(_op :Op, _t :BasicType, _x :Num) :Num|null {
+export function consteval1(_op :Op, _t :PrimType, _x :Num) :Num|null {
   // TODO: implementation
   return null
 }
@@ -280,7 +282,7 @@ export function consteval1(_op :Op, _t :BasicType, _x :Num) :Num|null {
 //   return n - Math.floor(n / 0x100000000) * 0x100000000
 // }
 
-// function eval_op1(op :Op, t :BasicType, x :number) :number {
+// function eval_op1(op :Op, t :PrimType, x :number) :number {
 //   switch (op) {
 //   case Op.i32Clz: return Math.clz32(x)
 //   }

@@ -1,11 +1,6 @@
 import { SInt64, UInt64 } from './int64'
 import { Num } from './num'
-import {
-  NumType,
-  t_u8, t_i8, t_u16, t_i16, t_u32, t_i32, t_u64, t_i64,
-  t_uint, t_int,
-  t_f32, t_f64,
-} from './types'
+import { NumType, types as T } from "./ast"
 
 const _Int64_UINT32_MAX = UInt64.fromInt32(0xffffffff)
 const _Int64_SINT32_MAX = SInt64.fromInt32(0x7fffffff)
@@ -35,13 +30,13 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
   let lossless :bool = false
 
   // TODO FIXME if the type is arch dependent, assume 32-bit
-  if (t === t_int) {
-    t = t_i32
-  } else if (t === t_uint) {
-    t = t_u32
+  if (t === T.int) {
+    t = T.i32
+  } else if (t === T.uint) {
+    t = T.u32
   }
 
-  if (t === t_i64) {
+  if (t === T.i64) {
     // ? -> i64
     if (typeof v == 'number') {
       if (v === (v | 0) || v === v >>> 0) {
@@ -64,7 +59,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       v = v.toSigned()
     }
 
-  } else if (t === t_u64) {
+  } else if (t === T.u64) {
     // ? -> u64
     if (typeof v == 'number') {
       if (v === v >>> 0) {
@@ -87,7 +82,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       v = v.toUnsigned()
     }
 
-  } else if (t === t_i32) {
+  } else if (t === T.i32) {
     // ? -> i32
     if (typeof v == 'number') {
       let v2 = v | 0
@@ -99,7 +94,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       v = v.toInt32()
     }
 
-  } else if (t === t_u32) {
+  } else if (t === T.u32) {
     // ? -> u32
     if (typeof v == 'number') {
       let v2 = v >>> 0
@@ -111,7 +106,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       v = v.toUInt32()
     }
 
-  } else if (t === t_i16) {
+  } else if (t === T.i16) {
     // ? -> i16
     if (typeof v == 'number') {
       let v2 = v | 0
@@ -124,7 +119,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       assert(v >= _Int32_SINT16_MIN && v <= _Int32_SINT16_MAX)
     }
 
-  } else if (t === t_u16) {
+  } else if (t === T.u16) {
     // ? -> u16
     if (typeof v == 'number') {
       let v2 = v >>> 0
@@ -137,7 +132,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       assert(v >= 0 && v <= _Int32_UINT16_MAX)
     }
 
-  } else if (t === t_i8) {
+  } else if (t === T.i8) {
     // ? -> i8
     if (typeof v == 'number') {
       let v2 = v | 0
@@ -150,7 +145,7 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       assert(v >= _Int32_SINT8_MIN && v <= _Int32_SINT8_MAX)
     }
 
-  } else if (t === t_u8) {
+  } else if (t === T.u8) {
     // ? -> u8
     if (typeof v == 'number') {
       let v2 = v >>> 0
@@ -163,13 +158,13 @@ export function numconv(v :Num, t :NumType) :[Num,bool] {  // -> v2, lossless
       assert(v >= 0 && v <= _Int32_UINT8_MAX)
     }
 
-  } else if (t === t_f64 || t === t_f32) {
+  } else if (t === T.f64 || t === T.f32) {
     // ? -> f64|f32
     lossless = true
     if (typeof v != 'number') {
       v = v.toFloat64()
     }
-    // TODO: if(t===t_f32) check overflow
+    // TODO: if(t===T.f32) check overflow
 
   } else {
     assert(false, `unexpected destination type ${t}`)

@@ -3,13 +3,12 @@ import { bindpkg } from './bind'
 import * as scanner from './scanner'
 import { NoPos, Position, SrcFileSet } from './pos'
 import { TypeSet } from './typeset'
-import { Package, Scope, Ent, Node, nilScope } from './ast'
-import { astRepr } from './ast_repr'
+import { Package, Scope, Ent, Stmt, nilScope } from './ast'
 import { Universe } from './universe'
 import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 import { strings } from "./bytestr"
-import * as astio from './astio'
+// import * as astio from './astio'
 import * as utf8 from './utf8'
 
 import { Pkg as IRPkg } from './ir/ssa'
@@ -110,7 +109,7 @@ function parsePkg(
       sfile,
       sdata,
       universe,
-      pkg.scope,
+      pkg._scope,
       typeres,
       errh,
       diagh,
@@ -124,22 +123,22 @@ function parsePkg(
       if (file.imports) {
         print(`${file.imports.length} imports`)
         for (let imp of file.imports) {
-          print(astRepr(imp, reprOptions))
+          print("  " + imp.repr())
         }
       }
 
       if (file.unresolved) {
         print(`${file.unresolved.size} unresolved references`)
         for (let ident of file.unresolved) {
-          print(' - ' + astRepr(ident, reprOptions))
+          print("  " + ident.repr())
         }
       }
 
-      print(`${file.decls.length} declarations`)
+      // print(`${file.decls.length} declarations`)
       // for (let decl of file.decls) {
-      //   print(astRepr(decl, reprOptions))
+      //   print(decl.repr())
       // }
-      print(astRepr(file, reprOptions))
+      // print(file.repr())
     }
   }
 
@@ -155,7 +154,7 @@ function parsePkg(
   function importer(_imports :Map<string,Ent>, _path :string) :Promise<Ent> {
     // TODO: FIXME implement
     let name = strings.get(utf8.encodeString(_path))
-    return Promise.resolve(new Ent(name, new Node(NoPos, nilScope), null))
+    return Promise.resolve(new Ent(name, new Stmt(NoPos, nilScope), null))
     // return Promise.reject(new Error(`not found`))
   }
 
@@ -203,15 +202,20 @@ async function main(options? :MainOptions) :Promise<MainResult> {
   // options.noIR = true
   if (options.noIR) {
 
+    // print(r.pkg.repr())
+    print(r.pkg.repr2())
+
+
     // serialize ast
-    let buf = astio.encode(r.pkg)
-    print("astio.encode => " + buf)
-    let ast = astio.decode(buf)
-    print("decoding complete")
-    for (let n of ast) {
-      print(astRepr(n, reprOptions))
-    }
-    print("astio.decode => " + astio.encode(...ast))
+    // let buf = astio.encode(r.pkg)
+    // let buf = astio.encode1(r.pkg)
+    // print("astio.encode => " + buf)
+    // let ast = astio.decode(buf)
+    // print("decoding complete")
+    // for (let n of ast) {
+    //   print(n.repr())
+    // }
+    // print("astio.decode => " + astio.encode(...ast))
 
     return { success: true, diagnostics, ast: r.pkg }
   }
@@ -237,9 +241,9 @@ async function main(options? :MainOptions) :Promise<MainResult> {
         banner(
           `${r.pkg} ${file.sfile.name} ${file.decls.length} declarations`
         )
-        print(astRepr(r.pkg, reprOptions))
+        print(r.pkg.repr())
         // for (let decl of file.decls) {
-        //   print(astRepr(decl, reprOptions))
+        //   print(decl.repr())
         // }
         banner(`ssa-ir ${file.sfile.name}`)
       }
@@ -352,7 +356,6 @@ if (isNodeJsLikeEnv) {
 } else {
   GlobalContext['colang'] = {
     main,
-    fmtast: astRepr,
     fmtir,
     printir,
   }

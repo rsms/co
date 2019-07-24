@@ -1,4 +1,4 @@
-import { SrcFile, Pos } from './pos'
+import { Pos, NoPos, SrcFile } from './pos'
 import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
@@ -9,15 +9,34 @@ import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
 import { numconv } from './numconv'
 import {
-  File,
-  Scope,
-  Ent,
-  Group,
-  Comment,
+  types,
+  values,
+  t_str0,
+  t_void,
 
   Node,
 
-  Field,
+  File,
+  Scope,
+  Ent,
+  Comment,
+  Bad,
+
+  Type,
+  PrimType,
+  IntType,
+  NumType,
+  FunType,
+  UnresolvedType,
+  UnionType,
+  ListType,
+  TupleType,
+  StructType,
+  RestType,
+  TypeVar,
+  AliasType,
+  OptionalType,
+
   Stmt,
   ReturnStmt,
   WhileStmt,
@@ -25,6 +44,7 @@ import {
   BranchStmt,
 
   Decl,
+  FieldDecl,
   ImportDecl,
   VarDecl,
   TypeDecl,
@@ -32,12 +52,11 @@ import {
 
   Expr,
   Ident,
-  RestTypeExpr,
   FunExpr,
   FunSig,
   NumLit,
   IntLit,
-  CharLit,
+  RuneLit,
   FloatLit,
   StringLit,
   Block,
@@ -46,41 +65,11 @@ import {
   Operation,
   CallExpr,
   TupleExpr,
-  BadExpr,
-  TypeExpr,
-  BadTypeExpr,
   SelectorExpr,
   IndexExpr,
   SliceExpr,
   ListExpr,
-
-  builtInTypes as bitypes,
-  GetTypeExpr,
 } from './ast'
-
-import {
-  Type,
-  NativeType,
-  IntType,
-  NumType,
-  FunType,
-  UnresolvedType,
-  UnionType,
-  TupleType,
-  ListType,
-  RestType,
-  GenericType,
-  GenericTypeInstance,
-  AliasType,
-
-  t_nil,
-  t_u32, t_i32, t_u64, t_i64,
-  t_f64, t_f32,
-  t_int, t_uint,
-  t_str0,
-  t_list,
-  t_bool,
-} from './types'
 
 import { debuglog as dlog } from './util'
 // const dlog = function(..._ :any[]){} // silence dlog
@@ -105,6 +94,12 @@ export class SyntaxError extends Error {
   }
 }
 
+let nextGroupId = 0
+class Group {
+  id = "group#" + nextGroupId++
+  toString() :string { return this.id }
+}
+
 
 // funInfo contains information about the current function, used for data
 // that is really only needed during parsing.
@@ -117,7 +112,7 @@ class funInfo {
 
   addInferredReturnType(t :Type) {
     if (this.inferredReturnType == null) {
-      this.inferredReturnType = new UnionType(new Set<Type>([t]))
+      this.inferredReturnType = new UnionType(t.pos, new Set<Type>([t]))
     } else {
       this.inferredReturnType.add(t)
     }
@@ -252,9 +247,9 @@ export class Parser extends scanner.Scanner {
     // check for unused declarations
     if (s.decls) for (let [name, ent] of s.decls) {
       if (ent.nreads == 0) {
-        if (ent.decl instanceof Field) {
+        if (ent.decl.isFieldDecl()) {
           p.diag("warn", `${name} not used`, ent.decl.pos, (
-            ent.decl.scope.isFunScope ? 'E_UNUSED_PARAM' :
+            ent.decl._scope.isFunScope ? 'E_UNUSED_PARAM' :
             'E_UNUSED_FIELD'
           ))
         } else {
@@ -273,7 +268,7 @@ export class Parser extends scanner.Scanner {
 
   // declare registers decl and x in scope identified by name
   //
-  declare(scope :Scope, ident: Ident, decl :Node, x: Expr|null) {
+  declare(scope :Scope, ident: Ident, decl :Stmt, x: Expr|null) {
     const p = this
 
     if (ident.value.isEmpty) {
@@ -297,7 +292,7 @@ export class Parser extends scanner.Scanner {
 
   // declarev performs multiple declarations at once
   //
-  declarev(scope :Scope, idents: Ident[], decl :Node, xs: Expr[]|null) {
+  declarev(scope :Scope, idents: Ident[], decl :Stmt, xs: Expr[]|null) {
     const p = this
     for (let i = 0; i < idents.length; ++i) {
       p.declare(scope, idents[i], decl, xs && xs[i] || null)
@@ -311,7 +306,7 @@ export class Parser extends scanner.Scanner {
     //   return null  // "_" never resolves
     // }
     assert(id.ent == null, "already resolved")
-    let s :Scope|null = id.scope
+    let s :Scope|null = id._scope
     while (s) {
       // dlog(`lookupImm ${id} in ${s}`)
       const ent = s.lookupImm(id.value)
@@ -336,43 +331,61 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  resolveType(x :Ident) :Ident {
+  // resolveType resolved identifier x as a type.  x is expected to name a type.
+  // If the identifier was successfully resolved, x.ent is set to the resolved Ent.
+  // x.type is always set to either UndefinedType or a known Type. Returns x.type.
+  //
+  // Note: This function accepts all types for x which are parsed from dotident
+  // for convenience, but actually doesn't support all types named for x.
+  resolveType(x :Ident|SelectorExpr|IndexExpr) :Type {
     const p = this
+    if (!x.isIdent() || x.value.isEmpty) {
+      // TODO: Support SelectorExpr, e.g. "foo.Bar"
+      p.syntaxError(`expected type`, x.pos)
+      return p.bad<Type>(x.pos, "type")
+    }
     let ent = p.resolveEnt(x)
     if (ent) {
-      if (ent.decl instanceof TypeExpr || ent.decl instanceof TypeDecl) {
-        // identifier names a value or is not yet known
-        x.type = ent.type || p.types.markUnresolved(x)
-        if (x.type instanceof UnresolvedType) {
-          // references something that itself is undefined
+      if (!ent.decl.isTypeDecl()) {
+        p.syntaxError(`${x} is not a type`, x.pos)
+      } else if (ent.type) {
+        x.type = ent.type
+        if (x.type.isUnresolvedType()) {
           x.type.addRef(x)
         }
-      } else {
-        p.syntaxError(`${x} is not a type`, x.pos)
+        return x.type
       }
     }
-    return x
+    x.type = p.types.markUnresolved(x)
+    return x.type
   }
 
 
-  resolveVal<N extends Expr>(x :N) :N {
-    if (!(x instanceof Ident) || x.value.isEmpty) { // ignore "_"
+  // resolveType resolved identifier x as an expression.
+  // If the identifier was successfully resolved, x.ent is set to the resolved Ent
+  // and x.type is set to either UndefinedType or a known Type.
+  resolveVal<T extends Ident|SelectorExpr|IndexExpr>(x :T) :T {
+    const p = this
+    if (!x.isIdent() || x.value.isEmpty) {
+      // TODO: Support SelectorExpr, e.g. "foo.Bar"
+      p.syntaxError(`expected identifier`, x.pos)
       return x
     }
-    const p = this
     let ent = p.resolveEnt(x)
     if (ent) {
-      if (ent.decl instanceof TypeExpr) {
+      if (ent.decl.isTypeDecl()) {
         // identifier names a type
-        // x.type = new TypeType(ent.decl.type)
         x.type = ent.decl.type
       } else {
         // identifier names a value or is not yet known
-        x.type = ent.type || p.types.markUnresolved(x)
-        if (x.type instanceof UnresolvedType) {
-          // references something that itself is undefined
-          x.type.addRef(x)
+        if (!ent.type) {
+          x.type = p.types.markUnresolved(x)
+          return x  // return to avoid double ref
         }
+        x.type = ent.type
+      }
+      if (x.type.isUnresolvedType()) {
+        x.type.addRef(x)
       }
     }
     return x
@@ -386,13 +399,13 @@ export class Parser extends scanner.Scanner {
   ctxType(ctx :exprCtx) :Type|null {
     const p = this
     if (ctx) {
-      if (ctx instanceof Type) {
+      if (ctx.isType()) {
         return ctx
       }
-      if (ctx instanceof VarDecl) {
-        return ctx.type && p.types.maybeResolve(ctx.type) || null
+      if (ctx.isVarDecl()) {
+        return ctx.type
       }
-      if (ctx instanceof Assignment) {
+      if (ctx.isAssignment()) {
         // common case: single assignment
         // we handle multi assignments later, in p.assignment()
         return (
@@ -437,7 +450,7 @@ export class Parser extends scanner.Scanner {
     return imports
   }
 
-  importDecl = (_ :Group|null) :ImportDecl => {
+  importDecl = (_ :Object|null) :ImportDecl => {
     const p = this
     let localIdent :Ident|null = null
     let hasLocalIdent = false
@@ -459,7 +472,7 @@ export class Parser extends scanner.Scanner {
       path = p.strlit()
     } else {
       p.syntaxError("missing import path; expecting quoted string")
-      path = new StringLit(p.pos, p.scope, kEmptyByteArray, t_str0)
+      path = new StringLit(p.pos, kEmptyByteArray, t_str0)
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
     }
 
@@ -541,29 +554,33 @@ export class Parser extends scanner.Scanner {
     return true
   }
 
-  typeDecl = (group :Group|null, _ :int) :TypeDecl => {
+  typeDecl = (group :Object|null, _ :int) :TypeDecl => {
     // TypeSpec = "type" identifier [ "=" ] Type
     const p = this
     const pos = p.pos
+
     const id = p.ident()
-    const alias = p.got(token.ASSIGN)
+
+    const isSimpleAlias = p.got(token.ASSIGN)  // type X = Y
 
     let t = p.maybeType()
     if (!t) {
-      t = p.badTypeExpr()
+      t = p.bad<Type>(pos, "type")
       p.syntaxError("in type declaration")
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
     }
 
-    // create new alias type
-    t.type = new AliasType(id.value, t.type)
+    // // create new alias type
+    // if (!isSimpleAlias) {
+    //   t = new AliasType(id.pos, id.value, t)
+    // }
 
     // ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
-    const d = new TypeDecl(pos, scope, id, alias, t, group)
+    const d = new TypeDecl(pos, scope, id, t, group)
 
-    p.declare(scope, id, d, d.type)
+    p.declare(scope, id, d, null)
 
     return d
   }
@@ -596,8 +613,8 @@ export class Parser extends scanner.Scanner {
       return d
     }
 
-    const reqt = d.type ? p.types.resolve(d.type) : null
-    p.processAssign(d.idents, d.values, d, reqt, null)
+    p.processAssign(d.idents, d.values, d, d.type, null)
+    p.types.resolve(d)
 
     return d
   }
@@ -645,23 +662,23 @@ export class Parser extends scanner.Scanner {
     // it will use that instead. Whenever we encounter a return statement, we
     // will check the expected return type with the actual return type.
     //
-    const sig = p.funSig(isInitFun ? bitypes.nil : null)
+    const sig = p.funSig(isInitFun ? t_void : null)
 
-    const f = new FunExpr(pos, p.scope, name, sig, isInitFun)
+    const f = new FunExpr(pos, p.scope, sig, name, isInitFun)
 
     if (isInitFun) {
       // check initfun signature (should be empty)
       if (sig.params.length > 0) {
         p.syntaxError(`init function with parameters`, sig.pos)
       }
-      if (sig.result !== bitypes.nil) {
+      if (sig.result !== t_void) {
         p.syntaxError(`init function with result ${sig.result}`, sig.pos)
       }
     } else {
-      if (sig.result) {
-        // an explicit result type was provided -- resolve its type
-        p.types.resolve(sig.result)
-      }
+      // if (sig.result) {
+      //   // an explicit result type was provided -- resolve its type
+      //   p.types.resolve(sig.result)
+      // }
 
       if (name && !ctx) {
         // The function itself is declared in its outer scope, so that its body
@@ -706,13 +723,13 @@ export class Parser extends scanner.Scanner {
 
       if (f.body instanceof Block) {
         if (!sig.result) {
-          // auto result of block = nil
+          // auto result of block = t_void
           //
           // e.g.  fun foo() { ... }
-          //   =>  fun foo() nil { ... }
+          //   =>  fun foo() void { ... }
           //
-          sig.result = bitypes.nil
-        } else if (!isInitFun && sig.result !== bitypes.nil) {
+          sig.result = t_void
+        } else if (!isInitFun && sig.result !== t_void) {
           // convert implicit return to explicit return
           //
           // e.g.  fun foo() i32 { 3 }
@@ -723,7 +740,7 @@ export class Parser extends scanner.Scanner {
           if (result instanceof Expr) {
             let x = result as Expr
             let xtype = p.types.resolve(x)
-            let rettype = sig.result.type
+            let rettype = sig.result
             if (!(xtype instanceof UnresolvedType) && !xtype.equals(rettype)) {
               // attempt type conversion; rettype -> x.type
               const convexpr = p.types.convertLossless(rettype, x)
@@ -738,7 +755,7 @@ export class Parser extends scanner.Scanner {
                 )
               }
             }
-            let ret = new ReturnStmt(x.pos, x.scope, x, sig.result.type)
+            let ret = new ReturnStmt(x.pos, x._scope, x, sig.result)
             f.body.list[lastindex] = ret
           }
         }
@@ -752,21 +769,21 @@ export class Parser extends scanner.Scanner {
         if (!fi.inferredReturnType) {
           // no return statements encountered.
           // set result type to same as the body
-          sig.result = GetTypeExpr(p.types.resolve(f.body))
+          sig.result = p.types.resolve(f.body)
         } else if (fi.inferredReturnType.types.size == 1) {
           // single return type (note: may be void if found `return;`)
-          sig.result = GetTypeExpr(fi.inferredReturnType.types.values().next().value)
+          sig.result = fi.inferredReturnType.types.values().next().value
         } else {
           // union type
-          sig.result = GetTypeExpr(fi.inferredReturnType)
+          sig.result = fi.inferredReturnType
         }
       }
     } else {
       if (sig.result === null) {
         // auto
         // for functions without a body and that is missing an explicit
-        // result type, nil/void is assumed.
-        sig.result = bitypes.nil
+        // result type, void is assumed.
+        sig.result = t_void
       }
       p.popScope()
     }
@@ -800,15 +817,14 @@ export class Parser extends scanner.Scanner {
   //
   // Signature = ( Parameters Result? | Type )?
   //
-  funSig(defaultType :TypeExpr | null): FunSig {
+  funSig(result :Type|null): FunSig {
     const p = this
     const pos = p.pos
     const params = p.tok == token.LPAREN ? p.parameters() : []
-    let result = defaultType
     if (p.tok != token.LBRACE) {
-      result = p.maybeType() || defaultType
+      result = p.maybeType() || result
     }
-    return new FunSig(pos, p.scope, params, result)
+    return new FunSig(pos, params, result)
   }
 
   // parameters parses a parameter list
@@ -826,7 +842,7 @@ export class Parser extends scanner.Scanner {
   // ParameterList = ParameterDecl ("," ParameterDecl)*
   // ParameterDecl = [ NameList ] [ "..." ] Type
   //
-  parameters() :Field[] {
+  parameters() :FieldDecl[] {
     // examples:
     //
     // (T)
@@ -842,16 +858,15 @@ export class Parser extends scanner.Scanner {
     p.want(token.LPAREN)
 
     let named = 0   // parameters that have an explicit name and type
-    let seenRestTypeExpr = false
+    let seenRestType = false
     const paramsPos = p.pos
-    const fields = [] as Field[]
+    const fields = [] as FieldDecl[]
     const scope = p.scope
 
     while (p.tok != token.RPAREN) {
       let pos = p.pos
-      // let f = new Field(p.pos, scope, t_nil, p.ident())
 
-      let typ :Expr|null = null
+      let typ  :Node|null = null  // used for both names and types, thus Node
       let name :Ident|null = null
 
       // parse type or name
@@ -868,15 +883,11 @@ export class Parser extends scanner.Scanner {
           isRest = true
           p.next()
         }
-        const x = p.maybeType()
-        if (x) {
-          typ = x
-          if (isRest) {
-            // typ = new RestTypeExpr(pos, x.scope, x, p.types.getRestType(x.type))
-            x.type = p.types.getRestType(x.type)
-          }
+        let t = p.maybeType()
+        if (t) {
+          typ = isRest ? new RestType(t) : t
         } else {
-          typ = p.badTypeExpr()
+          typ = p.bad<Type>(p.pos, "type")
           p.syntaxError("expecting name or type", pos)
         }
       }
@@ -890,7 +901,7 @@ export class Parser extends scanner.Scanner {
         // move typ -> name as we are about to parse the actual type
         if (typ) {
           // e.g. func(name T)
-          if (typ instanceof Ident) {
+          if (typ.isIdent()) {
             name = typ
             named++
           } else {
@@ -901,34 +912,25 @@ export class Parser extends scanner.Scanner {
 
         // parse type
         if (p.got(token.ELLIPSIS)) {
+          // rest
           const x = p.maybeType()
           if (x) {
-            let t = p.types.getRestType(p.types.resolve(x))
-            typ = new RestTypeExpr(pos, scope, x, t)
+            // let t = p.types.getRestType(p.types.resolve(x)) // before new ast
+            typ = new RestType(x)
           } else {
-            typ = p.badTypeExpr()
+            typ = p.bad<Type>(p.pos, "type")
             p.syntaxError("expecting type after ...")
           }
-          if (seenRestTypeExpr) {
+          if (seenRestType) {
             p.syntaxError("can only use ... with final parameter")
-            continue  // skip this field
+            continue  // error recovery: skip field
           } else {
-            seenRestTypeExpr = true
+            seenRestType = true
           }
         } else {
           typ = p.type()
         }
-      } // else if (typ instanceof Ident) {}
-
-      // restType() :RestTypeExpr {
-      //   // RestType = "..." Expr?
-      //   const p = this
-      //   const pos = p.pos
-      //   p.want(token.ELLIPSIS)
-      //   const rt = new RestTypeExpr(pos, p.scope, p.type())
-      //   p.types.resolve(rt)
-      //   return rt
-      // }
+      }
 
       // parse optional comma, or break on error
       if (!p.ocomma(token.RPAREN)) {
@@ -940,7 +942,8 @@ export class Parser extends scanner.Scanner {
 
       // Note: OK that typ is an Ident here. We may edit this later
       // TODO: cleaner way of doing this
-      fields.push(new Field(pos, scope, typ as TypeExpr, name))
+      assert(typ && (typ.isType() || typ.isIdent()))
+      fields.push(new FieldDecl(pos, scope, typ as Type, name))
     }
 
     p.want(token.RPAREN)
@@ -949,9 +952,8 @@ export class Parser extends scanner.Scanner {
     if (named == 0) {
       // none named -- types only
       for (let f of fields) {
-        if (f.type instanceof Ident) {
-          p.resolveType(f.type)
-          f.type = new TypeExpr(f.type.pos, f.type.scope, f.type.type)
+        if (f.type.isIdent()) {
+          f.type = p.resolveType(f.type)
         }
       }
     } else {
@@ -960,42 +962,50 @@ export class Parser extends scanner.Scanner {
         // All named, some has types, e.g. func(a, b B, c ...C)
         // some named => all must be named
         let ok = true
-        let typ :TypeExpr|null = null
-        let t :Type = t_nil
+        // let typ :Type|null = null
+        let t :Type = t_void
 
         for (let i = fields.length - 1; i >= 0; --i) {
           const f = fields[i]
 
           if (!f.name) {
             // is a single-name param (name is actually on .type)
-            if (f.type instanceof Ident) {
+            // copy .type -> .name; set .type = typ
+            if (f.type.isIdent()) {
               f.name = f.type
-              if (typ) {
-                f.type = typ
+              if (t !== t_void) {
+                f.type = t
                 f.name.type = t
               } else {
-                // f.type == nil && typ == null => we only have a f.name
+                // f.type == t_void && typ == null => we only have a f.name
                 ok = false
-                f.type = p.badTypeExpr(f.type.pos)
+                f.type = p.bad<Type>(f.type.pos, "type")
               }
             } else {
               p.syntaxError("illegal parameter name", f.type.pos)
             }
           } else if (f.type) {
-            p.resolveVal(f.type)
-            t = p.types.resolve(f.type)
-            typ = f.type
-            if (typ instanceof RestTypeExpr) {
-              // unbox rest type, e.g. "...typ" -> "typ"
-              const tx = typ.expr
-              assert(tx.type, 'unresolved type')
-              typ = new TypeExpr(tx.pos, tx.scope, tx.type as Type)
-            }
+            // field has name and type
+
+            assert(f.type.isType())
+            // if (f.type.isIdent()) {
+            //   f.type = p.resolveType(f.type)
+            //   f.type = p.types.resolve(f.type)
+            // }
+
+            t = f.type
+
+            // if (t.isRestType()) {
+            //   // unbox rest type, e.g. "...typ" -> "typ"
+            //   const tx = typ.expr
+            //   assert(tx.type, 'unresolved type')
+            //   typ = new TypeExpr(tx.pos, tx.scope, tx.type as Type)
+            // }
             if (f.name) {
               f.name.type = t
             } else {
               ok = false
-              f.name = p.fallbackIdent(typ.pos)
+              f.name = p.fallbackIdent(NoPos)
             }
           }
 
@@ -1008,19 +1018,19 @@ export class Parser extends scanner.Scanner {
           }
 
           // declare name in function scope
-          assert(f.name != null)
-          p.declare(scope, f.name as Ident, f, null)
+          assert(f.name)
+          p.declare(scope, f.name!, f, null)
         }
       } else {
         // All named, all have types
         // declare names in function scope
         for (let f of fields) {
-          assert(f.name != null)
-          if (f.type instanceof Ident) {
-            p.resolveType(f.type)
+          if (f.type.isIdent()) {
+            f.type = p.resolveType(f.type)
           }
-          ;(f.name as Ident).type = p.types.resolve(f.type)
-          p.declare(scope, f.name as Ident, f, null)
+          assert(f.name)
+          f.name!.type = f.type
+          p.declare(scope, f.name!, f, null)
         }
       }
     }
@@ -1090,7 +1100,7 @@ export class Parser extends scanner.Scanner {
     return new Block(pos, p.scope, list)
   }
 
-  multiDecl<D extends Decl>(f :(g:Group|null, i:int)=>D) :MultiDecl {
+  multiDecl<D extends Decl>(f :(g:Object|null, i:int)=>D) :MultiDecl {
     const p = this
     const pos = p.pos
     p.next() // e.g. TYPE
@@ -1178,7 +1188,7 @@ export class Parser extends scanner.Scanner {
   processAssign(
     lhs :Expr[],
     rhs :Expr[]|null,
-    decl :Node,
+    decl :VarDecl|Assignment,
     reqt :Type|null,
     decls :bool[]|null,
   ) {
@@ -1204,7 +1214,7 @@ export class Parser extends scanner.Scanner {
       }
 
       // Decide to store to an existing ent, or declare a new one
-      if (decls && rhs && id.ent && p.shouldStoreToEnt(id.ent, id.scope)) {
+      if (decls && rhs && id.ent && p.shouldStoreToEnt(id.ent, id._scope)) {
         // assign to existing ent
         const rval = rhs[i]
 
@@ -1212,8 +1222,8 @@ export class Parser extends scanner.Scanner {
 
         let typ = id.ent.type
         if (!typ) {
-          const typexpr = id.ent.getTypeExpr()! ; assert(typexpr)
-          typ = p.types.resolve(typexpr)
+          assert(id.ent.value)
+          typ = p.types.resolve(id.ent.value!)
         }
 
         // const typexpr = id.ent.getTypeExpr()
@@ -1248,9 +1258,9 @@ export class Parser extends scanner.Scanner {
       }
 
       if (p.unresolved) { p.unresolved.delete(id) } // may be noop
-      p.declare(id.scope, id, decl, rval)
+      p.declare(id._scope, id, decl, rval)
 
-      if (id.type instanceof UnresolvedType) {
+      if (id.type.isUnresolvedType()) {
         id.type.addRef(id)
       }
 
@@ -1497,7 +1507,7 @@ export class Parser extends scanner.Scanner {
 
     let cond :Expr|null = null
     if (p.tok != token.LBRACE) {
-      cond = p.expr(t_bool)
+      cond = p.expr(types.bool)
       p.types.resolve(cond)
     }
 
@@ -1521,7 +1531,7 @@ export class Parser extends scanner.Scanner {
 
     let cond :Expr|null = null
     if (p.tok != token.SEMICOLON) {
-      cond = p.expr(t_bool)
+      cond = p.expr(types.bool)
       p.types.resolve(cond)
     }
     p.want(token.SEMICOLON)
@@ -1598,23 +1608,20 @@ export class Parser extends scanner.Scanner {
 
     p.want(token.RETURN)
 
-    // expected return type (may be null (auto); bitypes.nil for init)
+    // expected return type (may be null (auto); VoidType for init)
     const fi = p.currFun()
     const frtype = fi.f.sig.result
 
-    assert(
-      !frtype || frtype.type instanceof Type,
-      "currFun sig.result type not resolved"
-    )
+    assert(!frtype || frtype.isUnresolved(), "currFun sig.result type not resolved")
 
-    const n = new ReturnStmt(pos, p.scope, bitypes.nil, t_nil)
+    const n = new ReturnStmt(pos, p.scope, values.nil, t_void)
 
     if (p.tok == token.SEMICOLON || p.tok == token.RBRACE) {
       // no result; just "return"
-      if (frtype !== bitypes.nil) {
+      if (frtype !== t_void) {
         if (frtype === null && fi.inferredReturnType == null) {
-          // patch current function's signature: nil result type
-          fi.f.sig.result = bitypes.nil
+          // patch current function's signature: void result type
+          fi.f.sig.result = t_void
         } else {
           // if `fi.inferredReturnType != null` that means the block returns
           // both some type and nothing, which is invalid.
@@ -1634,12 +1641,12 @@ export class Parser extends scanner.Scanner {
       xs.length == 1 ? xs[0] :
         // e.g. "return 1", "return (1, 2)"
 
-      new TupleExpr(xs[0].pos, xs[0].scope, xs, null)
+      new TupleExpr(xs[0].pos, xs[0]._scope, xs)
         // Support paren-less tuple return
         // e.g. "return 1, 2" == "return (1, 2)"
     )
 
-    if (frtype === bitypes.nil) {
+    if (frtype === t_void) {
       p.syntaxError("function does not return a value", rval.pos)
       return n
     }
@@ -1653,21 +1660,20 @@ export class Parser extends scanner.Scanner {
       fi.addInferredReturnType(rtype)
 
     } else {
-      assert(frtype.type)
-      const funResType = frtype.type as Type
+      assert(frtype)
       if (
-        !(rtype instanceof UnresolvedType) && // type is known, and
-        !rtype.equals(funResType) // type is different than function's ret type
+        !rtype.isUnresolvedType() && // type is known, and
+        !rtype.equals(frtype!) // type is different than function's ret type
       ) {
         // attempt type conversion; rtype -> frtype.type
-        const convexpr = p.types.convert(funResType, rval)
+        const convexpr = p.types.convert(frtype!, rval)
         if (convexpr) {
           n.result = convexpr
-          n.type = funResType
+          n.type = frtype!
         } else {
           // error: type mismatch
           p.syntaxError(
-            (rval.type instanceof UnresolvedType ?
+            (rval.type && rval.type.isUnresolvedType() ?
               `cannot use "${rval}" as return type ${frtype}` :
               `cannot use "${rval}" (type ${rval.type}) as return type ${frtype}`
             ),
@@ -1748,18 +1754,20 @@ export class Parser extends scanner.Scanner {
   maybeGenericTypeInstance(lhs :Expr, pr :prec, ctx :exprCtx) :Expr {
     const p = this
     assert(p.tok == token.LSS)  // enter at token.LSS "<"
-    return p.tryWithBacktracking(
 
-      // try to parse as generic type, e.g. "x<y>"
-      () => {
-        let t = p.types.resolve(lhs)
-        let tx = new TypeExpr(lhs.pos, lhs.scope, t)
-        return p.genericTypeInstance(tx)
-      },
+    // // TODO: re-introduce generics/templates
+    return p.maybeBinaryExpr(lhs, pr, ctx)
+    // return p.tryWithBacktracking(
 
-      // else, parse as binary expression, e.g. "x < y"
-      () => p.maybeBinaryExpr(lhs, pr, ctx),
-    )
+    //   // try to parse as generic type, e.g. "x<y>"
+    //   () => {
+    //     let t = p.types.resolve(lhs)
+    //     return p.genericType(t)
+    //   },
+
+    //   // else, parse as binary expression, e.g. "x < y"
+    //   () => p.maybeBinaryExpr(lhs, pr, ctx),
+    // )
   }
 
 
@@ -1777,7 +1785,7 @@ export class Parser extends scanner.Scanner {
         p.next()
         // unaryExpr may have returned a parenthesized composite literal
         // (see comment in operand)
-        let x = new Operation(pos, p.scope, t, p.unaryExpr(pr, ctx))
+        let x = new Operation(pos, p.scope, t, p.unaryExpr(pr, ctx), null)
         p.types.resolve(x)
 
         let isint = x.type instanceof IntType
@@ -1848,7 +1856,7 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // TODO: callNativeType(fun :Expr, t :NativeType) :CallExpr {
+  // TODO: callPrimType(fun :Expr, t :PrimType) :CallExpr {
   // }
 
 
@@ -1863,16 +1871,16 @@ export class Parser extends scanner.Scanner {
     let argtypes :Type[] = []
 
     // do we know the function type?
-    if (receiver instanceof TypeExpr) {
-      dlog(`calling a type ${receiver.type} (via receiver is TypeExpr)`)
-      if (receiver.type instanceof NativeType) {
-        // TODO: fast path for common case: conversion to native type
-        // return p.callNativeType(receiver, receiver.type.type)
+    if (receiver.isType()) {
+      dlog(`calling a type ${receiver.type} (via receiver.isType)`)
+      if (receiver.isPrimType()) {
+        // TODO: fast path for common case: conversion to primitive type
+        // return p.callPrimType(receiver, receiver.type.type)
       }
-      argtypes = [ receiver.type ]
+      argtypes = [ receiver ]
     } else if (receiver.type instanceof FunType) {
       argtypes = receiver.type.args
-    } else {
+    } else { // unresolved
       assert(
         receiver.type == null,
         `resolved, unexpected receiver=${receiver} .type=${receiver.type} ` +
@@ -1968,7 +1976,7 @@ export class Parser extends scanner.Scanner {
         return p.intLit(ctx, p.tok)
 
       case token.CHAR:
-        return p.charLit(ctx)
+        return p.runeLit(ctx)
 
       case token.FLOAT:
         return p.floatLit(ctx)
@@ -1982,33 +1990,33 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  charLit(ctx :exprCtx) :NumLit {
+  runeLit(ctx :exprCtx) :NumLit {
     const p = this
     assert(p.int32val >= 0, 'negative character value')
-    const x = new CharLit(p.pos, p.scope, p.int32val)
+    const x = new RuneLit(p.pos, p.int32val)
     p.next() // consume literal token
-    return p.numLitConv(x, p.ctxType(ctx))
+    return p.convNum(x, p.ctxType(ctx))
   }
 
 
   floatLit(ctx :exprCtx) :NumLit {
     const p = this
     assert(!isNaN(p.floatval), 'scanner produced invalid number')
-    const x = new FloatLit(p.pos, p.scope, p.floatval, t_f64)
+    const x = new FloatLit(p.pos, p.floatval, types.f64)
     p.next() // consume literal token
     let dstt = p.ctxType(ctx)
     if (dstt) {
-      if (dstt === t_f32) {
+      if (dstt === types.f32) {
         // common case: context is f32 and we parsed a float literal.
         // attempt to fit the literal into f32.
-        let [, lossless] = numconv(x.value, t_f32)
+        let [, lossless] = numconv(x.value, types.f32)
         if (lossless) {
-          x.type = t_f32
+          x.type = types.f32
         } else {
-          p.syntaxError(`constant ${x} overflows ${t_f32}`, x.pos)
+          p.syntaxError(`constant ${x} overflows ${types.f32}`, x.pos)
         }
       } else if (dstt !== x.type) {
-        return p.numLitConv(x, dstt)
+        return p.convNum(x, dstt)
       }
     }
     return x
@@ -2025,35 +2033,35 @@ export class Parser extends scanner.Scanner {
     // prefer signed integer types when the value fits
     if (p.int64val) {
       if (p.int64val.isSigned || p.int64val.lte(SInt64.MAX)) {
-        x = new IntLit(p.pos, p.scope, p.int64val.toSigned(), t_i64, tok)
+        x = new IntLit(p.pos, p.int64val.toSigned(), types.i64, tok)
       } else {
         assert(p.int64val instanceof UInt64)
-        x = new IntLit(p.pos, p.scope, p.int64val, t_u64, tok)
+        x = new IntLit(p.pos, p.int64val, types.u64, tok)
       }
     } else {
-      const t = p.int32val <= 0x7fffffff ? t_int : t_uint
-      x = new IntLit(p.pos, p.scope, p.int32val, t, tok)
+      const t = p.int32val <= 0x7fffffff ? types.int : types.uint
+      x = new IntLit(p.pos, p.int32val, t, tok)
     }
 
     p.next() // consume literal token
 
     // return possibly-converted number literal
-    return p.numLitConv(x, p.ctxType(ctx))
+    return p.convNum(x, p.ctxType(ctx))
   }
 
 
-  // numLitConv may convert x (in-place) to a different type as requested by reqt.
+  // convNum may convert x (in-place) to a different type as requested by reqt.
   //
-  numLitConv(x :NumLit, reqt :Type|null) :NumLit {
-    if (!reqt || reqt === t_bool) {
+  convNum(x :NumLit, reqt :Type|null) :NumLit {
+    if (!reqt || reqt === types.bool) {
       return x
     }
     const p = this
     // unwrap rest type. e.g. ...u32 => u32
-    if (reqt instanceof RestType) {
-      reqt = reqt.types[0]
+    if (reqt.isRestType()) {
+      reqt = reqt.type
     }
-    if (reqt instanceof NumType) {
+    if (reqt.isNumType()) {
       // capture refs to current type and value before converting, as
       // convertToType may change these properties.
       let xv = x.value
@@ -2082,8 +2090,13 @@ export class Parser extends scanner.Scanner {
     const p = this
     assert(p.tok == token.STRING)
     const bytes = p.takeByteValue()
-    const t = p.types.getStrType(bytes.length)
-    const n = new StringLit(p.pos, p.scope, bytes, t)
+    let n :StringLit
+    if (bytes.length == 0) {
+      // str<0> ""
+      n = new StringLit(p.pos, kEmptyByteArray, t_str0)
+    } else {
+      n = new StringLit(p.pos, bytes, p.types.getStrType(bytes.length))
+    }
     p.next()
     return n
   }
@@ -2154,7 +2167,7 @@ export class Parser extends scanner.Scanner {
     let l :Expr[] = []
     let ctxt = p.ctxType(ctx)
     let t :ListType|null = ctxt instanceof ListType ? ctxt : null
-    let itemtype :Type|null = t ? t.types[0] : null
+    let itemtype :Type|null = t ? t.type : null
 
     while (p.tok != token.RBRACKET) {
       let x = p.expr(itemtype)
@@ -2163,7 +2176,7 @@ export class Parser extends scanner.Scanner {
           t = new ListType(x.type)
         }
       } else {
-        x = p.types.convert(t.types[0], x) || x
+        x = p.types.convert(t.type, x) || x
       }
       l.push(x)
       if (p.tok as token != token.RBRACKET && !p.ocomma(token.RBRACKET)) {
@@ -2180,8 +2193,8 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  typedListExpr(operand :TypeExpr) :ListExpr {
-    return this.listExpr(operand.type)
+  typedListExpr(operand :Type) :ListExpr {
+    return this.listExpr(operand)
   }
 
 
@@ -2189,16 +2202,16 @@ export class Parser extends scanner.Scanner {
   // IndexExpr   = Expr "[" Expr "]"
   // SliceExpr   = Expr "[" Expr? ":" Expr? "]"
   //
-  bracketExpr(operand :Expr, ctx :exprCtx) :ListExpr|TypeExpr|IndexExpr|SliceExpr|BadExpr {
+  bracketExpr(operand :Expr, ctx :exprCtx) :Expr {
     const p = this
 
-    if (operand instanceof TypeExpr) {
+    if (operand.isType()) {
       // operand is type, e.g. int[][...
       //                       ~~~~~
       return p.typedListExpr(operand)
     }
 
-    // Note on case where operand.type instanceof TypeType
+    // Note on case where operand isType
     //
     // operand is type, e.g. int[...
     //                       ~~~
@@ -2230,9 +2243,10 @@ export class Parser extends scanner.Scanner {
 
     if (p.got(token.RBRACKET)) {
       // list type expression. e.g. x[]
-      let opt :Type = p.types.resolve(operand).canonicalType()
-      let lt = p.types.getGenericInstance(t_list, [opt])
-      return new TypeExpr(pos, p.scope, lt)
+      dlog(`TODO: FIXUP generics`)
+      // let opt :Type = p.types.resolve(operand).canonicalType()
+      // let lt = p.types.getGenericInstance(t_list, [opt])
+      // return new TypeExpr(pos, p.scope, lt)
     }
 
     let x1 :Expr|null = null
@@ -2256,7 +2270,7 @@ export class Parser extends scanner.Scanner {
         // non-uniform operand type
         // we need to resolve indexes to find type
         if (!p.types.tupleSlice(x)) {
-          x.type = p.types.markUnresolved(x)
+          x.type = p.types.markUnresolved(x) as any as TupleType  // FIXME
         }
       } else dlog(`TODO handle uniform slice operand ${operand.type}`)
 
@@ -2272,13 +2286,13 @@ export class Parser extends scanner.Scanner {
       }
       p.advanceUntil(token.RBRACKET) // avoids superfluous errors in common cases
       p.next()
-      return p.bad(pos)
+      return p.bad<Expr>(pos)
     }
 
-    assert(x1 != null)
-    assert(x1 instanceof Expr)
+    assert(x1)
+    assert(x1!.isExpr())
 
-    let x = new IndexExpr(pos, p.scope, operand, x1 as Expr)
+    let x = new IndexExpr(pos, p.scope, operand, x1!)
 
     if (operand.type instanceof TupleType) {
       // non-uniform operand type
@@ -2329,20 +2343,28 @@ export class Parser extends scanner.Scanner {
       //   l[0]
       // ) :
       l.length == 1 ? l[0] :
-      new TupleExpr(pos, p.scope, l, /*type*/null)
+      new TupleExpr(pos, p.scope, l)
     )
   }
 
 
-  bad(pos? :Pos) :BadExpr {
+  bad<T extends Node = Expr>(pos? :Pos, message :string = "") :T {
     const p = this
-    return new BadExpr(pos === undefined ? p.pos : pos, p.scope)
+    return new Bad(pos === undefined ? p.pos : pos, message) as any as T
   }
 
 
-  badTypeExpr(pos? :Pos) :BadTypeExpr {
+  // type parses a type
+  //
+  type() :Type {
     const p = this
-    return new BadTypeExpr(pos === undefined ? p.pos : pos, p.scope)
+    let t = p.maybeType()
+    if (!t) {
+      t = p.bad<Type>(p.pos, "type")
+      p.syntaxError("expecting type")
+      p.next()
+    }
+    return t
   }
 
 
@@ -2357,123 +2379,62 @@ export class Parser extends scanner.Scanner {
   // TypeLit  = ArrayType | StructType | PointerType | FunctionType
   //          | InterfaceType | SliceType | MapType | Channel_Type
   //
-  maybeType() :TypeExpr|null {
+  maybeType() :Type|null {
     const p = this
-    let tx :TypeExpr|null = null
+    let t :Type|null = null
 
     switch (p.tok) {
 
       case token.NAME: {
-        let x = p.dotident(null, p.resolveType(p.ident()))
-        tx = new TypeExpr(x.pos, x.scope, p.types.resolve(x))
+        // TODO: resolveType on dotident, not leaf ident
+        let x = p.dotident(null, p.ident())
+        p.resolveType(x)
+        t = p.types.resolve(x)
+        // TODO: re-introduce generics/templates
+        // // generic use. e.g. Foo<A,B>
+        // if ((p.tok as token) == token.LSS) {
+        //   t = p.genericType(t)
+        // }
         break
       }
 
       case token.LPAREN:
-        tx = p.tupleType()
+        t = p.tupleType()
         break
 
       case token.LBRACE:
-        dlog(`TODO: parse struct type`)
+        t = p.structType()
         break
 
-      // case token.LBRACKET:
-      //   dlog(`TODO: parse list type`)
-      //   break //p.tupleType()
-
-      // TODO: all other types
     }
 
-    if (tx) {
-      // generic use. e.g. T<A,B>
-      if (p.tok == token.LSS) {
-        tx = p.genericTypeInstance(tx)
-      }
-
-      // list. e.g. T[][]
-      while(p.tok == token.LBRACKET) {
-        tx = p.listType(tx)
-      }
-    }
-
-    return tx
-  }
-
-
-  // GenericTypeInstance = Type "<" (TypeArgs ","? )? ">"
-  // TypeArgs            = Type ("," Type)*
-  //
-  genericTypeInstance(tx :TypeExpr) :TypeExpr {
-    const p = this
-    const pos = p.pos
-    const args :Type[] = []
-
-    p.want(token.LSS)  // consume "<"
-
-    read_loop: while (p.tok != token.GTR) {
-      let tx2 = p.type()
-      assert(tx2.type, 'null type')
-      args.push(tx2.type)
-      if (p.tok == token.COMMA) {
-        p.next() // consume optional comma
-      } else {
-        // end of type def
-        if (p.tok == token.SHR) {
-          // convert token ">>" to ">", effectively creating the appearance
-          // that there are a token ">" followed by a token ">".
-          // This happens because the scanner is unable to distinguish between
-          // ">>" and ">".
-          p.tok = token.GTR
-        } else {
-          if (p.tok as token != token.GTR) {
-            p.syntaxError(`expecting comma or >`)
-            p.advanceUntil(token.GTR)
-          }
-          p.next() // consume ">"
+    if (t) {
+      // optional, e.g. "x Foo?"
+      if (p.got(token.QUESTION)) {
+        let t1 = t
+        t = new OptionalType(t.pos, t1)
+        if (t1.isUnresolvedType()) {
+          t1.addRef(t)
         }
-        break
       }
+      // list. e.g. Foo[][]
+      while(p.tok == token.LBRACKET) {
+        t = p.listType(t)
+      }
+      // Note: Optional list is invalid since empty list==nil.
+      // i.e. x Foo[]? is a syntax error
     }
 
-    let proto = tx.type.canonicalType()
-    let alias = (tx.type instanceof AliasType) ? tx.type : null
-    if (proto instanceof GenericType) {
-      tx.type = p.types.getGenericInstance(proto, args)
-    } else if (proto instanceof UnresolvedType) {
-      tx.type = new GenericTypeInstance(proto, args)
-    } else {
-      p.syntaxError(`instantiating non-generic type ${proto}`, pos)
-    }
-
-    if (alias) {
-      tx.type = new AliasType(alias.name, tx.type)
-    }
-
-    return tx
+    return t
   }
 
 
-  listType(tx :TypeExpr) :TypeExpr {
+  // ListType = Type "[]"
+  listType(t :Type) :ListType {
     const p = this
     p.want(token.LBRACKET)
     p.want(token.RBRACKET)
-    tx.type = new ListType(tx.type)
-    return tx
-  }
-
-
-  // type parses a type
-  //
-  type() :TypeExpr {
-    const p = this
-    let t = p.maybeType()
-    if (t) {
-      return t
-    }
-    t = p.badTypeExpr()
-    p.syntaxError("expecting type")
-    p.next()
-    return t
+    return new ListType(t)
   }
 
 
@@ -2481,17 +2442,16 @@ export class Parser extends scanner.Scanner {
   // Returns null for empty tuples, i.e. "()"
   // Returns the inner type for single-type tuples, i.e. "(Type)"
   //
-  tupleType() :TypeExpr|null {
+  tupleType() :Type|null {
     const p = this
     p.want(token.LPAREN)
     const pos = p.pos
-    let tx :TypeExpr | null = null
+    let t :Type|null = null
     const types = [] as Type[]
 
     while (p.tok != token.RPAREN) {
-      tx = p.type()
-      assert(tx.type, 'null type')
-      types.push(tx.type as Type)
+      t = p.type()
+      types.push(t)
       if (!p.ocomma(token.RPAREN)) {
         // error: unexpected ;, expecting comma, or )
         break
@@ -2499,17 +2459,105 @@ export class Parser extends scanner.Scanner {
     }
     p.want(token.RPAREN)
 
-    if (!tx) {
+    if (!t) {
       return null  // "()"  => null
     }
 
     if (types.length == 1) {
-      return tx as TypeExpr  // "(a)" => "a"
+      return t  // "(a)" => "a"
     }
 
-    const tupleType = p.types.getTupleType(types)
-    return new TypeExpr(pos, p.scope, tupleType)
+    return p.types.getTupleType(types)
   }
+
+
+  // StructType     = "{" (Field ";")* "}"
+  // Field          = (VarDecl | EmbeddedField | MethodDecl)
+  // EmbeddedField  = TypeName
+  //
+  structType() :StructType|null {
+    const p = this
+    const pos = p.pos
+    const decls :Decl[] = []
+
+    p.want(token.LBRACE)  // {
+
+    // { TopLevelDecl ";" }
+    while (p.tok != token.RBRACE) {
+      switch (p.tok) {
+
+        case token.TYPE:
+          p.next() // consume "type"
+          p.appendGroup(decls, p.typeDecl)
+          break
+
+        case token.NAME:
+          const pos = p.pos
+          const idents = p.identList(p.ident())
+          decls.push(p.varDecl(pos, idents))
+          break
+
+        case token.FUN:
+          decls.push(p.funExpr(null))
+          break
+
+        default:
+          p.syntaxError("expected declaration")
+          p.advanceUntil(token.RBRACE)
+          break
+      }
+
+      if ((p.tok as token) != token.RBRACE && !p.got(token.SEMICOLON)) {
+        p.syntaxError("in struct declaration")
+        p.advanceUntil(token.RBRACE)
+      }
+    }
+
+    p.want(token.RBRACE)  // }
+
+    return new StructType(pos, decls)
+  }
+
+
+  // // GenericTypeInstance = Type "<" (TypeArgs ","? )? ">"
+  // // TypeArgs            = Type ("," Type)*
+  // //
+  // genericType(t :Type) :Type {
+  //   const p = this
+  //   const pos = p.pos
+  //   const args :Type[] = []
+
+  //   p.want(token.LSS)  // consume "<"
+
+  //   if (!t.isGenericType()) {
+  //     p.syntaxError(`unexpected type vars for non-generic type ${t}`, pos)
+  //     return t
+  //   }
+
+  //   while (p.tok != token.GTR) {
+  //     args.push(p.type())
+  //     if (p.tok == token.COMMA) {
+  //       p.next() // consume optional comma
+  //     } else {
+  //       // end of type def
+  //       if (p.tok == token.SHR) {
+  //         // convert token ">>" to ">", effectively creating the appearance
+  //         // that there are a token ">" followed by a token ">".
+  //         // This happens because the scanner is unable to distinguish between
+  //         // ">>" and ">".
+  //         p.tok = token.GTR
+  //       } else {
+  //         if (p.tok as token != token.GTR) {
+  //           p.syntaxError(`expecting comma or >`)
+  //           p.advanceUntil(token.GTR)
+  //         }
+  //         p.next() // consume ">"
+  //       }
+  //       break
+  //     }
+  //   }
+  //   return p.types.getGenericInstance(t, args)
+  // }
 
 
   // IdentifierList = identifier { "," identifier } .
@@ -2543,7 +2591,7 @@ export class Parser extends scanner.Scanner {
 
   fallbackIdent(pos? :Pos) :Ident {
     const p = this
-    return new Ident(pos === undefined ? p.pos : pos, p.scope, str__)
+    return new Ident(pos || p.pos, p.scope, str__)
   }
 
   // osemi parses an optional semicolon.
@@ -2595,7 +2643,7 @@ export class Parser extends scanner.Scanner {
   }
 
   // appendGroup(f) = f | "(" { f ";" } ")" .
-  appendGroup<D extends Decl>(list :D[], f :(g:Group|null, i:int)=>D) {
+  appendGroup<D extends Decl>(list :D[], f :(g:Object|null, i:int)=>D) {
     const p = this
     let i = 0
     if (p.got(token.LPAREN)) {
@@ -2715,7 +2763,7 @@ export class Parser extends scanner.Scanner {
   // If a BadExpr then no error was reported and backtracking should follow,
   // by the caller to this function returning the BadExpr object.
   //
-  syntaxError(msg :string, pos :Pos = this.pos) :BadExpr|null {
+  syntaxError(msg :string, pos :Pos = this.pos) :void {
     const p = this
 
     if (p.throwOnSyntaxError) {
@@ -2741,7 +2789,7 @@ export class Parser extends scanner.Scanner {
     } else {
       // plain error - we don't care about current token
       p.errorAt(msg, position)
-      return null
+      return
     }
 
     let cond = (
@@ -2753,7 +2801,6 @@ export class Parser extends scanner.Scanner {
       // print token state when compiled in debug mode
       console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
     }
-    return null
   }
 
   // diag reports a diagnostic message, or an error if k is ERROR

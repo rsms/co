@@ -462,6 +462,10 @@ export class Scanner extends ErrorReporter {
         insertSemi = true
         break
 
+      case 0x3f: // ?
+        s.tok = token.QUESTION
+        break
+
       case 0x2B: { // +
         s.prec = prec.LOWEST
         if (s.gotchar(0x3D)) { // +=

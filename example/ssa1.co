@@ -1,4 +1,3 @@
-import "fool"
 // fun a -> 4
 // fun b
 // fun c {}
@@ -62,14 +61,15 @@ import "fool"
 // type A i32    // concrete
 // type B = i32  // alias
 
-fun bar(int) int
+// fun bar(int) int
 
 // _ = fun(x int)int -> x
+// lol = 9223372036854775807
 
 fun foo(x, _, y int) int {
   z int = 0
-  _, _, fooz = z + 1, 2, 3
-  _ = "hello"
+  // _, _, fooz = z + 1, 2, 3
+  // _ = "hello"
   while x < 5 {
     x++
     for i = 0; x > i; i++ {

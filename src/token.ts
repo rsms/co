@@ -66,6 +66,7 @@ export enum token {
   RBRACE,    // }
   SEMICOLON, // ;
   COLON,     // :
+  QUESTION,  // ?
   delim_end,
 
   // Operators

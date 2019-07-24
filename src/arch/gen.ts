@@ -13,7 +13,7 @@ import {
   fmtRegSet,
 } from "../ir/reg"
 import { ArchInfo } from "../ir/arch_info"
-import { BasicType, NativeType, t_str } from '../types'
+import { PrimType, StrType, t_str } from '../ast'
 import { Op, AuxType } from '../ir/op'
 import { ArchDescr, OpDescription, parseOpDescr, t as dtypes } from './describe'
 import * as sexpr from "../sexpr"
@@ -181,7 +181,7 @@ function ruleGen(a :ArchDescr) {
     `import { Value } from "./ssa"\n` +
     `import { ValueRewriter } from "./arch_info"\n` +
     `import { ops } from "./ops"\n` +
-    `import * as types from "../types"\n` +
+    `import { types, PrimType } from "../ast"\n` +
     Object.keys(helperlibs).sort().map(
       name => `import ${name} from "${helperlibs[name]}"\n`
     ).join("") +
@@ -292,7 +292,7 @@ function genRuleRewriteCode(
       assert(opinfo !== undefined)
       let aux = ""
       let auxInt = ""
-      let typ = opinfo.type ? `types.t_${opinfo.type.name}` : fallbackType
+      let typ = opinfo.type ? `types.${opinfo.type.name}` : fallbackType
       let args = [] as string[]
       for (let i = 1; i < l.length; i++) {
         let v = l[i]
@@ -781,15 +781,15 @@ function parseRewriteRules(a :ArchDescr, srcrules :sexpr.List, rulesFile :string
     if (match instanceof sexpr.List) {
       list = match
       let op = match[0]
+      while (match.length == 1 && op instanceof sexpr.List) {
+        // (Op) => Op
+        match = op
+      }
       if (op instanceof sexpr.Union) {
         matchops = op.map(s => s.value)
       } else {
         assert(op instanceof sexpr.Sym)
         matchops = [ (op as sexpr.Sym).value ]
-      }
-      if (match.length == 1) {
-        // (Op) => Op
-        match = op
       }
       // vars
       visitListR(match as sexpr.List, (v, parent) => {
@@ -909,7 +909,7 @@ function parseRewriteRules(a :ArchDescr, srcrules :sexpr.List, rulesFile :string
           } else if (varset.has(v.value)) {
             nvarsAccountedFor++
           }
-          // else: something else, like types.t_uint8 or 42
+          // else: something else, like types.uint8 or 42
           // else {
           //   syntaxErr(`undefined variable ${repr(v.toString())}`, v)
           // }
@@ -1024,7 +1024,7 @@ function opsGen() {
   let imports = (
     'import {\n  ' +
     Array.from(types).sort().join(",\n  ") +
-    '\n} from "../types"\n'
+    '\n} from "../ast"\n'
   )
 
   // glue it all together
@@ -1158,8 +1158,8 @@ function getConstantsCode() {
 }
 
 
-function typename(t :NativeType) :string {
-  if (t instanceof BasicType) {
+function typename(t :PrimType|StrType) :string {
+  if (t.isPrimType()) {
     return "t_" + t.name
   }
   if (t === t_str) {
@@ -1186,7 +1186,7 @@ function fmtop(op :OpInfo, opcode :int) :string {
           assert(name !== undefined, `no AuxType[${v}]`)
           v = "AuxType." + name
         }
-      } else if (v instanceof NativeType) {
+      } else if (v instanceof PrimType || v instanceof StrType) {
         v = typename(v)
       } else {
         v = js(v)

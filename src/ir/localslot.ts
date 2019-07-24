@@ -1,4 +1,4 @@
-import { Type } from '../types'
+import { Type } from '../ast'
 
 // A LocalSlot is a location in the stack frame, which identifies and stores
 // part or all of a PPARAM, PPARAMOUT, or PAUTO ONAME node.

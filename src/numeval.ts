@@ -3,8 +3,10 @@ import { numconv } from './numconv'
 import { Int64, SInt64, UInt64 } from './int64'
 import { token } from './token'
 import { debuglog as dlog } from './util'
-import { Mem, IntType, NumType, t_u32 } from './types'
-import { Ent, Expr, NumLit, Ident, Operation } from './ast'
+import {
+  Storage, IntType, NumType, t_u32,
+  Ent, Expr, NumLit, Ident, Operation,
+} from "./ast"
 
 
 // evalConstU32 evaluates a constant expression yielding a u32
@@ -32,12 +34,12 @@ export function numEvalU32(x :Expr) :int {
 // components are unresolved or not constant.
 //
 export function numEval(x :Expr) :Num|null {
-  if (x instanceof NumLit) {
+  if (x.isNumLit()) {
     return x.value
   }
 
-  if (x instanceof Ident) {
-    let ent = x.ent as Ent
+  if (x.isIdent()) {
+    let ent = x.ent!
     assert(ent, 'unresolved identifier')
     assert(ent.value, 'unresolved identifier value')
     if (ent.value && (ent.isConstant() || ent.nreads == 1)) {
@@ -46,7 +48,7 @@ export function numEval(x :Expr) :Num|null {
       return numEval(ent.value)
     }
 
-  } else if (x instanceof Operation) {
+  } else if (x.isOperation()) {
     return numEvalOp(x)
 
   } else {
@@ -61,13 +63,14 @@ export function numEval(x :Expr) :Num|null {
 // returns null on failure.
 //
 export function numEvalOp(x :Operation) :Num|null {
-  let t = x.type as NumType
-  assert(t, 'unresolved type')
+  assert(x.type, 'unresolved type')
 
-  if (!(t instanceof NumType)) {
+  if (!x.type!.isNumType()) {
     // not a numeric operation
     return null
   }
+
+  let t = x.type
 
   let xn = numEval(x.x)
   if (xn === null) {
@@ -100,8 +103,7 @@ export function numEvalOp(x :Operation) :Num|null {
   if (x.op == token.SHL || x.op == token.SHR) {
     // special case for bit shifts which takes an unsigned in as 2nd operand
     // y must be unsigned int
-    let yt = x.y.type as IntType
-    if (!(yt instanceof IntType) || !(t instanceof IntType)) {
+    if (!(x.y.type instanceof IntType) || !t.isIntType()) {
       // floating point operand for bit shift is invalid
       return null
     }
@@ -119,12 +121,7 @@ export function numEvalOp(x :Operation) :Num|null {
 }
 
 
-export function numEvalOpBitSh(
-  t :IntType,
-  a :Num,
-  b :Num,
-  op :token.SHL|token.SHR
-) :Num|null {
+export function numEvalOpBitSh(t :IntType, a :Num, b :Num, op :token.SHL|token.SHR) :Num|null {
   let nbits = 0
   if (typeof b == 'number' && b >= 0) {
     nbits = b >>> 0
@@ -138,18 +135,18 @@ export function numEvalOpBitSh(
   }
 
   if (typeof a == 'number') {
-    assert(t.mem == Mem.i32 || t.mem == Mem.i16 || t.mem == Mem.i8)
+    assert(t.isI32() || t.isI16() || t.isI8())
     if (op == token.SHL) {
       return a << nbits
     }
     assert(op == token.SHR)
     return (
-      t.isSignedInt ? a >> nbits :  // sign-extending
-      a >>> nbits  // zero-replicating
+      t.isSIntType() ? a >> nbits :  // sign-extending
+                       a >>> nbits  // zero-replicating
     )
   }
 
-  assert(t.mem == Mem.i64)
+  assert(t.isI64())
   assert(a instanceof SInt64 || a instanceof UInt64)
   if (op == token.SHL) {
     return (a as Int64).shl(nbits) // <<
@@ -159,17 +156,12 @@ export function numEvalOpBitSh(
 }
 
 
-export function numEvalOpBin(
-  t :NumType,
-  a :Num,
-  b :Num,
-  op :token
-) :Num|null {
-  if (t.mem == Mem.i32) {
-    assert(t instanceof IntType)
+export function numEvalOpBin(t :NumType, a :Num, b :Num, op :token) :Num|null {
+  if (t.isI32()) {
+    assert(t.isIntType())
     assert(typeof a == 'number')
     assert(typeof b == 'number')
-    if (t.isSignedInt) {
+    if (t.isSIntType()) {
       return numEvalOpBinS32(a as int, b as int, op)
     }
     assert(a >= 0)
@@ -177,9 +169,9 @@ export function numEvalOpBin(
     return numEvalOpBinU32(a as int, b as int, op)
   }
 
-  if (t.mem == Mem.i64) {
-    assert(t instanceof IntType)
-    if (t.isSignedInt) {
+  if (t.isI64()) {
+    assert(t.isIntType())
+    if (t.isSIntType()) {
       assert(a instanceof SInt64)
       assert(b instanceof SInt64)
     } else {
@@ -283,19 +275,19 @@ export function numEvalOpBinFloat(a :number, b :number, op :token) :Num|null {
 
 
 export function numEvalOpUnary(t :NumType, n :Num, op :token) :Num|null {
-  if (t.mem == Mem.i32) {
+  if (t.isI32()) {
     assert(typeof n == 'number')
-    assert(t instanceof IntType)
-    if (t.isSignedInt) {
+    assert(t.isIntType())
+    if (t.isSIntType()) {
       return numEvalOpUnaryS32(n as int, op)
     }
     return numEvalOpUnaryU32(n as int, op)
   }
 
-  if (t.mem == Mem.i64) {
+  if (t.isI64()) {
     assert(typeof n == 'object')
     assert(n instanceof UInt64 || n instanceof SInt64)
-    assert(t instanceof IntType)
+    assert(t.isIntType())
     return numEvalOpUnaryI64(n as Int64, op)
   }
 

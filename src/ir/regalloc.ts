@@ -1,6 +1,6 @@
 import { UInt64 } from '../int64'
 import { Pos } from '../pos'
-import { Mem, t_u32, intTypes } from '../types'
+import { Storage, types, intTypes } from "../ast"
 import { ID, Fun, Block, Value, BranchPrediction, Location, BlockKind } from './ssa'
 import { Config } from './config'
 import { DesiredState } from './reg_desiredstate'
@@ -146,9 +146,9 @@ class ValState {
 
 
 export class RegAllocator {
-  readonly config :Config
-  readonly addrsize :Mem
-  readonly addrtype = t_u32
+  readonly config   :Config
+  readonly addrsize :Storage
+  readonly addrtype = types.u32
 
   // labels :Map<Value,int>  // maps values to addresses
 
@@ -320,7 +320,7 @@ export class RegAllocator {
         let val = new ValState(v)
         a.values[v.id] = val
         // if (!t.isMemory() && !t.isVoid() && !t.isFlags() && !t.isTuple())
-        if (!t.isMemory && !t.isTuple() && !v.reg) {
+        if (!t.isMemType() /*&& !t.isTupleType()*/ && !v.reg) {
           val.needReg = true
           val.rematerializeable = v.rematerializeable()
           a.orig[v.id] = v

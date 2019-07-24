@@ -1,13 +1,13 @@
 //
 // Exposes the function
-//   basicTypeCompat(dst :BasicType, src :BasicType) :TypeCompat
+//   basicTypeCompat(dst :PrimType, src :PrimType) :TypeCompat
 // which can be used to understand how conversion from one type to another
 // affects its value.
 //
 // The result can be
 //
 import {
-  BasicType,
+  PrimType,
   t_uint,
   t_int,
   t_bool,
@@ -21,7 +21,7 @@ import {
   t_u64,
   t_f32,
   t_f64,
-} from './types'
+} from "./ast"
 
 // type compatibility
 export enum TypeCompat {
@@ -34,9 +34,9 @@ const uintz :number = 32 // TODO FIXME: target-dependant
 
 // maps destination type to receiver types and their compatbility type
 // TODO: separate into a "type" source file.
-const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
+const typeCompatMap = new Map<PrimType,Map<PrimType,TypeCompat>>([
 
-  [t_u64, new Map<BasicType,TypeCompat>([
+  [t_u64, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSLESS],
     [t_int,  TypeCompat.LOSSLESS],
 
@@ -55,7 +55,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_i64, new Map<BasicType,TypeCompat>([
+  [t_i64, new Map<PrimType,TypeCompat>([
     [t_uint, uintz <= 63 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSLESS],
 
@@ -74,7 +74,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_u32, new Map<BasicType,TypeCompat>([
+  [t_u32, new Map<PrimType,TypeCompat>([
     [t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
@@ -93,7 +93,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_i32, new Map<BasicType,TypeCompat>([
+  [t_i32, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
@@ -112,7 +112,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_uint, new Map<BasicType,TypeCompat>([
+  [t_uint, new Map<PrimType,TypeCompat>([
     [t_int, TypeCompat.LOSSLESS],
 
     [t_bool,TypeCompat.LOSSLESS],
@@ -131,7 +131,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_int, new Map<BasicType,TypeCompat>([
+  [t_int, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
 
     [t_bool,TypeCompat.LOSSLESS],
@@ -150,7 +150,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_u16, new Map<BasicType,TypeCompat>([
+  [t_u16, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
@@ -169,7 +169,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_i16, new Map<BasicType,TypeCompat>([
+  [t_i16, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
@@ -188,7 +188,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_u8, new Map<BasicType,TypeCompat>([
+  [t_u8, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
@@ -207,7 +207,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_i8, new Map<BasicType,TypeCompat>([
+  [t_i8, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
@@ -227,7 +227,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
   ])],
 
   // strict boolean conversion (nothing can be converted to bool)
-  // [t_bool, new Map<BasicType,TypeCompat>([
+  // [t_bool, new Map<PrimType,TypeCompat>([
   //   [t_uint, TypeCompat.LOSSY],
   //   [t_int,  TypeCompat.LOSSY],
 
@@ -246,7 +246,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
   // ])],
 
   // allow conversion to bool without errors
-  [t_bool, new Map<BasicType,TypeCompat>([
+  [t_bool, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSLESS],
     [t_int,  TypeCompat.LOSSLESS],
 
@@ -264,7 +264,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSLESS],
   ])],
 
-  [t_f32, new Map<BasicType,TypeCompat>([
+  [t_f32, new Map<PrimType,TypeCompat>([
     [t_uint, TypeCompat.LOSSY],
     [t_int,  TypeCompat.LOSSY],
 
@@ -283,7 +283,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
     [t_f64, TypeCompat.LOSSY],
   ])],
 
-  [t_f64, new Map<BasicType,TypeCompat>([
+  [t_f64, new Map<PrimType,TypeCompat>([
     [t_uint, uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
     [t_int,  uintz <= 32 ? TypeCompat.LOSSLESS : TypeCompat.LOSSY],
 
@@ -303,7 +303,7 @@ const typeCompatMap = new Map<BasicType,Map<BasicType,TypeCompat>>([
   ])],
 ])
 
-export function basicTypeCompat(dst :BasicType, src :BasicType) :TypeCompat {
+export function basicTypeCompat(dst :PrimType, src :PrimType) :TypeCompat {
   assert(dst !== src, "same type is always compatible")
   let s = typeCompatMap.get(dst)
   return s && s.get(src) || TypeCompat.NO
@@ -311,8 +311,8 @@ export function basicTypeCompat(dst :BasicType, src :BasicType) :TypeCompat {
 
 TEST("basicTypeCompat", () => {
   function assertTypeCompat(
-    dst :BasicType,
-    src :BasicType,
+    dst :PrimType,
+    src :PrimType,
     expect :TypeCompat,
     cons :Function,
   ) {
@@ -324,11 +324,11 @@ TEST("basicTypeCompat", () => {
     )
   }
 
-  function assert_LOSSLESS(dst :BasicType, src :BasicType) {
+  function assert_LOSSLESS(dst :PrimType, src :PrimType) {
     assertTypeCompat(dst, src, TypeCompat.LOSSLESS, assert_LOSSLESS)
   }
 
-  function assert_LOSSY(dst :BasicType, src :BasicType) {
+  function assert_LOSSY(dst :PrimType, src :PrimType) {
     assertTypeCompat(dst, src, TypeCompat.LOSSY, assert_LOSSY)
   }
 

@@ -1,4 +1,4 @@
-import { BasicType } from '../types'
+import { PrimType } from '../ast'
 import { RegInfo } from './reg'
 
 
@@ -66,8 +66,8 @@ export interface OpInfo {
   name: string // printed name
   argLen: int // number of arguments, if -1, then this operation has a variable number of arguments
 
-  type? :BasicType // default result type
-  aux?  :AuxType // type of aux field
+  type? :PrimType // default result type
+  aux?  :AuxType  // type of aux field
 
   constant? :bool // true if the value is a constant. Value in aux
   commutative? :bool // this operation is commutative on its first 2 arguments (e.g. addition)

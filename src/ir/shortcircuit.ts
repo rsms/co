@@ -1,7 +1,7 @@
 // import { debuglog as dlog } from '../util'
-import { Value, Fun, BlockKind } from './ssa'
+import { Value, Fun, BlockKind } from "./ssa"
 import { ops } from "./ops"
-import { t_bool } from '../types'
+import { t_bool } from "../ast"
 
 // Shortcircuit finds situations where branch directions
 // are always correlated and rewrites the CFG to take

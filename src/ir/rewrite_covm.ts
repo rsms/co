@@ -2,7 +2,7 @@
 import { Value } from "./ssa"
 import { ValueRewriter } from "./arch_info"
 import { ops } from "./ops"
-import * as types from "../types"
+import { types, PrimType } from "../ast"
 import nmath from "../nummath"
 
 function rw_NilCheck(v :Value) :bool {
@@ -74,14 +74,14 @@ function rw_Load(v :Value) :bool {
 
 function rw_Store(v :Value) :bool {
   // match: (Store {t} ptr val mem)
-  // cond:  (t as types.BasicType).isI32()
+  // cond:  t instanceof PrimType && t.isI32()
   // sub:   (CovmStore32 ptr val mem)
   while (true) {
     let t = v.aux
     let ptr = v.args[0]!;
     let val = v.args[1]!;
     let mem = v.args[2]!;
-    if (!((t as types.BasicType).isI32())) { break }
+    if (!(t instanceof PrimType && t.isI32())) { break }
     v.reset(ops.CovmStore32)
     v.addArg(ptr)
     v.addArg(val)

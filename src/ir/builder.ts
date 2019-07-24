@@ -3,8 +3,7 @@ import { Pos, SrcFile } from '../pos'
 import { token } from '../token'
 import { DiagKind, DiagHandler } from '../diag'
 import * as ast from '../ast'
-import * as types from '../types'
-import { Type, BasicType, FunType, t_nil, t_bool, t_mem, UIntType } from '../types'
+import { Type, PrimType, FunType, UIntType, types as T, intTypes, t_nil } from "../ast"
 import { optcf_op1, optcf_op2 } from './opt_cf'
 import { ops, opinfo } from "./ops"
 import { Value, Block, BlockKind, Fun, Pkg, BranchPrediction, nilValue } from './ssa'
@@ -25,7 +24,7 @@ const dlogPhi = function(..._ :any[]){} // silence
 const dlogVar = function(..._ :any[]){}
 
 
-const bitypes = ast.builtInTypes
+const bitypes = ast.types
 
 
 export enum IRBuilderFlags {
@@ -34,8 +33,7 @@ export enum IRBuilderFlags {
 }
 
 
-class TmpName extends ByteStr {
-}
+class TmpName extends ByteStr {}
 
 
 // IRBuilder produces SSA IR for functions, taking AST as the input.
@@ -95,17 +93,17 @@ export class IRBuilder {
     r.sp = nilValue
 
     // // select integer types
-    const [intt_s, intt_u] = types.intTypes(config.intSize)
-    r.addrtype = types.intTypes(config.addrSize)[1]
+    const [intt_s, intt_u] = intTypes(config.intSize)
+    r.addrtype = intTypes(config.addrSize)[1]
 
-    this.concreteType = (t :Type) :BasicType => {
+    this.concreteType = (t :Type) :PrimType => {
       switch (t) {
-      case types.t_int:     return intt_s
-      case types.t_uint:    return intt_u
-      case types.t_uintptr: return r.addrtype
+      case T.int:     return intt_s
+      case T.uint:    return intt_u
+      case T.uintptr: return r.addrtype
       default:
-        assert(t instanceof BasicType, `${t} is not a BasicType`)
-        return t as BasicType
+        assert(t.isPrimType(), `${t} is not a PrimType`)
+        return t as PrimType
       }
     }
   }
@@ -129,7 +127,7 @@ export class IRBuilder {
       if (d.isInit) {
         // Sanity checks (parser has already checked these things)
         assert(d.sig.params.length == 0, 'init fun with parameters')
-        assert(d.sig.result === bitypes.nil, 'init fun with result')
+        assert(d.sig.result === t_nil, 'init fun with result')
         assert(d.body, 'missing body')
         r.initCode(d.body as ast.Expr)
       } else if (d.body) {
@@ -263,10 +261,10 @@ export class IRBuilder {
   // concreteType normalizes abstract types to concrete types.
   // E.g. concreteType(int) -> i32  (if int->i32 exists in typemap)
   //
-  concreteType(t :Type) :BasicType {
+  concreteType(t :Type) :PrimType {
     // Note: This function is replaced by the constructor
-    assert(t instanceof BasicType)
-    return t as BasicType
+    assert(t.isPrimType())
+    return t as PrimType
   }
 
   // nilValue returns a placeholder value.
@@ -303,7 +301,7 @@ export class IRBuilder {
     )
 
     // Add initial memory state, SP and SB to top of entry block
-    r.startmem = f.entry.newValue0(ops.InitMem, t_mem)
+    r.startmem = f.entry.newValue0(ops.InitMem, T.mem)
     r.sp = f.entry.newValue0(ops.SP, r.addrtype)
     r.sb = f.entry.newValue0(ops.SB, r.addrtype)
 
@@ -409,16 +407,16 @@ export class IRBuilder {
       } else {
         // default value; e.g. "x i32"  =>  "x = 0"
         assert(s.type, 'var decl without type or values')
-        let t = (s.type as ast.Expr).type as BasicType
+        let t = (s.type as ast.Expr).type as PrimType
         assert(t, 'unresolved type')
-        assert(t instanceof BasicType, 'non-basic type not yet supported')
+        assert(t.isPrimType(), 'non-basic type not yet supported')
         let v = r.f.constVal(t, 0)  // nil
         for (let id of s.idents) {
           r.varDef(id.value, v)
         }
       }
     // } else if (s instanceof ast.InlineMark) {
-    //   s.newValue1I(ssa.OpInlMark, types.TypeVoid, n.Xoffset, s.mem())
+    //   s.newValue1I(ssa.OpInlMark, t.TypeVoid, n.Xoffset, s.mem())
     } else {
       dlog(`TODO: handle ${s.constructor.name}`)
     }
@@ -967,8 +965,8 @@ export class IRBuilder {
 
   conv(s :ast.TypeConvExpr) :Value {
     const r = this
-    let t = s.type as BasicType
-    assert(t instanceof BasicType)
+    let t = s.type as PrimType
+    assert(t.isPrimType())
     let x = r.expr(s.expr)
     let op = opselectConv(x.type, t)
     return r.b.newValue1(op, t, x)
@@ -1106,7 +1104,7 @@ export class IRBuilder {
     contb.preds = [ifb, rightb] // contb <- ifb, rightb
     s.startSealedBlock(contb)
 
-    let v = s.readVariable(tmpname, t_bool, null)
+    let v = s.readVariable(tmpname, T.bool, null)
 
     // remove tmpname
     s.removeVariable(ifb, tmpname)
@@ -1120,30 +1118,30 @@ export class IRBuilder {
 
   stackPush(v :Value) {
     const s = this
-    assert(v.type instanceof BasicType)
+    assert(v.type.isPrimType())
 
     // compute address (SP + stack offset)
-    let addr = s.b.newValue1(ops.OffPtr, t_mem, s.sp, s.spoffs)
+    let addr = s.b.newValue1(ops.OffPtr, T.mem, s.sp, s.spoffs)
 
     // Store v to addr. arg2=mem, aux=type
-    s.stacktop = s.b.newValue3(ops.Store, t_mem, addr, v, s.stacktop, 0, v.type)
+    s.stacktop = s.b.newValue3(ops.Store, T.mem, addr, v, s.stacktop, 0, v.type)
 
     // increment offset to stack pointer
-    s.spoffs += v.type.size
+    s.spoffs += v.type.storageSize()
   }
 
-  stackPop(t :BasicType) :Value {
+  stackPop(t :PrimType) :Value {
     const s = this
-    assert(t.size <= s.addrtype.size)
+    assert(t.storageSize() <= s.addrtype.storageSize())
 
     // compute address (SP + stack offset)
-    let addr = s.b.newValue1(ops.OffPtr, t_mem, s.sp, s.spoffs)
+    let addr = s.b.newValue1(ops.OffPtr, T.mem, s.sp, s.spoffs)
 
     // load return value at spoffs of type rt
     s.stacktop = s.b.newValue2(ops.Load, t, addr, s.stacktop)
 
     // decrement offset to stack pointer
-    s.spoffs -= t.size
+    s.spoffs -= t.storageSize()
 
     return s.stacktop
   }
@@ -1169,7 +1167,7 @@ export class IRBuilder {
     assert(ft, "unresolved function type")
 
     // TODO: support other types like strings etc
-    assert(ft.result instanceof BasicType,
+    assert(ft.result.isPrimType(),
       `non-basic type ${ft.result.constructor.name} not yet supported`)
 
     // first unroll argument values in order (LTR)
@@ -1187,14 +1185,14 @@ export class IRBuilder {
     }
 
     // generate call op
-    s.stacktop = s.b.newValue1(ops.Call, t_mem, s.stacktop, x.args.length, funid.value)
+    s.stacktop = s.b.newValue1(ops.Call, T.mem, s.stacktop, x.args.length, funid.value)
 
     // load return value off of the stack
-    return s.stackPop(s.concreteType(ft.result as BasicType)) // == s.stacktop
+    return s.stackPop(s.concreteType(ft.result as PrimType)) // == s.stacktop
   }
 
 
-  readVariable(name :ByteStr, t :BasicType, b :Block|null) :Value {
+  readVariable(name :ByteStr, t :PrimType, b :Block|null) :Value {
     const s = this
 
     if (!b || b === s.b) {
@@ -1277,7 +1275,7 @@ export class IRBuilder {
   }
 
 
-  readVariableRecursive(name :ByteStr, t :BasicType, b :Block) :Value {
+  readVariableRecursive(name :ByteStr, t :PrimType, b :Block) :Value {
     const s = this
     let val :Value
 

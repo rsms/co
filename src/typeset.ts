@@ -1,4 +1,4 @@
-import { Type } from './types'
+import { Type } from "./ast"
 
 // TypeSet provides interning of types based on equality on a per-constructor
 // basis.

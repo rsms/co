@@ -5,6 +5,9 @@ import * as utf8 from './utf8'
 import { TypeResolver } from './resolve'
 import { debuglog as dlog } from './util'
 import {
+  Type,
+  FunType,
+  UnresolvedType,
   File,
   Package,
   Ent,
@@ -13,7 +16,6 @@ import {
   ImportDecl,
   Expr,
 } from './ast'
-import { FunType, UnresolvedType } from './types'
 
 
 // An Importer resolves import paths to package entities.
@@ -119,7 +121,7 @@ class pkgBinder extends ErrorReporter {
       // (do not re-use pkg in the file scope but create
       // a new ent instead; the Decl field is different
       // for different files)
-      f.scope.declareEnt(new Ent(name, imp, null, null, pkg.data))
+      f._scope.declareEnt(new Ent(name, imp, null, null, pkg.data))
     }
   }
 
@@ -130,7 +132,7 @@ class pkgBinder extends ErrorReporter {
     if (f.unresolved) for (let id of f.unresolved) {
       // see if the name was declared after it was referenced in the file, or
       // declared in another file in the same package
-      let ent = f.scope.lookup(id.value)
+      let ent = f._scope.lookup(id.value)
 
       if (!ent) { // truly undefined
         b.error(`${id} undefined`, id.pos)
@@ -148,21 +150,34 @@ class pkgBinder extends ErrorReporter {
 
       id.refEnt(ent) // reference ent
 
-      let t = id.type
-      if (t instanceof UnresolvedType) {
-        assert(ent.value != null)
+      assert(id.type)
+      let t = id.type!
+      if (!t.isUnresolvedType()) {
+        // was resolved
+        continue
+      }
+
+      if (ent.value) {
+        // TODO: kill ent.value
         id.type = b.types.resolve(ent.value as Expr)
         assert(!(id.type instanceof UnresolvedType), 'still unresolved')
-        
-        // delegate type to any expressions that reference this type
-        dlog('len(t.refs):', t.refs ? t.refs.size : 0)
-        if (t.refs) for (let ref of t.refs) {
-          if (ref instanceof FunSig || ref instanceof FunType) {
-            ref.result = id.type
-          } else {
-            assert(ref instanceof Expr)
-            ;(ref as Expr).type = id.type
-          }
+      } else {
+        // TODO: FIXME: ent.decl is Stmt and might not have type. It's messy.
+        // see if we can narrow down the type on Ent.decl
+        assert(ent.decl != null, `UnresoledType with null ent.value and ent.decl`)
+        assert((ent.decl as any).type instanceof Type, `${ent.decl} does not have type`)
+        id.type = (ent.decl as any).type as Type
+      }
+      dlog(`resolved to ${id.type}`)
+
+      // delegate type to any expressions that reference this type
+      dlog(`len(t.refs):`, t.refs ? t.refs.size : 0)
+      if (t.refs) for (let ref of t.refs) {
+        if (ref.isFunSig() || ref.isFunType()) {
+          ref.result = id.type
+        } else {
+          assert((ref as any).type !== undefined)
+          ;(ref as any).type = id.type
         }
       }
     }
@@ -185,7 +200,7 @@ class pkgBinder extends ErrorReporter {
       if (b.undef && expr instanceof Ident && b.undef.has(expr)) {
         continue
       }
-  
+
       // attempt to resolve the type now that we can see the entire package
       expr.type = null // clear so resolve can progress
       const restyp = b.types.maybeResolve(expr)

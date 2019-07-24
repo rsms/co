@@ -1,3 +1,5 @@
+// [x] = auxInt, {x} = aux, <x> = type
+
 // Lowering checks
 NilCheck -> LowNilCheck
 
@@ -20,7 +22,7 @@ Call -> CALL
 // (Load <t> ptr mem) && is64BitFloat(t) -> (MOVSDload ptr mem)
 
 // Lowering stores
-(Store {t} ptr val mem) "(t as types.BasicType).isI32()" -> (Store32 ptr val mem)
+(Store {t} ptr val mem) "t instanceof PrimType && t.isI32()" -> (Store32 ptr val mem)
 // (Store {t} ptr val mem) && t.(*types.Type).Size() == 2 -> (MOVWstore ptr val mem)
 // (Store {t} ptr val mem) && t.(*types.Type).Size() == 1 -> (MOVBstore ptr val mem)
 

@@ -33,7 +33,7 @@ interface Scope {
 }
 
 
-class Encoder implements ast.Encoder {
+class Encoder1 implements ast.Encoder1 {
   buf = ""
   stack :Scope[] = []
   types = new Map<Type,string>()
@@ -409,7 +409,7 @@ class NodeDecoder implements ast.Decoder {
 
 
 class Decoder {
-  intypes :Map<string,sexpr.List>|null = null
+  intypes  :Map<string,sexpr.List>|null = null
   nodedecs :NodeDecoder[] = [] // free list
 
   getType = (id :string) :Type|null => {
@@ -519,24 +519,148 @@ class Decoder {
 }
 
 
-// export function write(n :Node) :Uint8Array
-// export function write(n :Node, w :AppendBuffer) :Uint8Array
-// export function write(n :Node, w :ByteWriter) :null
-// export function write(n :Node, _w? :ByteWriter) :Uint8Array|null {
-//   let e = new Encoder()
-//   n.encode(e)
-//   e.writeMetadata()
-//   return utf8.encodeString(e.buf)
-// }
-
 export function encode(...nodes :Node[]) :string {
-  let e = new Encoder()
+  let buf = ""
+  let stack :Scope[] = []
+  let types = new Map<Type,string>()
+  let wantSpace = false
+
+  type GroupType = "()" | "[]"
+
+  function write(s :string) {
+    if (!wantSpace) {
+      wantSpace = true
+    } else {
+      buf += " "
+    }
+    buf += s
+  }
+
+  function newline() {
+    buf += linestr.substr(0, 1 + (stack.length * 2))
+    wantSpace = false
+  }
+
+  function stackPush() { stack.push({}) }
+  function stackPop() :Scope { assert(stack.length > 0) ; return stack.pop()! }
+
+  function startGroup(openstr :string, name? :string) {
+    newline()
+    buf += openstr
+    if (name) {
+      buf += name
+      wantSpace = true
+    } else {
+      wantSpace = false
+    }
+    stackPush()
+  }
+
+  function endGroup(closestr :string) {
+    stackPop()
+    buf += closestr
+  }
+
+  function group(type :GroupType, name :string, c :()=>void) {
+    newline()
+    buf += type[0] + name
+    wantSpace = name.length > 0
+    stackPush()
+    c()
+    stackPop()
+    buf += type[1]
+  }
+
+
+  function eAny(v :any, inGroup :bool = false) {
+    if (v === null || v === undefined) {
+      return write("null")
+    }
+
+    let t = typeof v
+
+    if (t == "object") {
+      if (v instanceof Node) { return eNode(v) }
+      if (v instanceof Type) { return eType(v) }
+      if (v instanceof Array) { return eIterable(v, inGroup) }
+      if (v instanceof Set) { return eIterable(v, inGroup) }
+    }
+
+    if (typeof v == "object") {
+      if (v instanceof Uint8Array) {
+        v = utf8.decodeToString(v)
+      } else {
+        v = String(v)
+      }
+    }
+    if (typeof v == "string") {
+      v = JSON.stringify(v.toString())
+    }
+
+    write(String(v))
+  }
+
+
+  function eIterable(v :Iterable<any>, inGroup :bool) {
+    const f = () => {
+      for (let v2 of v) {
+        eAny(v2)
+      }
+    }
+    if (!inGroup) {
+      group("[]", "", f)
+    } else {
+      f()
+    }
+  }
+
+
+  function eType(v :Type) {
+    let typeid = types.get(v)
+    if (typeid === undefined) {
+      if (v instanceof BasicType) {
+        // basic types have good, well-recognized names like "i32"
+        typeid = String(v)
+      } else {
+        typeid = "t" + types.size
+      }
+      types.set(v, typeid)
+    }
+    write(typeid)
+  }
+
+
+  function eNode(n :Node) {
+    group("()", n.constructor.name, () => n.encode(e))
+  }
+
+
+  function e(...args :any[]) {
+    assert(args.length % 2 == 0, `uneven number of args (missing a key or value?)`)
+    for (let i = 0; i < args.length; i += 2) {
+      let name = String(args[i])
+      group("()", name, () => eAny(args[i + 1], true))
+    }
+  }
+
+
   for (let n of nodes) {
-    n.encode(e)
+    eNode(n)
+  }
+  //e.writeMetadata()
+  return buf
+}
+
+
+export function encode1(...nodes :Node[]) :string {
+  let e = new Encoder1()
+  for (let n of nodes) {
+    n.encode1(e)
   }
   e.writeMetadata()
   return e.buf
 }
+
 
 export function decode(s :string, filename? :string) :Node[] {
   let d = new Decoder()
@@ -545,41 +669,12 @@ export function decode(s :string, filename? :string) :Node[] {
 
 
 
-
+// export function write(n :Node) :Uint8Array
+// export function write(n :Node, w :AppendBuffer) :Uint8Array
+// export function write(n :Node, w :ByteWriter) :null
 // export function write(n :Node, _w? :ByteWriter) :Uint8Array|null {
-//   let w = _w || new AppendBuffer(512)
-
-//   let char = (s :string) => s.charCodeAt(0)
-
-//   let SP     = char(" ")
-//   let LF     = char("\n")
-//   let RPAREN = char(")")
-
-//   let stack :Node[] = []
-
-//   let writeAsciiStr = (s :string) => w.write(asciibuf(s))
-//   let writeStr  = (s :string) => w.write(utf8.encodeString(s))
-
-//   let newline = () => {
-//     w.writeByte(LF)
-//     w.writeNbytes(SP, stack.length * 2)
-//   }
-
-//   n.visit((n :Node, visitChildren :()=>void) => {
-//     print(`visit ${n} with path:\n  ${stack.slice().reverse().join("\n  ")}`)
-
-//     newline()
-//     writeAsciiStr("(" + n.constructor.name)
-//     stack.push(n)
-
-//     newline()
-//     writeAsciiStr(`(pos ${n.pos})`)
-
-//     visitChildren()
-
-//     stack.pop()
-//     w.writeByte(RPAREN)
-//   })
-
-//   return w instanceof AppendBuffer ? w.bytes() : null
+//   let e = new Encoder()
+//   n.encode(e)
+//   e.writeMetadata()
+//   return utf8.encodeString(e.buf)
 // }

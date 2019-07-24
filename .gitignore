@@ -12,5 +12,7 @@ _local
 node_modules
 misc/UnicodeData.txt
 misc/emoji-data.txt
-.gen*
 * copy
+
+# code generator program output:
+src/**/.src-*.js

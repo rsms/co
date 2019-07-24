@@ -1,25 +1,25 @@
 import { ArchInfo } from "../ir/arch_info"
 import { OpInfo, AuxType } from "../ir/op"
-import * as types from '../types'
+import { PrimType, types } from '../ast'
 
 export const t = {
-  "bool":    types.t_bool,
-  "u8":      types.t_u8,
-  "u16":     types.t_u16,
-  "i16":     types.t_i16,
-  "u32":     types.t_u32,
-  "i32":     types.t_i32,
-  "u64":     types.t_u64,
-  "i64":     types.t_i64,
-  "int":     types.t_int,
-  "uint":    types.t_uint,
-  "uintptr": types.t_uintptr,
-  "addr":    types.t_addr,
-  "mem":     types.t_mem,
-  "f32":     types.t_f32,
-  "f64":     types.t_f64,
-  "str":     types.t_str,
-  "nil":     types.t_nil,
+  "bool":    types.bool,
+  "u8":      types.u8,
+  "u16":     types.u16,
+  "i16":     types.i16,
+  "u32":     types.u32,
+  "i32":     types.i32,
+  "u64":     types.u64,
+  "i64":     types.i64,
+  "int":     types.int,
+  "uint":    types.uint,
+  "uintptr": types.uintptr,
+  "addr":    types.uintptr, // alias
+  "mem":     types.mem,
+  "f32":     types.f32,
+  "f64":     types.f64,
+  "str":     types.str,
+  "nil":     types.nil,
 }
 
 export const
@@ -43,7 +43,7 @@ export interface ArchDescr extends ArchInfo {
   ops: OpDescription[]
 }
 
-export type OpDescription = (string|ArgLen|Flag|types.BasicType|OpInfoProps)[]
+export type OpDescription = (string|ArgLen|Flag|PrimType|OpInfoProps)[]
 
 type ArgLen = int
 type Flag = symbol
@@ -89,7 +89,7 @@ export function parseOpDescr(d :OpDescription) :OpInfo {
         break
 
       case "object":
-        if (v instanceof types.BasicType) {
+        if (v instanceof PrimType) {
           props.type = v
         } else {
           Object.assign(props, v)

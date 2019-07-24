@@ -15,7 +15,7 @@ import {
   t_u64,
   t_u8,
   t_uintptr
-} from "../types"
+} from "../ast"
 
 const u64_ffff = new UInt64(65535,0),
       u64_50000ffff = new UInt64(65535,5),
@@ -23,7 +23,7 @@ const u64_ffff = new UInt64(65535,0),
       u64_ffffffff = new UInt64(-1,0);
 
 export const ops = {
-  
+
   // generic
   Invalid: 0,
   Unknown: 1,
