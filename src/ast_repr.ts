@@ -1,7 +1,7 @@
 import * as utf8 from "./utf8"
 import { StrWriter } from "./util"
 import { Visitor, Visitable } from "./ast_visit"
-import { Node, PrimType, StrType, Ident } from "./ast_nodes"
+import { Node, Type, PrimType, StrType, Ident } from "./ast_nodes"
 
 interface Scope {
   sep :string
@@ -40,15 +40,6 @@ export class ReprVisitor implements Visitor {
     }
   }
 
-  getSeenId(v :any) :string|null {
-    let id = this.seen.get(v)
-    if (id !== undefined) {
-      return `#${id}`
-    }
-    this.seen.set(v, this.nextid++)
-    return null
-  }
-
   visitNode(n :Visitable) {
     if (n instanceof PrimType) {
       this.w(n.name)
@@ -62,11 +53,17 @@ export class ReprVisitor implements Visitor {
       }
       this.w(")")
     } else {
+      let id = this.seen.get(n)
+      let hasSeen = id !== undefined
+      if (!hasSeen) {
+        id = ++this.nextid
+        this.seen.set(n, id)
+      }
       this.w(`(${n.constructor.name}`)
-      let id = this.getSeenId(n)
-      if (id) {
-        this.w(id)
-      } else {
+      if (hasSeen || n instanceof Type) {
+        this.w(` &${id}`)
+      }
+      if (!hasSeen) {
         this.pushScope()
         n.visit(this)
         this.popScope()

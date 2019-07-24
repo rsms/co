@@ -542,7 +542,7 @@ class Transformer<T extends ts.Node> {
           stmt = ts.createIf(
             ts.createBinary(
               prop,
-              ts.SyntaxKind.EqualsEqualsEqualsToken,
+              ts.SyntaxKind.ExclamationEqualsEqualsToken,
               ts.createNull()
             ),
             stmt

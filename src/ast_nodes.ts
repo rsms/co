@@ -119,7 +119,7 @@ export class File extends Node {
         if (this.imports)
             v.visitFieldNA("imports", this.imports);
         v.visitFieldNA("decls", this.decls);
-        if (this.unresolved === null)
+        if (this.unresolved !== null)
             v.visitField("unresolved", this.unresolved);
     }
 }
@@ -207,7 +207,7 @@ export class UnresolvedType extends Type {
     visit(v: Visitor) {
         if (this.type)
             v.visitFieldN("type", this.type);
-        if (this.refs === null)
+        if (this.refs !== null)
             v.visitField("refs", this.refs);
         v.visitFieldN("def", this.def);
     }
@@ -633,7 +633,7 @@ export class VarDecl extends Decl {
     ) { super(pos, _scope); }
     visit(v: Visitor) {
         v.visitFieldNA("idents", this.idents);
-        if (this.group === null)
+        if (this.group !== null)
             v.visitField("group", this.group);
         if (this.type)
             v.visitFieldN("type", this.type);
@@ -647,7 +647,7 @@ export class TypeDecl extends Decl {
     visit(v: Visitor) {
         v.visitFieldN("ident", this.ident);
         v.visitFieldN("type", this.type);
-        if (this.group === null)
+        if (this.group !== null)
             v.visitField("group", this.group);
     }
 }
@@ -687,7 +687,7 @@ export class Ident extends Expr {
     visit(v: Visitor) {
         if (this.type)
             v.visitFieldN("type", this.type);
-        if (this.ent === null)
+        if (this.ent !== null)
             v.visitField("ent", this.ent);
         v.visitField("value", this.value);
     }
@@ -766,7 +766,7 @@ export class SliceExpr extends Expr {
     startnum: Num = -1; // used by resolver. >=0 : resolved, -1 : invalid or unresolved
     endnum: Num = -1; // used by resolver. >=0 : resolved, -1 : invalid or unresolved
     visit(v: Visitor) {
-        if (this.type === null)
+        if (this.type !== null)
             v.visitField("type", this.type);
         v.visitFieldN("operand", this.operand);
         if (this.start)
