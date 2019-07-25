@@ -2,19 +2,22 @@ type Pos int
 type Scope int
 
 type Node {
+  next     Node?
   pos      Pos
   _scope   Scope
   foo, bar u32 = 123, 456
   name     str
-  next     Node?
 }
 
-// TODO:
-// 1. fix unresolved resolution for "next" above
-// 2. when parsing TypeDecl, define the name in the scope before
-//    parsing the right-hand side.
-// 3. check for cyclic types. i.e. "type A { a A }" is invalid since
-//    "A" would be infinitely large. (Note: "type A { a A? }" is ok)
+// type A { a A }
+// type A { a A? }
+
+// type A { a B }
+// type B { b A }
+
+// type A { a B }
+// type B { b C }
+// type C { c A }
 
 
 // type Box<T> {

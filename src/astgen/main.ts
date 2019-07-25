@@ -517,7 +517,7 @@ class Transformer<T extends ts.Node> {
           }
         } else if (ts.isTypeReferenceNode(f.type) && ts.isIdentifier(f.type.typeName)) {
           let typename = f.type.typeName.escapedText.toString()
-          if (typename == "Storage") {
+          if (typename == "Storage" || typename == "token") {
             // TODO: automatically understand that "Storage" is an enum
             print(typename)
             visitFun = "visitFieldS"

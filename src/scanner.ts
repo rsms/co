@@ -464,6 +464,7 @@ export class Scanner extends ErrorReporter {
 
       case 0x3f: // ?
         s.tok = token.QUESTION
+        insertSemi = true
         break
 
       case 0x2B: { // +

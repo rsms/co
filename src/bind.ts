@@ -5,8 +5,11 @@ import * as utf8 from './utf8'
 import { TypeResolver } from './resolve'
 import { debuglog as dlog } from './util'
 import {
+  Node,
+  Scope,
   Type,
   FunType,
+  StructType,
   UnresolvedType,
   File,
   Package,
@@ -132,7 +135,9 @@ class pkgBinder extends ErrorReporter {
     if (f.unresolved) for (let id of f.unresolved) {
       // see if the name was declared after it was referenced in the file, or
       // declared in another file in the same package
-      let ent = f._scope.lookup(id.value)
+      // let scope = f._scope
+      let scope = id._scope
+      let ent = scope.lookup(id.value)
 
       if (!ent) { // truly undefined
         b.error(`${id} undefined`, id.pos)
@@ -143,10 +148,7 @@ class pkgBinder extends ErrorReporter {
         continue
       }
 
-      dlog(
-        `${id} (${ent.value && ent.value.constructor.name})`+
-        ` at ${b.fset.position(id.pos)}`
-      )
+      dlog(`${id} (${ent.decl.constructor.name}) at ${b.fset.position(id.pos)}`)
 
       id.refEnt(ent) // reference ent
 
@@ -165,14 +167,21 @@ class pkgBinder extends ErrorReporter {
         // TODO: FIXME: ent.decl is Stmt and might not have type. It's messy.
         // see if we can narrow down the type on Ent.decl
         assert(ent.decl != null, `UnresoledType with null ent.value and ent.decl`)
-        assert((ent.decl as any).type instanceof Type, `${ent.decl} does not have type`)
-        id.type = (ent.decl as any).type as Type
+        if (ent.decl.isType()) {
+          id.type = ent.decl
+        } else {
+          assert(
+            (ent.decl as any).type instanceof Type,
+            `${ent.decl} does not have type`
+          )
+          id.type = (ent.decl as any).type as Type
+        }
       }
-      dlog(`resolved to ${id.type}`)
 
       // delegate type to any expressions that reference this type
-      dlog(`len(t.refs):`, t.refs ? t.refs.size : 0)
+      dlog(`resolved to ${id.type}; len(t.refs)=${t.refs ? t.refs.size : 0}`)
       if (t.refs) for (let ref of t.refs) {
+        // dlog(`- ref ${ref} ${b.fset.position(ref.pos)}`)
         if (ref.isFunSig() || ref.isFunType()) {
           ref.result = id.type
         } else {
@@ -180,6 +189,8 @@ class pkgBinder extends ErrorReporter {
           ;(ref as any).type = id.type
         }
       }
+
+      this.checkCyclicTypeRef(scope, id)
     }
   }
 
@@ -209,21 +220,57 @@ class pkgBinder extends ErrorReporter {
         expr.type = t // restore original which might have refs
         // Note: This normally happens when the expression contains something
         // that itself failed to resolve, like an undefined variable.
-        dlog(
-          `cannot resolve type of ${expr} ${b.fset.position(expr.pos)}`
-        )
+        dlog(`cannot resolve type of ${expr} ${b.fset.position(expr.pos)}`)
         continue
       }
 
       // succeeded in resolving the type.
       // delegate type to any expressions that reference this type.
       if (t.refs) for (let ref of t.refs) {
-        if (ref instanceof FunSig || ref instanceof FunType) {
+        if (ref.isFunSig() || ref.isFunType()) {
           ref.result = restyp
         } else {
           assert(ref instanceof Expr)
           ;(ref as Expr).type = restyp
         }
+      }
+    }
+  }
+
+  checkCyclicTypeRef(scope :Scope, id :Ident) {
+    // check for cyclic type definitions
+    const b = this
+    if (id.type instanceof StructType) {
+      // check for deep cycles in structs
+      // TODO: find a better, more efficient way of doing this.
+      let seen = new Set<Type>([ id.type ])
+      const visit = (n :StructType) => {
+        for (let f of n.decls) {
+          // TODO: handle other declarations like TypeDecl
+          // TODO: handle other types like union
+          if (f.isVarDecl() && f.type && f.type.isStructType()) {
+            if (seen.has(f.type)) {
+              throw 1
+            }
+            seen.add(f.type)
+            visit(f.type)
+          }
+        }
+      }
+      try {
+        visit(id.type)
+      } catch (_) {
+        // sort chain on source position. We usually trigger resolution on a later
+        // definition, for instance with
+        //    type A { x B }; type B { x A }
+        // we will trigger resolution of B when B is defined and thus the head/end
+        // of the cycle is B, not A. Sorting makes the error message more intuitive.
+        let types = Array.from(seen).sort((a, b) =>
+          a.pos < b.pos ? -1 :
+          b.pos < a.pos ? 1 :
+          0
+        )
+        b.error(`cyclic type reference ${types.join(" -> ")} -> ${types[0]}`, types[0].pos)
       }
     }
   }

@@ -223,12 +223,9 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  pushScope(scope :Scope | null = null) {
+  pushScope() {
     const p = this
-    if (scope) {
-      assert(scope.outer != null, 'pushing scope without outer scope')
-    }
-    p.scope = scope || new Scope(p.scope)
+    p.scope = new Scope(p.scope)
     // dlog(`${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
   }
 
@@ -249,10 +246,10 @@ export class Parser extends scanner.Scanner {
       if (ent.nreads == 0) {
         if (ent.decl.isFieldDecl()) {
           p.diag("warn", `${name} not used`, ent.decl.pos, (
-            ent.decl._scope.isFunScope ? 'E_UNUSED_PARAM' :
+            ent.decl._scope.context instanceof FunExpr ? 'E_UNUSED_PARAM' :
             'E_UNUSED_FIELD'
           ))
-        } else {
+        } else if (!(ent.scope.context instanceof StructType)) {
           p.diag(
             "warn",
             `${name} declared and not used`,
@@ -283,7 +280,7 @@ export class Parser extends scanner.Scanner {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
 
-    // dlog(`declare ${ident} (val=${x}) at ${decl} in ${scope} [${ent.type}]`)
+    // dlog(`declare ${ident} => ${decl} in ${scope} [${ent.type}]`)
 
     ident.ent = ent
     // TODO: in the else branch, we could count locals/registers needed here.
@@ -346,7 +343,7 @@ export class Parser extends scanner.Scanner {
     }
     let ent = p.resolveEnt(x)
     if (ent) {
-      if (!ent.decl.isTypeDecl()) {
+      if (!ent.decl.isType()) {
         p.syntaxError(`${x} is not a type`, x.pos)
       } else if (ent.type) {
         x.type = ent.type
@@ -559,37 +556,40 @@ export class Parser extends scanner.Scanner {
     const p = this
     const pos = p.pos
 
+    // name
     const id = p.ident()
 
-    const isSimpleAlias = p.got(token.ASSIGN)  // type X = Y
+    // // is "X = Y" rather than "X Y"?
+    // const isSimpleAlias = p.got(token.ASSIGN)  // type X = Y
 
-    let t = p.maybeType()
+    let isAlias = p.tok == token.NAME
+
+    let t = p.maybeType(id)
     if (!t) {
       t = p.bad<Type>(pos, "type")
       p.syntaxError("in type declaration")
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
     }
 
-    // // create new alias type
-    // if (!isSimpleAlias) {
-    //   t = new AliasType(id.pos, id.value, t)
-    // }
+    // create new alias type, which is basically a Template witout params
+    if (isAlias) {
+      t = new AliasType(id.pos, id.value, t)
+    }
 
-    // ids at the file level are declared in the package scope
+    // scope. ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
-    const d = new TypeDecl(pos, scope, id, t, group)
+    // declare id => t
+    p.declare(scope, id, t, null)
 
-    p.declare(scope, id, d, null)
-
-    return d
+    return new TypeDecl(pos, scope, id, t, group)
   }
 
   varDecl(pos :Pos, idents :Ident[]) :VarDecl|Assignment {
     // VarDecl = IdentifierList
     //           ( Type [ "=" ExpressionList ] | "=" ExpressionList )
     const p = this
-    const typ = p.maybeType()
+    const typ = p.maybeType(null)
     let isError = false
 
     // ids at the file level are declared in the package scope
@@ -650,7 +650,7 @@ export class Parser extends scanner.Scanner {
     const scope = isTopLevel ? p.pkgscope : p.scope
 
     // new scope for parameters, signature and body
-    p.pushScope(new Scope(p.scope, null, /*isFunScope*/true))
+    p.pushScope()
 
     // parse signature.
     //
@@ -665,6 +665,7 @@ export class Parser extends scanner.Scanner {
     const sig = p.funSig(isInitFun ? t_void : null)
 
     const f = new FunExpr(pos, p.scope, sig, name, isInitFun)
+    p.scope.context = f
 
     if (isInitFun) {
       // check initfun signature (should be empty)
@@ -822,7 +823,7 @@ export class Parser extends scanner.Scanner {
     const pos = p.pos
     const params = p.tok == token.LPAREN ? p.parameters() : []
     if (p.tok != token.LBRACE) {
-      result = p.maybeType() || result
+      result = p.maybeType(null) || result
     }
     return new FunSig(pos, params, result)
   }
@@ -883,7 +884,7 @@ export class Parser extends scanner.Scanner {
           isRest = true
           p.next()
         }
-        let t = p.maybeType()
+        let t = p.maybeType(null)
         if (t) {
           typ = isRest ? new RestType(t) : t
         } else {
@@ -913,7 +914,7 @@ export class Parser extends scanner.Scanner {
         // parse type
         if (p.got(token.ELLIPSIS)) {
           // rest
-          const x = p.maybeType()
+          const x = p.maybeType(null)
           if (x) {
             // let t = p.types.getRestType(p.types.resolve(x)) // before new ast
             typ = new RestType(x)
@@ -1148,8 +1149,9 @@ export class Parser extends scanner.Scanner {
       ||
       ( ent.scope !== p.filescope &&
         ( ( ent.scope === p.pkgscope &&
-            atScope.fun && atScope.fun.isInit )
-          ||
+            atScope.context instanceof FunExpr &&
+            atScope.context.isInit
+          ) ||
           ent.scope.funScope() === atScope.funScope()
         )
       )
@@ -1258,7 +1260,8 @@ export class Parser extends scanner.Scanner {
       }
 
       if (p.unresolved) { p.unresolved.delete(id) } // may be noop
-      p.declare(id._scope, id, decl, rval)
+      // p.declare(id._scope, id, decl, rval)
+      p.declare(id._scope, id, decl, null)
 
       if (id.type.isUnresolvedType()) {
         id.type.addRef(id)
@@ -2358,7 +2361,7 @@ export class Parser extends scanner.Scanner {
   //
   type() :Type {
     const p = this
-    let t = p.maybeType()
+    let t = p.maybeType(null)
     if (!t) {
       t = p.bad<Type>(p.pos, "type")
       p.syntaxError("expecting type")
@@ -2379,7 +2382,7 @@ export class Parser extends scanner.Scanner {
   // TypeLit  = ArrayType | StructType | PointerType | FunctionType
   //          | InterfaceType | SliceType | MapType | Channel_Type
   //
-  maybeType() :Type|null {
+  maybeType(name :Ident|null) :Type|null {
     const p = this
     let t :Type|null = null
 
@@ -2391,10 +2394,24 @@ export class Parser extends scanner.Scanner {
         p.resolveType(x)
         t = p.types.resolve(x)
         // TODO: re-introduce generics/templates
-        // // generic use. e.g. Foo<A,B>
-        // if ((p.tok as token) == token.LSS) {
-        //   t = p.genericType(t)
-        // }
+        //
+        // Here, we want to check t and make sure it's a TemplateType,
+        // then we'll try to resolve its free type variables with the
+        // provided ones (e.g. A and B in Foo<A,B>).
+        //
+        // It's possible that we will not be able to bind all variables,
+        // which is probably fine and we would in that case produce
+        // another TemplateType with a scope with the provided bindings.
+        //
+        // Idea: Track Template parse scope in Scope. That way we could
+        // check right here if Foo<A,B> is an expansion of a template or not.
+        //
+        // This because we could be inside a template already, e.g.
+        //   type Bar<T> List<T>
+        //   type Foo<A,B> {
+        //     x Bar<A>  // <-  Bar<A> is a template over Bar<T> with binding A=T
+        //   }
+        //
         break
       }
 
@@ -2403,7 +2420,7 @@ export class Parser extends scanner.Scanner {
         break
 
       case token.LBRACE:
-        t = p.structType()
+        t = p.structType(name)
         break
 
     }
@@ -2475,12 +2492,17 @@ export class Parser extends scanner.Scanner {
   // Field          = (VarDecl | EmbeddedField | MethodDecl)
   // EmbeddedField  = TypeName
   //
-  structType() :StructType|null {
+  structType(name :Ident|null) :StructType|null {
     const p = this
     const pos = p.pos
     const decls :Decl[] = []
 
     p.want(token.LBRACE)  // {
+
+    // struct has its own scope
+    p.pushScope()
+    let st = new StructType(pos, name, decls)
+    p.scope.context = st
 
     // { TopLevelDecl ";" }
     while (p.tok != token.RBRACE) {
@@ -2513,9 +2535,10 @@ export class Parser extends scanner.Scanner {
       }
     }
 
+    p.popScope()
     p.want(token.RBRACE)  // }
 
-    return new StructType(pos, decls)
+    return st
   }
 
 

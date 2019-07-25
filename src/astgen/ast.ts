@@ -411,7 +411,12 @@ class RestType extends ListType {
 
 class StructType extends Type {
   // StructType = "{" (Decl ";")* "}"
+  name  :Ident|null
   decls :Decl[]
+
+  toString() :string {
+    return this.name ? this.name.toString() : "{anon}"
+  }
 }
 
 class FunType extends Type {
@@ -517,7 +522,7 @@ class Ident extends Expr {
     this.ent = null
   }
 
-  toString() :string { return `(Ident ${this.value})` }
+  toString() :string { return this.value.toString() }
   repr(sep :string = "") :string { return this.toString() }
 }
 
@@ -589,11 +594,11 @@ class NumLit extends LiteralExpr {
   }
 }
 class IntLit extends NumLit {
-  kind  :token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX
-  type  :IntType  // type is always known
+  format :token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX
+  type   :IntType  // type is always known
 
   base() :int {
-    switch (this.kind) {
+    switch (this.format) {
       case token.INT_HEX: return 16
       case token.INT_OCT: return 8
       case token.INT_BIN: return 2
@@ -602,12 +607,18 @@ class IntLit extends NumLit {
   }
 
   toString() :string {
-    switch (this.kind) {
+    switch (this.format) {
       case token.INT_HEX: return '0x' + this.value.toString(16)
       case token.INT_OCT: return '0o' + this.value.toString(8)
       case token.INT_BIN: return '0b' + this.value.toString(2)
       default:            return this.value.toString(10)
     }
+  }
+
+  visit(v: Visitor) {
+    v.visitFieldN("type", this.type)
+    v.visitField("value", this.value)
+    v.visitFieldS("format", token[this.format])
   }
 }
 class RuneLit extends NumLit {

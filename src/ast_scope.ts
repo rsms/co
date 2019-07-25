@@ -1,4 +1,4 @@
-import { Stmt, Type, Expr, FunExpr } from "./ast_nodes"
+import { Node, Stmt, Type, Expr, FunExpr } from "./ast_nodes"
 import { ByteStr } from './bytestr'
 
 // An Ent describes a named language entity such as a package,
@@ -48,6 +48,7 @@ export class Ent {
     this.value = value
     this.type = (
       type ||
+      ( s.isType() && s ) ||
       ( (s.isFieldDecl() || s.isVarDecl() || s.isTypeDecl()) && s.type ) ||
       ( value && value.type ) ||
       null
@@ -77,13 +78,13 @@ export class Ent {
 // TODO: track TypeVars in scope
 
 export class Scope {
-  fun :FunExpr | null = null // when set, scope if function scope
+  outer   :Scope|null                   // parent/puter scope
+  context :Node|null = null             // node owning the scope. null for universe
+  decls   :Map<ByteStr,Ent>|null = null // declarations in this scope
 
-  constructor(
-  public outer :Scope | null,
-  public decls :Map<ByteStr,Ent> | null = null,
-  public isFunScope :bool = false, // if the scope is that of a function
-  ) {}
+  constructor(outer :Scope|null) {
+    this.outer = outer
+  }
 
   // lookup a declaration in this scope and any outer scopes
   //
@@ -145,7 +146,7 @@ export class Scope {
   funScope() :Scope|null {
     let s :Scope|null = this
     while (s) {
-      if (s.fun) {
+      if (s.context instanceof FunExpr) {
         return s
       }
       s = s.outer
@@ -167,5 +168,13 @@ export class Scope {
   }
 }
 
+class NilScope extends Scope {
+  constructor() { super(null) }
+  lookup(s :ByteStr) :Ent | null { return null }
+  lookupImm(s :ByteStr) :Ent | null { return null }
+  declare(name: ByteStr, s :Stmt, x: Expr|null) :Ent|null { return null }
+  declareEnt(ent :Ent) :bool { return false }
+}
+
 // used by intrinsics
-export const nilScope = new Scope(null) // TODO: subclass NilScope with noop methods
+export const nilScope = new NilScope()

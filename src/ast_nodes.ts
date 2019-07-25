@@ -538,10 +538,15 @@ export class RestType extends ListType {
     visit(v: Visitor) { v.visitFieldN("type", this.type); }
 }
 export class StructType extends Type {
-    constructor(pos: Pos, public decls: Decl[]) { super(pos); }
+    constructor(pos: Pos, public name: Ident | null, public decls: Decl[]) { super(pos); }
+    toString(): string {
+        return this.name ? this.name.toString() : "{anon}";
+    }
     visit(v: Visitor) {
         if (this.type)
             v.visitFieldN("type", this.type);
+        if (this.name)
+            v.visitFieldN("name", this.name);
         v.visitFieldNA("decls", this.decls);
     }
 }
@@ -603,7 +608,7 @@ export class BranchStmt extends Stmt {
     ) { super(pos, _scope); }
     label: Ident | null = null;
     visit(v: Visitor) {
-        v.visitField("tok", this.tok);
+        v.visitFieldS("tok", token[this.tok]);
         if (this.label)
             v.visitFieldN("label", this.label);
     }
@@ -682,7 +687,7 @@ export class Ident extends Expr {
         this.ent!.nreads--;
         this.ent = null;
     }
-    toString(): string { return `(Ident ${this.value})`; }
+    toString(): string { return this.value.toString(); }
     repr(sep: string = ""): string { return this.toString(); }
     visit(v: Visitor) {
         if (this.type)
@@ -803,9 +808,9 @@ export class NumLit extends LiteralExpr {
 }
 export class IntLit extends NumLit {
     constructor(pos: Pos, value: Int64 | number, public type: IntType // type is always known
-    , public kind: token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX) { super(pos, value, type); }
+    , public format: token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX) { super(pos, value, type); }
     base(): int {
-        switch (this.kind) {
+        switch (this.format) {
             case token.INT_HEX: return 16;
             case token.INT_OCT: return 8;
             case token.INT_BIN: return 2;
@@ -813,7 +818,7 @@ export class IntLit extends NumLit {
         }
     }
     toString(): string {
-        switch (this.kind) {
+        switch (this.format) {
             case token.INT_HEX: return "0x" + this.value.toString(16);
             case token.INT_OCT: return "0o" + this.value.toString(8);
             case token.INT_BIN: return "0b" + this.value.toString(2);
@@ -823,7 +828,7 @@ export class IntLit extends NumLit {
     visit(v: Visitor) {
         v.visitFieldN("type", this.type);
         v.visitField("value", this.value);
-        v.visitField("kind", this.kind);
+        v.visitFieldS("format", token[this.format]);
     }
 }
 export class RuneLit extends NumLit {
@@ -852,7 +857,7 @@ export class Assignment extends Expr {
     visit(v: Visitor) {
         if (this.type)
             v.visitFieldN("type", this.type);
-        v.visitField("op", this.op);
+        v.visitFieldS("op", token[this.op]);
         v.visitFieldNA("lhs", this.lhs);
         v.visitFieldNA("rhs", this.rhs);
         v.visitFieldA("decls", this.decls);
@@ -866,7 +871,7 @@ export class Operation extends Expr {
     visit(v: Visitor) {
         if (this.type)
             v.visitFieldN("type", this.type);
-        v.visitField("op", this.op);
+        v.visitFieldS("op", token[this.op]);
         v.visitFieldN("x", this.x);
         if (this.y)
             v.visitFieldN("y", this.y);

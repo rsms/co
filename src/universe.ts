@@ -26,8 +26,9 @@ export class Universe {
       const namebuf = strings.get(asciibuf(name))
       // declare t as namebuf of type t.type
       let ident = new Ident(NoPos, this.scope, namebuf)
-      let d = new TypeDecl(NoPos, this.scope, ident, t, g)
-      decls.set(namebuf, new Ent(namebuf, d, null, t))
+      // let d = new TypeDecl(NoPos, this.scope, ident, t, g)
+      // decls.set(namebuf, new Ent(namebuf, d, null, t))
+      decls.set(namebuf, new Ent(namebuf, t, null, t))
     }
 
     // export all built-in values (true, false, nil, etc)

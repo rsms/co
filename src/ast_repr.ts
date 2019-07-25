@@ -1,7 +1,7 @@
 import * as utf8 from "./utf8"
 import { StrWriter } from "./util"
 import { Visitor, Visitable } from "./ast_visit"
-import { Node, Type, PrimType, StrType, Ident } from "./ast_nodes"
+import { Node, Type, PrimType, StrType, Ident, NumLit } from "./ast_nodes"
 
 interface Scope {
   sep :string
@@ -51,6 +51,11 @@ export class ReprVisitor implements Visitor {
         this.w(" ")
         this.visitNode(n.type)
       }
+      this.w(")")
+    } else if (n instanceof NumLit) {
+      // note: NumLit.toString includes base prefix, e.g. "0x" for 16.
+      this.w(`(${n.constructor.name} ${n} `)
+      this.visitNode(n.type)
       this.w(")")
     } else {
       let id = this.seen.get(n)

@@ -1,0 +1,9 @@
+// type A { a A } // error: cyclic
+// type A { a A? } // ok
+
+// type A { a B } // error: cyclic
+// type B { b A }
+
+type A { a B } // error: cyclic
+type B { b C }
+type C { c A }
