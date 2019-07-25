@@ -9,6 +9,11 @@ type Node {
   name     str
 }
 
+x = [
+  1
+  2
+]
+
 // type A { a A }
 // type A { a A? }
 

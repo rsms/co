@@ -614,7 +614,6 @@ export class Parser extends scanner.Scanner {
     }
 
     p.processAssign(d.idents, d.values, d, d.type, null)
-    p.types.resolve(d)
 
     return d
   }
@@ -864,7 +863,7 @@ export class Parser extends scanner.Scanner {
     const fields = [] as FieldDecl[]
     const scope = p.scope
 
-    while (p.tok != token.RPAREN) {
+    while (p.tok != token.RPAREN && p.tok != token.EOF) {
       let pos = p.pos
 
       let typ  :Node|null = null  // used for both names and types, thus Node
@@ -1899,7 +1898,7 @@ export class Parser extends scanner.Scanner {
 
     p.want(token.LPAREN)
 
-    if (receiver.type && !receiver.type.isUnresolved) {
+    if (receiver.type && !receiver.type.isUnresolved()) {
       // parse expected arguments with type information
       let i = 0  // index into argtypes
       let restType :Type|null = null  // set when we encounter ...
@@ -2172,17 +2171,21 @@ export class Parser extends scanner.Scanner {
     let t :ListType|null = ctxt instanceof ListType ? ctxt : null
     let itemtype :Type|null = t ? t.type : null
 
-    while (p.tok != token.RBRACKET) {
+    while (p.tok != token.RBRACKET && p.tok != token.EOF) {
       let x = p.expr(itemtype)
       if (!t) {
-        if (x.type && !x.type.isUnresolved) {
+        if (x.type && !x.type.isUnresolved()) {
           t = new ListType(x.type)
         }
       } else {
         x = p.types.convert(t.type, x) || x
       }
       l.push(x)
-      if (p.tok as token != token.RBRACKET && !p.ocomma(token.RBRACKET)) {
+      if (
+        !p.got(token.SEMICOLON) &&
+        p.tok as token != token.RBRACKET &&
+        !p.ocomma(token.RBRACKET)
+      ) {
         break  // error: unexpected ;, expecting comma, or )
       }
     }
@@ -2466,7 +2469,7 @@ export class Parser extends scanner.Scanner {
     let t :Type|null = null
     const types = [] as Type[]
 
-    while (p.tok != token.RPAREN) {
+    while (p.tok != token.RPAREN && p.tok != token.EOF) {
       t = p.type()
       types.push(t)
       if (!p.ocomma(token.RPAREN)) {
@@ -2505,7 +2508,7 @@ export class Parser extends scanner.Scanner {
     p.scope.context = st
 
     // { TopLevelDecl ";" }
-    while (p.tok != token.RBRACE) {
+    while (p.tok != token.RBRACE && p.tok != token.EOF) {
       switch (p.tok) {
 
         case token.TYPE:

@@ -200,27 +200,27 @@ class pkgBinder extends ErrorReporter {
 
     for (let ut of b.types.unresolved) {
       // console.log('types.unresolved.size = ', b.types.unresolved.size)
-      const expr = ut.def as Expr ; assert(expr instanceof Expr)
-      const t = expr.type
+      const n = ut.def
+      const t = n.type
 
       if (!(t instanceof UnresolvedType)) {
         // was probably resolved during step 2
         continue
       }
 
-      if (b.undef && expr instanceof Ident && b.undef.has(expr)) {
+      if (b.undef && n instanceof Ident && b.undef.has(n)) {
         continue
       }
 
       // attempt to resolve the type now that we can see the entire package
-      expr.type = null // clear so resolve can progress
-      const restyp = b.types.maybeResolve(expr)
+      n.type = null // clear so resolve can progress
+      const restyp = b.types.maybeResolve(n)
 
       if (!restyp) {
-        expr.type = t // restore original which might have refs
+        n.type = t // restore original which might have refs
         // Note: This normally happens when the expression contains something
         // that itself failed to resolve, like an undefined variable.
-        dlog(`cannot resolve type of ${expr} ${b.fset.position(expr.pos)}`)
+        dlog(`cannot resolve type of ${n} ${b.fset.position(n.pos)}`)
         continue
       }
 
@@ -248,12 +248,16 @@ class pkgBinder extends ErrorReporter {
         for (let f of n.decls) {
           // TODO: handle other declarations like TypeDecl
           // TODO: handle other types like union
-          if (f.isVarDecl() && f.type && f.type.isStructType()) {
-            if (seen.has(f.type)) {
-              throw 1
+          if (f.isVarDecl()) {
+            for (let id of f.idents) {
+              if (id.type && id.type.isStructType()) {
+                if (seen.has(id.type)) {
+                  throw id
+                }
+                seen.add(id.type)
+                visit(id.type)
+              }
             }
-            seen.add(f.type)
-            visit(f.type)
           }
         }
       }
