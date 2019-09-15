@@ -1,0 +1,28 @@
+
+// The idea here is that we could use template expansion
+// under the hood, and allow for pretty much anything to
+// be a macro.
+//
+// However, if we want to allow arbitrary code in macros,
+// we need to execute it and template expansion is not
+// going to be enough.
+//
+// For instance, consider this macro function which transforms
+// any iterable type into a compile-time list:
+//
+macro clist<T, C Iterable<T>>(c C) T[] {
+  l T[]
+  for e in c {
+    l.append(e)
+  }
+  l
+}
+names = clist([
+  "bob"
+  "anne"
+  "cat"
+].map(upcase))
+//
+// The above should be equivalent to the following:
+//
+names = ["BOB", "ANNE", "CAT"]

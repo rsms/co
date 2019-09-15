@@ -4,6 +4,7 @@ import { ErrorCode, ErrorHandler, ErrorReporter } from './error'
 import * as utf8 from './utf8'
 import { TypeResolver } from './resolve'
 import { debuglog as dlog } from './util'
+import { ByteStr } from "./bytestr"
 import {
   Node,
   Scope,
@@ -18,7 +19,8 @@ import {
   FunSig,
   ImportDecl,
   Expr,
-} from './ast'
+  StringLit,
+} from "./ast"
 
 
 // An Importer resolves import paths to package entities.
@@ -31,29 +33,38 @@ import {
 // a new Ent (pkg), record pkg in the imports map, and then
 // return pkg.
 //
-export type Importer =
-  (imports :Map<string,Ent>, path :string) => Promise<Ent>
+export type Importer = (imports :Map<string,Ent>, path :StringLit) => Promise<Ent>
 
 
 // pkgBinder resolves a ast.Package and its ast.File s
 //
-class pkgBinder extends ErrorReporter {
+export class PkgBinder extends ErrorReporter {
   errorCount = 0
+
   // package-global mapping of imported package ids to package entities
   imports = new Map<string,Ent>()
   undef :Set<Ident>|null = null // track undefined so we don't report twice
 
+  pkg      :Package
+  fset     :SrcFileSet
+  importer :Importer|null
+  types    :TypeResolver
+
   constructor(
-    public pkg      :Package,
-    public fset     :SrcFileSet,
-    public importer :Importer|null,
-    public types    :TypeResolver,
-    errh            :ErrorHandler|null,
+    pkg      :Package,
+    fset     :SrcFileSet,
+    importer :Importer|null,
+    types    :TypeResolver,
+    errh     :ErrorHandler|null,
   ) {
     super('E_RESOLVE', errh)
+    this.pkg = pkg
+    this.fset = fset
+    this.importer = importer
+    this.types = types
   }
 
-  bind() :Promise<void> {
+  bind() :Promise<int> {  // returns errorCount
     const b = this
     //
     // binding happens in three steps:
@@ -62,22 +73,19 @@ class pkgBinder extends ErrorReporter {
     // 2. identifiers are resolved in all files (and across the package)
     // 3. types are resolved across the package
     //
-
     // step 1: complete file scopes with imports
     return Promise.all(
       b.pkg.files.map(f => this._resolveImports(f))
     ).then(() => {
-      if (b.errorCount > 0) {
-        return  // stop when imports failed
+      if (b.errorCount == 0) {
+        // step 2: resolve identifiers
+        for (let f of b.pkg.files) {
+          b._resolveIdents(f)
+        }
+        // step 3: resolve types
+        b._resolveTypes()
       }
-
-      // step 2: resolve identifiers
-      for (let f of b.pkg.files) {
-        b._resolveIdents(f)
-      }
-
-      // step 3: resolve types
-      b._resolveTypes()
+      return b.errorCount
     })
   }
 
@@ -96,14 +104,10 @@ class pkgBinder extends ErrorReporter {
         b.error(`unresolvable import ${decl.path}`, decl.path.pos)
         break
       }
-      const path = utf8.decodeToString(decl.path.value)
-      pv.push(b.importer(b.imports, path)
+      pv.push(b.importer(b.imports, decl.path)
         .then((pkg :Ent) => { b.integrateImport(f, decl, pkg) })
         .catch(err => {
-          b.error(
-            `could not import ${path} (${err.message || err})`,
-            decl.path.pos
-          )
+          b.error(`could not import ${decl.path} (${err.message || err})`, decl.path.pos)
         })
       )
     }
@@ -170,10 +174,8 @@ class pkgBinder extends ErrorReporter {
         if (ent.decl.isType()) {
           id.type = ent.decl
         } else {
-          assert(
-            (ent.decl as any).type instanceof Type,
-            `${ent.decl} does not have type`
-          )
+          let t = (ent.decl as any).type as Type|null
+          assert(t && t.isType(), `${ent.decl} does not have type (.type=${t})`)
           id.type = (ent.decl as any).type as Type
         }
       }
@@ -252,7 +254,7 @@ class pkgBinder extends ErrorReporter {
             for (let id of f.idents) {
               if (id.type && id.type.isStructType()) {
                 if (seen.has(id.type)) {
-                  throw id
+                  throw 1
                 }
                 seen.add(id.type)
                 visit(id.type)
@@ -299,6 +301,6 @@ export function bindpkg(
   typeres  :TypeResolver,
   errh     :ErrorHandler,
 ) :Promise<bool> {
-  const b = new pkgBinder(pkg, fset, importer, typeres, errh)
+  const b = new PkgBinder(pkg, fset, importer, typeres, errh)
   return b.bind().then(() => b.errorCount != 0)
 }

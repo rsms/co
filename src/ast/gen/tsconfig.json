@@ -6,16 +6,17 @@
     "noImplicitReturns": true,
     "noImplicitThis": true,
     "module": "amd",
+    "moduleResolution": "node",
     "newLine": "LF",
     "target": "es2017",
     "inlineSourceMap": true,
     "removeComments": true,
     "lib": [ "es2017" ],
-    "rootDir": "../..",
+    "rootDir": "../../..",
     "outFile": ".main.js"
   },
   "include": [
-    "../global.d.ts",
+    "../../global.d.ts",
     "main.ts"
   ]
 }

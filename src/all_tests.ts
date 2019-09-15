@@ -1,4 +1,5 @@
-import './int64_test'
-import './scanner_test'
-import './scan_num_test'
-import './intgraph_test'
+import "./int64_test"
+import "./scanner_test"
+import "./scan_num_test"
+import "./intgraph_test"
+import "./ast/test/ast_test"

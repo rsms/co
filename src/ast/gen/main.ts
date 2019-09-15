@@ -1,16 +1,16 @@
 import * as Path from 'path'
 import { readFileSync, writeFileSync, existsSync } from 'fs'
-import * as ts from "../../node_modules/typescript/lib/typescript"
+import * as ts from "../../../node_modules/typescript/lib/typescript"
 
 
 declare function print(msg :any, ...v :any[]) :void
 
-const rootdir = Path.normalize(__dirname + "/../..")
+const rootdir = Path.normalize(__dirname + "/../../..")
 
 
 function main() {
   let infile = __dirname + "/ast.ts"
-  let outfile = Path.resolve(__dirname + "/../ast_nodes.ts")
+  let outfile = Path.resolve(__dirname + "/../nodes.ts")
   let f = parse(infile)
   f = transform(f)
   let output = gencode(f)
@@ -215,14 +215,14 @@ class Transformer<T extends ts.Node> {
     return this.createMethod(name, [], t, ...body)
   }
 
-  generateTypeTestMethod(classname :string) :ts.MethodDeclaration {
+  generateTypeTestMethod(methodName :string, classname :string) :ts.MethodDeclaration {
     // isTYPE() :this is TYPE { return this instanceof classname }
     let t = ts.createTypePredicateNode(
       ts.createThisTypeNode(),
       ts.createTypeReferenceNode(classname, undefined)
     )
     return this.createMethod0(
-      "is" + classname,
+      methodName,
       t, // type
       ts.createReturn(
         ts.createBinary(
@@ -482,6 +482,7 @@ class Transformer<T extends ts.Node> {
     for (let f of fields.values()) {
       let prop :ts.Expression = ts.createPropertyAccess(ts.createThis(), f.name)
       let visitFun = "visitField"  // TODO: based on field type
+      let visitArgs :ts.Expression[] = []  // extra args
       if (f.nodeType) {
         if (f.nodeType instanceof ArrayNode) {
           visitFun = "visitFieldNA"
@@ -519,12 +520,12 @@ class Transformer<T extends ts.Node> {
           let typename = f.type.typeName.escapedText.toString()
           if (typename == "Storage" || typename == "token") {
             // TODO: automatically understand that "Storage" is an enum
-            print(typename)
-            visitFun = "visitFieldS"
-            prop = ts.createElementAccess(
-              ts.createIdentifier(typename),
-              prop
-            )
+            visitFun = "visitFieldE"
+            // prop = ts.createElementAccess(
+            //   ts.createIdentifier(typename),
+            //   prop
+            // )
+            visitArgs.push(ts.createIdentifier(typename))
           }
         }
       }
@@ -532,7 +533,7 @@ class Transformer<T extends ts.Node> {
         ts.createCall(
           ts.createPropertyAccess(ts.createIdentifier("v"), ts.createIdentifier(visitFun)),
           undefined,
-          [ ts.createStringLiteral(f.name), prop ]
+          [ ts.createStringLiteral(f.name), prop ].concat(visitArgs)
         )
       )
       if (f.isNullable) {
@@ -541,9 +542,17 @@ class Transformer<T extends ts.Node> {
         } else {
           stmt = ts.createIf(
             ts.createBinary(
-              prop,
-              ts.SyntaxKind.ExclamationEqualsEqualsToken,
-              ts.createNull()
+              ts.createBinary(
+                prop,
+                ts.SyntaxKind.ExclamationEqualsEqualsToken,
+                ts.createNull()
+              ),
+              ts.SyntaxKind.AmpersandAmpersandToken,
+              ts.createBinary(
+                prop,
+                ts.SyntaxKind.ExclamationEqualsEqualsToken,
+                ts.createIdentifier("undefined")
+              ),
             ),
             stmt
           )
@@ -562,7 +571,7 @@ class Transformer<T extends ts.Node> {
           undefined,
           "v",
           undefined,
-          ts.createTypeReferenceNode("Visitor", [])
+          ts.createTypeReferenceNode("NodeVisitor", [])
         ),
       ],
       null,
@@ -693,7 +702,12 @@ class Transformer<T extends ts.Node> {
 
       if (c !== this.baseNode) {
         // isTYPE() :this is TYPE
-        this.baseNode.addMember(this.generateTypeTestMethod(classname))
+        let methodName = "is" + classname
+        if (!this.baseNode.hasMember(methodName)) {
+          this.baseNode.addMember(
+            this.generateTypeTestMethod(methodName, classname)
+          )
+        }
       }
     }
     return n
@@ -815,22 +829,22 @@ class Transformer<T extends ts.Node> {
         continue
       }
 
-      // debug/print an existing method on a class.
-      // useful for reverse-engineering TS AST<->code.
-      if (
-        ts.isMethodDeclaration(m) &&
-        m.body &&
-        ts.isIdentifier(m.name) &&
-        m.name.escapedText.toString() == "foofoo"
-      ) {
-        print(
-          repr(
-            (m as any).body.statements[0], //.declarationList.declarations[0],
-            // (m as any).body.statements[2],
-            4
-          )
-        )
-      }
+      // // debug/print an existing method on a class.
+      // // useful for reverse-engineering TS AST<->code.
+      // if (
+      //   ts.isMethodDeclaration(m) &&
+      //   m.body &&
+      //   ts.isIdentifier(m.name) &&
+      //   m.name.escapedText.toString() == "foofoo"
+      // ) {
+      //   print(
+      //     repr(
+      //       (m as any).body.statements[0], //.declarationList.declarations[0],
+      //       // (m as any).body.statements[2],
+      //       4
+      //     )
+      //   )
+      // }
 
       if (!ts.isPropertyDeclaration(m)) {
         continue
@@ -862,6 +876,15 @@ class Transformer<T extends ts.Node> {
           continue
         }
       } else if (m.questionToken) {
+        if (
+          m.initializer &&
+          ts.isIdentifier(m.initializer) &&
+          m.initializer.originalKeywordKind == ts.SyntaxKind.UndefinedKeyword
+        ) {
+          // e.g. "x? :Foo = undefined" -> "x? :Foo"
+          m.initializer = undefined
+          continue
+        }
         // convert "foo? :Type" -> "foo :Type|null|undefined"
         m.questionToken = undefined
         isNullable = true

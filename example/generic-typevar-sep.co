@@ -1,0 +1,29 @@
+// test comma parsing
+type _<A,B,> A
+type _<A;B;> A
+type _<A;B,> A
+type _<A;B> A
+type _<
+  A
+  B
+> A
+type _<
+  A,
+  B
+> A
+type _<
+  A,
+  B,
+> A
+type _<
+  A;
+  B,
+> A
+type _<
+  A;
+  B
+> A
+type _<
+  A;
+  B;
+> A

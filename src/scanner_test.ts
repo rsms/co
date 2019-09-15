@@ -3,6 +3,7 @@ import * as utf8 from './utf8'
 import { Position, SrcFileSet } from './pos'
 import { token, tokstr } from './token'
 import * as scanner from './scanner'
+import { mstr } from "./util"
 
 const SEMIC = token.SEMICOLON
 const ReportErrors = false
@@ -37,17 +38,17 @@ export function dumpTokens(s :scanner.Scanner) {
   }
 }
 
-export function sourceScanner(srctext :string) :scanner.Scanner {
+export function sourceScanner(srctext :string, mode? :scanner.Mode) :scanner.Scanner {
   let s = new scanner.Scanner()
   let fileSet = new SrcFileSet()
   let src = utf8.encodeString(dedentMultiLineString(srctext))
   let file = fileSet.addFile('a', src.length)
-  s.init(file, src, ReportErrors ? onScanError : null)
+  s.init(file, src, ReportErrors ? onScanError : null, mode)
   return s
 }
 
-export function assertTokens(srctext :string, tokens :token[]) {
-  let s = sourceScanner(srctext)
+export function assertTokens(srctext :string, tokens :token[], mode? :scanner.Mode) {
+  let s = sourceScanner(srctext, mode)
   let i = 0
   s.next()
   while (s.tok != token.EOF) {
@@ -114,6 +115,7 @@ TEST('basics', () => {
 
 
 TEST('char', () => {
+  // see scanner/scanEscape
   let samples = [
     ['a',           0x61],
     ['K',           0x4B],
@@ -161,4 +163,72 @@ TEST('char/invalid', () => {
     assertGotTok(s, SEMIC)
     assertGotTok(s, token.EOF)
   }
+})
+
+
+TEST('directive', () => {
+  let s = sourceScanner(mstr(`
+  x
+  #end
+  foo
+  `))
+  assertGotTok(s, token.NAME)
+  assertGotTok(s, SEMIC)
+  assertGotTok(s, token.DIRECTIVE)
+  assertEq(s.stringValue(), "end")  // should not include "#"
+  assertGotTok(s, SEMIC)
+  assertEq(s.offset, 7)  // beginning of data tail
+
+  assertTokens(mstr(`
+    ident 123
+    #end
+    `), [
+    token.NAME, token.INT, SEMIC,
+    token.DIRECTIVE,       SEMIC,
+  ])
+  assertTokens(`ident 123;#end`, [
+    token.NAME, token.INT, SEMIC,
+    token.DIRECTIVE,       SEMIC,
+  ])
+
+  assertTokens(mstr(`
+    ident 123
+    #end
+    foo
+    `), [
+    token.NAME, token.INT, SEMIC,
+    token.DIRECTIVE,       SEMIC,
+    token.NAME,            SEMIC,
+  ])
+
+  assertTokens(mstr(`
+    ident 123
+    #end lisp
+    foo
+    `), [
+    token.NAME, token.INT,       SEMIC,
+    token.DIRECTIVE, token.NAME, SEMIC,
+    token.NAME,                  SEMIC,
+  ])
+
+  assertTokens(mstr(`
+    ident 123
+    #end // comment
+    foo
+    `), [
+    token.NAME, token.INT, SEMIC,
+    token.DIRECTIVE,       SEMIC,  // comments are ignored
+    token.NAME,            SEMIC,
+  ], scanner.Mode.None)
+
+  assertTokens(mstr(`
+    ident 123
+    #end // comment
+    foo
+    `), [
+    token.NAME, token.INT,          SEMIC,
+    token.DIRECTIVE, token.COMMENT, SEMIC,
+    token.NAME,                     SEMIC,
+  ], scanner.Mode.ScanComments)
+
 })

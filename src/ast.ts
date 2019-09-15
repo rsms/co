@@ -1,11 +1,16 @@
 import { NoPos } from "./pos"
 import { strings } from "./bytestr"
-import * as n from "./ast_nodes"
-export * from "./ast_nodes"
-export * from "./ast_scope"
+import * as n from "./ast/nodes"
+import { nilScope } from "./ast/scope"  // order matters i/r/t nodes.ts
+
+export * from "./ast/nodes"
+export * from "./ast/scope"
+export * from "./ast/visit"
+export * from "./ast/transform"
+export { printAst as print } from "./ast/repr"
 
 const str_T = strings.get(new Uint8Array([0x54])) // "T"
-const typeVarT = new n.TypeVar(str_T, null, null)
+const id_T = new n.Ident(NoPos, nilScope, str_T)
 
 // dynamically-sized string. i.e. "str"
 export const t_str = new n.StrType(NoPos, -1)
@@ -15,6 +20,9 @@ export const t_str0 = new n.StrType(NoPos, 0)
 
 // optional "str". i.e. "str?"
 export const t_stropt = new n.OptionalType(NoPos, t_str)
+
+// tvar used for List
+let List_tvar0 = new n.TemplateVar(NoPos, nilScope, id_T, null, null)
 
 // exported type objects
 export const types = {
@@ -42,18 +50,12 @@ export const types = {
   //
   // type Str<size=-1> <intrinsic>
   str: t_str, // size known at runtime. i.e. "str"
-
-  // TODO: template types wrap these in TemplateType,
-  //       e.g. TemplateType(typeVarT, TupleType(typeVarT))
   // //
   // // type Tuple<T...> <intrinsic>
-  // Tuple: new n.TupleType(typeVarT),
-  // //
-  // // type List<T> <intrinsic>
-  // List: new n.ListType(typeVarT),
-  // //
-  // // type Rest<T> List<T>
-  // Rest: new n.RestType(typeVarT),
+  // Tuple: new n.TupleType(tplVarT),
+  //
+  // type List<T> <intrinsic>
+  List: new n.Template(NoPos, nilScope, [List_tvar0], new n.ListType(List_tvar0)),
 }
 
 // built-in, predefined values

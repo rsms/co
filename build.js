@@ -6,10 +6,13 @@
 //  -O          Generate optimized product
 //  -w          Watch sources for changes and rebuild incrementally
 //  -clean      Throw away cache. Implied with -O.
+//  -pretty     Pretty-print optimized code (effective only with -O)
 //  -nominify   Do not minify (or mangle) optimized product code (i/c/w -O)
 //  -nobuild    Do not build (i.e. only run the linter)
 //  -nolint     Do not run the linter
 //  -color      Style output even if stdout or stderr is not TTY
+//  -no-warn-unused
+//              Supress warnings about unused variables and parameters
 //  -o <file>   Write product to <file>
 //  -h, -help   Print this help message to stderr and exit
 //
@@ -40,10 +43,12 @@ const prog = relpath(".", argv[1])
 const debug = !argv.includes('-O')
 const watch = argv.includes('-w')
 const clean = argv.includes('-clean')
+const pretty = argv.includes('-pretty')
 const minify = !argv.includes('-nominify')
 const noBuild = argv.includes("-nobuild")
 const noLint = argv.includes("-nolint")
 const productIsExectuable = !argv.includes("-lib")
+const diagUnused = !argv.includes("-no-warn-unused")
 
 // config
 const productName = "co"
@@ -63,8 +68,8 @@ const linterTSCompilerOptions = {
   noImplicitAny: true,
   noImplicitReturns: true,
   noImplicitThis: true,
-  noUnusedLocals: true,
-  noUnusedParameters: true,
+  noUnusedLocals: diagUnused,
+  noUnusedParameters: diagUnused,
   strictNullChecks: true,
   // strict: true, // ALL THE CHECKS -- "pedantic"
 }
@@ -508,6 +513,7 @@ function startDiagnostics() {  // :CancellableProcess<void>
   const compilerOptionsOverrides = { // CompilerOptions
     ...linterTSCompilerOptions,
     noEmit: true,
+    moduleResolution: ts.ModuleResolutionKind.NodeJs,
   }
 
   // create host
@@ -1069,6 +1075,8 @@ function genOptimized(code, map) { // :Promise<void>
       'Math.ceil',
       'Math.round',
       'Math.random',
+      'Math.min',
+      'Math.max',
       // TODO: expand this list
     ]
 
@@ -1315,13 +1323,13 @@ function genOptimized(code, map) { // :Promise<void>
       mangle: minify ? {
         // reserved: [],
         keep_classnames: true,
-        keep_fnames: false,
+        keep_fnames: true,
         safari10: false,
       } : false,
 
       output: {
         preamble: versionBanner.trim(), // uglify adds a trailing newline
-        beautify: !minify,
+        beautify: pretty || !minify,
         indent_level: 2,
         // comments: true,
         ast: false,

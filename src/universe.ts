@@ -22,7 +22,7 @@ export class Universe {
     // export all built-in types
     for (let name of Object.keys(types)) {
       const t = (types as {[name:string]:Type})[name]
-      assert(t.isType())
+      assert(t.isType(), `t ${t} (${t.constructor.name}) not a type`)
       const namebuf = strings.get(asciibuf(name))
       // declare t as namebuf of type t.type
       let ident = new Ident(NoPos, this.scope, namebuf)

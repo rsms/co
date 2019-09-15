@@ -1,3 +1,5 @@
+import { assertEq } from "./test"
+
 //
 // simple s-expressions parser made for arch rewrite rules DSL,
 // but is generic and can be used independently.
@@ -24,6 +26,7 @@ const lparen = char("(")
     , pipe   = char("|")
     , squote = char("'")
     , dquote = char('"')
+    , semic  = char(';')
     , ch_r   = char("r")
     , ch_n   = char("n")
     , ch_t   = char("t")
@@ -40,6 +43,7 @@ interface IValue {
   isUnion() : this is Union
   isSym() : this is Sym
   isPre() : this is Pre  // note: Pre is a type of Sym
+  toString(ln? :string) :string
 }
 
 export class List extends Array<Value> implements IValue {
@@ -47,7 +51,7 @@ export class List extends Array<Value> implements IValue {
   col  :int
   type :ListType
 
-  _keychache? :Map<string,List>
+  _keycache? :Map<string,List>
 
   constructor(line :int, col :int, type :ListType) {
     super()
@@ -56,28 +60,45 @@ export class List extends Array<Value> implements IValue {
     this.type = type
   }
 
+  static create(line :int, col :int, ...v :Value[]) :List {
+    let l = new List(line, col, "(")
+    l.splice(0, 0, ...v)
+    return l
+  }
+
   isList() : this is List { return true }
   isUnion() : this is Union { return false }
   isSym() : this is Sym { return false }
   isPre() : this is Pre { return false }
 
-  toString() {
-    return `(${this.join(" ")})`
+  toString(ln :string = "") :string {
+    let ln2 = ln.charCodeAt(0) == 0xA ? ln + "  " : ln
+    let s = "("
+    for (let i = 0; i < this.length; i++) {
+      let v = this[i]
+      let s2 = v.toString(ln2)
+      if (v instanceof List) {
+        s += (ln2 || i == 0 ? ln2 : " ") + s2
+      } else {
+        s += (i == 0 || s2.charCodeAt(0) == 0xA) ? s2 : " " + s2
+      }
+    }
+    return s + ")"
   }
 
   asMap() :Map<string,List> {
-    if (!this._keychache) {
-      this._keychache = new Map<string,List>()
+    if (!this._keycache) {
+      this._keycache = new Map<string,List>()
       for (let v of this) {
         if (v instanceof List && v.length > 1) {
           let s = v[0]
           if (s instanceof Sym) {
-            this._keychache.set(s.value, v)
+            this._keycache.set(s.value, v)
           }
         }
       }
     }
-    return this._keychache
+    return this._keycache
   }
 
   get(key :string) :List|null {
@@ -150,6 +171,8 @@ export class Sym implements IValue {
   }
 }
 
+export const nil = new Sym(0,0,"nil")
+
 export class Pre extends Sym {
   type :PreType
   constructor(line :int, col :int, value :string, type :PreType) {
@@ -169,6 +192,21 @@ export class Pre extends Sym {
   isPre() : this is Pre { return true }
 }
 
+
+
+// -------------------------------------------------------------
+// parse
+
+// InterpretAs is used for options to the parser, indicating how to interpret certain syntax.
+export enum InterpretAs {
+  Default = 0,
+  Sym,
+  Pre,
+}
+export const DEFAULT = InterpretAs.Default
+           , AS_SYM = InterpretAs.Sym
+           , AS_PRE = InterpretAs.Pre
+
 export class SyntaxError extends Error {
   line :int
   col  :int
@@ -176,10 +214,12 @@ export class SyntaxError extends Error {
 }
 
 export interface ParseOptions {
-  filename?     :string
-  brackAsList?  :bool // parse [...] as List instead of Pre
-  braceAsList?  :bool // parse {...} as List instead of Pre
-  ltgtAsList?   :bool // parse <...> as List instead of Pre
+  filename?   :string
+  lineOffset? :int  // offset source location lines by N
+
+  brack? :InterpretAs
+  brace? :InterpretAs
+  ltgt? :InterpretAs
 }
 
 export function parse(src :string, options? :ParseOptions) :List
@@ -190,10 +230,11 @@ export function parse(src :string, arg1? :string|ParseOptions) :List {
     arg1 ? arg1 :
     {}
   )
+
   let i = 0
     , c = 0
     , nextc = 0
-    , line = 1
+    , line = (options.lineOffset || 0) + 1
     , lineStart = 0
     , symstart = -1
 
@@ -324,7 +365,11 @@ export function parse(src :string, arg1? :string|ParseOptions) :List {
               break
 
             default:
-              syntaxErr(`invalid string escape seq "\\${chr(c)}"`)
+              // instead or causing error on unknown escape, interpret vanilla.
+              buf.push(bslash)
+              buf.push(c)
+              // syntaxErr(`invalid string escape seq "\\${chr(c)}"`)
+              break
           }
           break
 
@@ -345,27 +390,22 @@ export function parse(src :string, arg1? :string|ParseOptions) :List {
   type PreOrListParser = (startc :int, endc :int, type :ListType&PreType)=>Value
 
   const parseBrack :PreOrListParser = (
-    options.brackAsList ? (_ :int, endc :int, type :ListType&PreType) :Value => {
+    options.brack == AS_PRE ? parsePre : (_ :int, endc :int, type :ListType&PreType) :Value => {
       return parseList(endc, type)
-    } : parsePre
+    }
   )
 
-  // brackAsList :bool // parse [...] as List instead of Pre
-  // braceAsList :bool // parse {...} as List instead of Pre
-  // ltgtAsList  :bool // parse <...> as List instead of Pre
-        //   flushSym(list)
-        //   list.push(parsePre(c, rbrack, "["))
-        //   break
+  const parseBrace :PreOrListParser = (
+    options.brace == AS_PRE ? parsePre : (_ :int, endc :int, type :ListType&PreType) :Value => {
+      return parseList(endc, type)
+    }
+  )
 
-        // case lbrace: // {...}
-        //   flushSym(list)
-        //   list.push(parsePre(c, rbrace, "{"))
-        //   break
-
-        // case lt: // <...>
-        //   flushSym(list)
-        //   list.push(parsePre(c, gt, "<"))
-        //   break
+  const parseLtgt :PreOrListParser = (
+    options.ltgt == AS_PRE ? parsePre : (_ :int, endc :int, type :ListType&PreType) :Value => {
+      return parseList(endc, type)
+    }
+  )
 
   function parseList(endchar :int, type :ListType) :List {
     let list = new List(line, i - lineStart, type)
@@ -391,6 +431,14 @@ export function parse(src :string, arg1? :string|ParseOptions) :List {
         case rbrack:
         case rbrace:
           syntaxErr(`unbalanced ${repr(chr(c))}`)
+          break
+
+        case semic:
+          flushSym(list)
+          // let commentStart = ++i
+          readRestOfLine()
+          // print(`comment: ${repr(src.substring(commentStart, i-1))}`)
+          newLine()
           break
 
         case slash:
@@ -434,19 +482,30 @@ export function parse(src :string, arg1? :string|ParseOptions) :List {
           break
 
         case lbrack: // [...]
-          flushSym(list)
-          list.push(parseBrack(c, rbrack, "["))
-          // list.push(parsePre(c, rbrack, "["))
+          if (options.brack == AS_SYM) {
+            startSym()
+          } else {
+            flushSym(list)
+            list.push(parseBrack(c, rbrack, "["))
+          }
           break
 
         case lbrace: // {...}
-          flushSym(list)
-          list.push(parsePre(c, rbrace, "{"))
+          if (options.brace == AS_SYM) {
+            startSym()
+          } else {
+            flushSym(list)
+            list.push(parseBrace(c, rbrace, "{"))
+          }
           break
 
         case lt: // <...>
-          flushSym(list)
-          list.push(parsePre(c, gt, "<"))
+          if (options.ltgt == AS_SYM) {
+            startSym()
+          } else {
+            flushSym(list)
+            list.push(parseLtgt(c, gt, "<"))
+          }
           break
 
         default:
@@ -459,3 +518,339 @@ export function parse(src :string, arg1? :string|ParseOptions) :List {
 
   return parseList(0, "")
 }
+
+// ----------------------------------------------------------
+
+let ind = ""
+// const diffprint = print
+// const indincr = () => ind += "  "
+// const inddecr = () => ind = ind.substr(0, ind.length-2)
+const diffprint = (...v:any[])=>{}
+const indincr = () => {}
+const inddecr = () => {}
+
+// diff computes the set difference of right compared to left.
+//
+// Difference is not uniform, but:
+// - left subset of or equal to right
+// - right superset of or equal to left
+//
+// i.e. left ⊆ right ⊇ left
+//
+export function diff(L :Value, R :Value|null) :List|null {
+  // print(`${ind}diff  ${L}  ⊆  ${R}`)
+  // try {indincr()
+  let c = L.constructor
+  return c == List  ? diffList(L as List, R)[1] :
+         c == Sym   ? diffSym(L as Sym, R) :
+         c == Pre   ? diffPre(L as Pre, R) :
+         c == Union ? diffUnion(L as Union, R) :
+         null
+  // }finally{inddecr()}
+}
+
+function diffList(left :List, right :Value|null) :[bool,List|null] {
+  // This is a total mess. Sorry.
+  if (!right) {
+    return [false, List.create(left.line, left.col, left, nil)]
+  }
+  if (
+    !(right instanceof List) ||
+    right.type != left.type ||
+    left.length == 0 ||
+    right.length == 0 ||
+    (!(left[0] instanceof List) && diff(left[0], right[0])) // (a x) (b x)
+  ) {
+    return [false, List.create(left.line, left.col, left, right)]
+  }
+
+  diffprint(`${ind}diffList  ${left}  ⊆  ${right}`)
+
+  let partialMatchIndex = -1
+  let bestMatch :Value|null = null
+
+  function find(L :Value, minIndex :int) :int {
+    let index = 0
+    partialMatchIndex = -1
+    bestMatch = null
+    for (let R of right as List) {
+      if (R.constructor === L.constructor && index > minIndex) {
+        let d :List|null
+        if (L instanceof List)  {
+          let [partial, d2] = diffList(L, R)
+          d = d2
+          if (partial) {
+            partialMatchIndex = index
+          }
+        } else {
+          d = diff(L, R)
+        }
+        if (!d) {
+          return index
+        }
+        if (R.constructor === L.constructor) {
+          bestMatch = R
+        }
+        diffprint(`${ind}res   ${L}  ⊆  ${R}  ⇒  ${d}`)
+      }
+      index++
+    }
+    return -1
+  }
+
+  let d :List|null = null
+  let lastIndex = -1
+  let nmatches = 0
+  let isIdList = !(left[0] instanceof List)
+
+  for (let li = isIdList ? 1 : 0; li < left.length; li++) {
+    let L = left[li]
+    diffprint(`${ind}find  ${L}`)
+    indincr()
+    let i = find(L, lastIndex)
+    inddecr()
+    if (i == -1) {
+      // if (partialMatchIndex != -1) {
+      //   diffprint(`${ind}PARTIAL match  ${right[partialMatchIndex]}`)
+      // }
+      if (!d) {
+        d = new List(left.line, left.col, "(")
+        if (isIdList) {
+          d.push(left[0])
+        }
+      }
+      let R = right[partialMatchIndex == -1 ? li : partialMatchIndex]
+      if (!R || R instanceof Sym) {
+        if (bestMatch && !((bestMatch as any) instanceof Sym)) {
+          let R2 = bestMatch as any as Value
+          if (isIdList && R2 instanceof List && diff(left[0], R2[0])) {
+            // don't use best-match lists unless they match on arg0
+            diffprint(`${ind}R2 erasure  ${R2}  <${R2.constructor.name}>`)
+            R = nil
+          } else {
+            R = bestMatch
+          }
+        } else {
+          // if (bestMatch) {
+          //   diffprint(`${ind}ignoring bestMatch  ${bestMatch}`)
+          // }
+          R = nil
+        }
+      }
+      diffprint(`${ind}not found; select substitute  ${R}`)
+      d.push(List.create(L.line, L.col, L, R))
+    } else {
+      diffprint(`${ind}found at ${i}`)
+      lastIndex = i
+      nmatches++
+    }
+  }
+
+  let partial = !!d && nmatches > 0
+
+  if (!partial && !(left[0] instanceof List)) {
+    // diffprint(`${ind}•• not partial but is id list`)
+    partial = true
+  }
+
+  return [partial, d]
+}
+
+function diffSym(L :Sym, R :Value|null) :List|null {
+  return !R ? List.create(L.line, L.col, L, nil) :
+         (R instanceof Sym && R.value === L.value) ? null :
+         List.create(L.line, L.col, L, R)
+}
+
+function diffPre(L :Pre, R :Value|null) :List|null {
+  let d = diffSym(L, R)
+  return d === null && R instanceof Pre && L.type !== R.type ?
+         List.create(L.line, L.col, L, R) : d
+}
+
+function diffUnion(L :Union, R :Value|null) :List|null {
+  if (!R) { return List.create(L.line, L.col, L, nil) }
+  if (!(R instanceof Union) || L.prefix !== R.prefix || L.length !== R.length) {
+    return List.create(L.line, L.col, L, R)
+  }
+  // unions must match exactly (unlike lists)
+  for (let i = 0; i < L.length; i++) {
+    let D = diffSym(L[i], R[i])
+    if (D) {
+      return List.create(L.line, L.col, L, R)
+    }
+  }
+  return null
+}
+
+// ----------------------------------------------------------
+// test
+
+function assertS(v :any, value :string) {
+  assert(v.constructor === Sym)
+  assert(v.value == value, `${v.value} == ${value}`)
+}
+function assertP(v :any, value :string, type :PreType) {
+  assert(v.constructor === Pre)
+  assert(v.value == value, `${v.value} == ${value}`)
+  assert(v.type == type, `${v.type} == ${type}`)
+}
+function assertL(v :any, type :ListType, length :int) {
+  assert(v.constructor === List)
+  assert(v.type == type, `${v.type} == ${type}`)
+  assert(v.length == length, `${v.length} == ${length}`)
+}
+
+TEST("parse", () => {
+  let xs = parse(`
+    (a
+      (b c
+        [d e])
+      <f g>  // comment
+      "h i"
+      'j k')
+  `) as any
+  assertL(xs, "", 1)  // parse returns an anonymous list of lists
+  assertL(xs[0], "(", 5)
+  assertS(xs[0][0], "a")
+  assertL(xs[0][1], "(", 3)
+  assertS(xs[0][1][0], "b")
+  assertS(xs[0][1][1], "c")
+  assertL(xs[0][1][2], "[", 2)
+  assertL(xs[0][2], "<", 2)
+  assertS(xs[0][2][0], "f")
+  assertS(xs[0][2][1], "g")
+  assertP(xs[0][3], "h i", '"')
+  assertP(xs[0][4], "j k", "'")
+})
+
+TEST("toString", () => {
+  let xs = parse(`(a (b c [d e]) <f g> "h i" 'j k')`)[0]
+  assertEq(xs.toString(), `(a (b c (d e)) (f g) "h i" 'j k')`)
+  assertEq(xs.toString("\n"), `
+    (a
+      (b c
+        (d e))
+      (f g) "h i" 'j k')
+  `.trim().replace(/\n    /g, "\n"))
+  // note that toString only really supports "\n" and " " as the provided
+  // string is inserted at list starting points, as illustrated here:
+  assertEq(xs.toString("•"), `(a•(b c•(d e))•(f g) "h i" 'j k')`)
+})
+
+
+TEST('diff', () => {
+  assertEq(diff(parse("(a c)")[0],
+                parse("(a b c d)")[0])+"",
+           "null") // no difference
+
+  assertEq(diff(parse("(a (x y))")[0],
+                parse("(a b (x y)")[0])+"",
+           "null")
+
+  assertEq(diff(parse("(a c x)")[0],
+                parse("(a b c d e)")[0])+"",
+           "(a (x nil))")  // x not found
+
+  assertEq(diff(parse("(a c x y)")[0],
+                parse("(a b c d e)")[0])+"",
+           "(a (x nil) (y nil))")  // x and y not found
+
+  assertEq(diff(parse("(a b (c (d x)))")[0],
+                parse("(a b (c k (d z)))")[0])+"",
+           "(a ((c (d x)) (c k (d z))))") // list "c" is different
+
+  assertEq(diff(parse("(a (c (d x)) (g h))")[0],
+                parse("(a (b 1) (c k (d z)) p (g h))")[0])+"",
+           "(a ((c (d x)) (c k (d z))))") // list "c" is different
+
+  assertEq(diff(parse("(a (x y))")[0],
+                parse("(a b (y x)")[0])+"",
+           "(a ((x y) nil))")  // y out-of order
+
+  assertEq(diff(parse("(a u(x|y))")[0],
+                parse("(a b u(x|y)")[0])+"",
+           "null")  // unions
+
+  assertEq(diff(parse("(a u(x|y))")[0],
+                parse("(a b u(x|y|z)")[0])+"",
+           "(a (u(x|y) u(x|y|z)))") // unions must match exactly
+
+  assertEq(diff(parse("(a k(x|y))")[0],
+                parse("(a b z(x|y)")[0])+"",
+           "(a (k(x|y) z(x|y)))") // unions with different prefix
+
+  assertEq(diff(parse(`
+    (a
+      (b b1)
+      a1
+      (b b2
+        (c c1
+          (d d1)))
+      a2)
+    `)[0], parse(`
+    (a
+      (b b1)
+      a1
+      (b b2
+        (c c1
+          (d d1)))
+      a2)
+    `)[0])+"",
+    "null")
+
+  diffprint("----------------------------")
+  assertEq(diff(parse(`
+    (a
+      (b
+        (c d)))
+    `)[0], parse(`
+    (a
+      x
+      (b
+        y
+        (c k)))
+    `)[0])+"",
+    "(a ((b (c d)) (b y (c k))))")
+
+  assertEq(diff(parse(`
+    (a
+      (b b1 matches)
+      a1
+      (b
+        (c c1
+          (d d1)))
+      a2)
+    `)[0], parse(`
+    (a
+      (b b1 matches)
+      a1
+      ignored
+      (b
+        included
+        (c c1
+          (d dx)))
+      a2)
+    `)[0])+"",
+    "(a ((b (c c1 (d d1))) (b included (c c1 (d dx)))))")
+
+  // // source location
+  // { let d = diff(parse(
+  //     `         // line 1
+  //     (a        // line 2
+  //       (b b1)  // line 3
+  //       a2)     // line 4
+  //     `)[0], parse(
+  //     `         // line 1
+  //     (a        // line 2
+  //       x       // line 3
+  //       y       // line 4
+  //       (b bx)  // line 5
+  //       a2)     // line 6
+  //   `)[0]) as any
+  //   assertEq(d+"", "(((b1 bx)))")
+  //   assertEq(d[0][0][0].line, 3)  // b1
+  //   assertEq(d[0][0][1].line, 5)  // bx
+  //   assertEq(d[0].line, 3) // synthetic lists inherit location of left side
+  // }
+})

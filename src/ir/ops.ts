@@ -23,7 +23,7 @@ const u64_ffff = new UInt64(65535,0),
       u64_ffffffff = new UInt64(-1,0);
 
 export const ops = {
-
+  
   // generic
   Invalid: 0,
   Unknown: 1,

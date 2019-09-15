@@ -1,11 +1,21 @@
 import { monotime } from './time'
 
 export function assertEq(actual :any, expected :any, context? :string) {
+  let obj = {
+    toString() :string {
+      let exs = JSON.stringify(expected)
+      let acs = JSON.stringify(actual)
+      return (
+        (Math.max(exs.length, acs.length) > 25 ?
+          `expected\n  ${exs}\nbut instead got\n  ${acs}\n` :
+          `expected ${exs} but instead got ${acs}` ) +
+        (context ? ' — ' + context : '')
+      )
+    }
+  }
   assert(
     actual === expected,
-    `expected ${JSON.stringify(expected)} `+
-    `but instead got ${JSON.stringify(actual)}` +
-    (context ? ' — ' + context : ''),
+    obj as string,
     assertEq
   )
 }

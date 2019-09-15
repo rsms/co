@@ -8,6 +8,10 @@ interface WArrayLike<T> {
   [n: number]: T
 }
 
+interface Constructor<T> {
+  new(...args :any[]) :T
+}
+
 declare var AssertionError :ErrorConstructor
 declare const DEBUG :boolean
 declare const VERSION :string      // e.g. "0.1.2"

@@ -1,0 +1,27 @@
+a = 1
+å = 1
+kαβ = 1
+αβ = 1
+$foo = 1
+grinning-face = 1
+Ꙁ_gԃ = 1
+😎 = 1
+🕺🏽 = 1
+
+// U+1F469 U+1F3FD U+200D U+1F680
+👩🏽‍🚀 = "astronout woman with skin tone modifier"
+
+
+#end lisp // expected
+(
+  (VarDecl (idents (id a )))
+  (VarDecl (idents (id å )))
+  (VarDecl (idents (id kαβ )))
+  (VarDecl (idents (id αβ )))
+  (VarDecl (idents (id $foo )))
+  (VarDecl (idents (id grinning-face )))
+  (VarDecl (idents (id Ꙁ_gԃ )))
+  (VarDecl (idents (id 😎 )))
+  (VarDecl (idents (id 🕺🏽 )))
+  (VarDecl (idents (id 👩🏽‍🚀 )))
+)

@@ -28,9 +28,33 @@ export function search(n :number, f :(n:number)=>bool) :int {
   return i
 }
 
+// serialize works on a collection of promieses.
+// It's similar to Promise.all but instead of being concurrent, this function
+// executes each promise serially; in order.
+//
+// Example:
+//   let foo = (msg :string, delay :number) =>
+//     new Promise<string>(res => setTimeout(() => { log(msg); res(msg) }, delay))
+//   let inputs :[string,number][] = [
+//     ["hello", 10],["world",50],["good night",0]]
+//   serialize(inputs.map(a=>()=>foo(a[0],a[1]))).then(results => log({results}))
+//   // Console: hello\nworld\ngood night\n
+//   Promise.all(inputs.map(a=>foo(a[0],a[1]))).then(results => log({results}))
+//   // Console: good night\nhello\nworld\n
+//
+export function serialize<T>(v :(()=>Promise<T>)[]) :Promise<T[]> {
+  let results :T[] = []
+  let p = v[0]()
+  for (let i = 1; i < v.length; i++) {
+    let f = v[i]
+    p = p.then(r => (results.push(r), f()))
+  }
+  return p.then(r => (results.push(r), results))
+}
+
 // bufcopy creates a new buffer containing bytes with some additional space.
 //
-function bufcopy(bytes :ArrayLike<byte>, addlSize :int) {
+export function bufcopy(bytes :ArrayLike<byte>, addlSize :int) {
   const size = bytes.length + addlSize
   const b2 = new Uint8Array(size)
   b2.set(bytes, 0)
@@ -253,7 +277,7 @@ export class AppendBuffer implements ByteWriter {
   private _grow(minAddlSize :int) {
     this.buffer = bufcopy(
       this.buffer,
-      Math.min(minAddlSize, this.buffer.length)
+      Math.max(minAddlSize, this.buffer.length)
     )
   }
 }
@@ -329,4 +353,33 @@ function _debuglog(...v :any[]) {
 export function is2pow(n :int) :bool {
   assert(n > 0)
   return (n & (n - 1)) == 0
+}
+
+// mstr takes a multi-line string as input and strips a whitespace prefix from each line
+// when the last line is purely whitespace.
+//
+export function mstr(s :string) :string {
+  let p = s.lastIndexOf("\n")
+  if (p == -1) { return s }
+  let ind = s.substr(p + 1)
+  for (let i = 0; i < ind.length; i++) {
+    let c = ind.charCodeAt(i)
+    if (c != 0x20 && c != 0x09) { // SP TAB
+      // last line is not just whitespace -- treat as vanilla string
+      return s
+    }
+  }
+  s = s.substr(s.charCodeAt(0) == 0x0A ? 1 : 0, p) // strip first LF + last line
+  let lines :string[] = []
+  for (let line of s.split("\n")) {
+    if (line.length == 0) {
+      lines.push(line)
+    } else if (!line.startsWith(ind)) {
+      // some line does not begin with ind -- treat as vanilla string
+      return s
+    } else {
+      lines.push(line.substr(ind.length))
+    }
+  }
+  return lines.join("\n")
 }

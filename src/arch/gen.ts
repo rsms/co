@@ -984,7 +984,12 @@ function tsCodeRefersToIdentifiers(tscode :string, idents :Set<string>, onerror 
 function loadRewriteRules(a :ArchDescr, rulesFile :string, outFile :string) :sexpr.List|null {
   try {
     let src = readFileSync(rulesFile, "utf8")
-    return sexpr.parse(src, rpath(rulesFile))
+    return sexpr.parse(src, {
+      filename: rpath(rulesFile),
+      brackAsPre: true, // parse [...] as Pre
+      braceAsPre: true, // parse {...} as Pre
+      ltgtAsPre: true,  // parse <...> as Pre
+    })
   } catch (err) {
     if (err.code == "ENOENT") {
       // print(`${rpath(rulesFile)} not found; skipping arch "${a.arch}"`)

@@ -1,5 +1,5 @@
-import { Node, Stmt, Type, Expr, FunExpr } from "./ast_nodes"
-import { ByteStr } from './bytestr'
+import { ByteStr } from '../bytestr'
+import { Node, Stmt, Type, Template, Expr, FunExpr } from "./nodes"
 
 // An Ent describes a named language entity such as a package,
 // constant, type, variable, function (incl. methods), or label.
@@ -46,13 +46,14 @@ export class Ent {
     this.name = name
     this.decl = s
     this.value = value
-    this.type = (
-      type ||
-      ( s.isType() && s ) ||
-      ( (s.isFieldDecl() || s.isVarDecl() || s.isTypeDecl()) && s.type ) ||
-      ( value && value.type ) ||
-      null
-    )
+    this.type = type
+    if (s.isType()) {
+      this.type = s
+    } else if (s.isFieldDecl() || s.isVarDecl() || s.isTypeDecl()) {
+      this.type = s.type
+    } else if (value) {
+      this.type = value.type
+    }
     this.data = data
   }
 
@@ -72,6 +73,10 @@ export class Ent {
 
   get scope() :Scope {
     return this.decl._scope
+  }
+
+  toString() :string {
+    return `(Ent ${this.name} ${this.decl})`
   }
 }
 
@@ -152,6 +157,48 @@ export class Scope {
       s = s.outer
     }
     return null
+  }
+
+  // templateScope returns the nearest scope which context is a template
+  //
+  templateScope() :Scope|null {
+    let s :Scope|null = this
+    while (s) {
+      if (s.context instanceof Template) {
+        return s
+      }
+      s = s.outer
+    }
+    return null
+  }
+
+  // filter returns a copy of the scope with ents passing the filter.
+  //
+  filter(f :(name :ByteStr, ent :Ent)=>bool) :Scope {
+    let scope = new Scope(this.outer)
+    if (this.decls) {
+      scope.decls = new Map<ByteStr,Ent>()
+      for (let [name, ent] of this.decls) {
+        if (f(name, ent)) {
+          scope.decls.set(name, ent)
+        }
+      }
+    }
+    return scope
+  }
+
+  // copy returns a shallow copy of the scope.
+  //
+  // The returned copy references the same Ents, but has its own
+  // declaration mappings, allowing modification of mapping without
+  // affecting the source of the copy.
+  //
+  copy(filter? :(name :ByteStr, ent :Ent)=>bool) :Scope {
+    let scope = new Scope(this.outer)
+    if (this.decls) {
+      scope.decls = new Map<ByteStr,Ent>(this.decls)
+    }
+    return scope
   }
 
   level() {

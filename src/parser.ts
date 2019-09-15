@@ -1,4 +1,4 @@
-import { Pos, NoPos, SrcFile } from './pos'
+import { Pos, NoPos, Position, SrcFile } from './pos'
 import { token, tokstr, prec } from './token'
 import * as scanner from './scanner'
 import { ErrorHandler, ErrorCode } from './error'
@@ -8,6 +8,9 @@ import { Universe } from './universe'
 import { DiagHandler, DiagKind } from './diag'
 import { SInt64, UInt64 } from './int64'
 import { numconv } from './numconv'
+import * as utf8 from "./utf8"
+import * as template from "./template"
+import * as ast from "./ast"
 import {
   types,
   values,
@@ -33,9 +36,12 @@ import {
   TupleType,
   StructType,
   RestType,
-  TypeVar,
   AliasType,
   OptionalType,
+
+  Template,
+  TemplateVar,
+  TemplateInvocation,
 
   Stmt,
   ReturnStmt,
@@ -81,7 +87,7 @@ const str_init = strings.get(new Uint8Array([0x69, 0x6e, 0x69, 0x74])) // "init"
 
 const emptyExprList :Expr[] = []
 
-type exprCtx = Type|Assignment|VarDecl|null
+type exprCtx = Type|TemplateInvocation<Type>|Assignment|VarDecl|null
 
 
 export class SyntaxError extends Error {
@@ -136,6 +142,8 @@ export class Parser extends scanner.Scanner {
   funstack   :funInfo[]  // function stack
   types      :TypeResolver
   throwOnSyntaxError :bool = false  // throw SyntaxError instead of reporting
+  endPos     :Position|null = null  // when non-null, the position of #end "data tail"
+  endMeta    :Expr[] = [] // any metadata immediately following #end
 
   initParser(
     sfile      :SrcFile,
@@ -162,6 +170,8 @@ export class Parser extends scanner.Scanner {
     p.funstack = []
     p.types = typeres
     p.throwOnSyntaxError = false
+    p.endPos = null
+    p.endMeta = []
 
     if (smode & scanner.Mode.ScanComments) {
       // sub token reader with one that does does not ignore comments
@@ -204,6 +214,20 @@ export class Parser extends scanner.Scanner {
     }
   }
 
+
+  // wantGtr is a specialized version of want() that consumes a ">" but not ">>".
+  wantGtr() {
+    const p = this
+    if (p.tok == token.SHR) {
+      // convert token ">>" to ">", effectively creating the appearance
+      // that there are a token ">" followed by a token ">".
+      // This because the scanner is unable to distinguish between ">>" and ">".
+      p.tok = token.GTR
+    } else {
+      p.want(token.GTR)
+    }
+  }
+
   // inFun() :FunExpr|null {
   //   return this.funstack[0] || null
   // }
@@ -229,18 +253,9 @@ export class Parser extends scanner.Scanner {
     // dlog(`${(p as any).scope.outer.level()} -> ${p.scope.level()}`)
   }
 
-  popScope() :Scope { // returns old ("popped") scope
+  popScope() :Scope { // returns "popped" scope
     const p = this
-    const s = p.scope
-
-    assert(s !== p.filescope, "pop file scope")
-    assert(s !== p.pkgscope, "pop file scope")
-    assert(p.scope.outer != null, 'pop scope at base scope')
-
-    // dlog(` ${(p as any).scope.outer.level()} <- ${p.scope.level()}`)
-
-    p.scope = p.scope.outer as Scope
-
+    const s = p.popScopeNoCheckUnused()
     // check for unused declarations
     if (s.decls) for (let [name, ent] of s.decls) {
       if (ent.nreads == 0) {
@@ -263,9 +278,20 @@ export class Parser extends scanner.Scanner {
     return s
   }
 
+  popScopeNoCheckUnused() :Scope { // returns "popped" scope
+    const p = this
+    const s = p.scope
+    assert(s !== p.filescope, "pop file scope")
+    assert(s !== p.pkgscope, "pop file scope")
+    assert(s.outer != null, 'pop scope at base scope')
+    // dlog(` ${(p as any).scope.outer.level()} <- ${p.scope.level()}`)
+    p.scope = p.scope.outer as Scope
+    return s
+  }
+
   // declare registers decl and x in scope identified by name
   //
-  declare(scope :Scope, ident: Ident, decl :Stmt, x: Expr|null) {
+  declare(scope :Scope, ident: Ident, decl :Stmt/*, x: Expr|null*/) {
     const p = this
 
     if (ident.value.isEmpty) {
@@ -275,7 +301,7 @@ export class Parser extends scanner.Scanner {
 
     assert(ident.ent == null, `redeclaration of ${ident}`)
 
-    const ent = new Ent(ident.value, decl, x)
+    const ent = new Ent(ident.value, decl, /*x*/null)
     if (!scope.declareEnt(ent)) {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
@@ -283,6 +309,11 @@ export class Parser extends scanner.Scanner {
     // dlog(`declare ${ident} => ${decl} in ${scope} [${ent.type}]`)
 
     ident.ent = ent
+
+    // if (!ident.type) {
+    //   ident.type = ent.type
+    // }
+
     // TODO: in the else branch, we could count locals/registers needed here.
     // For instance, "currFun().local_i32s_needed++"
   }
@@ -292,7 +323,8 @@ export class Parser extends scanner.Scanner {
   declarev(scope :Scope, idents: Ident[], decl :Stmt, xs: Expr[]|null) {
     const p = this
     for (let i = 0; i < idents.length; ++i) {
-      p.declare(scope, idents[i], decl, xs && xs[i] || null)
+      // p.declare(scope, idents[i], decl, xs && xs[i] || null)
+      p.declare(scope, idents[i], decl)
     }
   }
 
@@ -304,16 +336,25 @@ export class Parser extends scanner.Scanner {
     // }
     assert(id.ent == null, "already resolved")
     let s :Scope|null = id._scope
-    while (s) {
-      // dlog(`lookupImm ${id} in ${s}`)
-      const ent = s.lookupImm(id.value)
-      if (ent) {
-        // dlog(`${id} found in scope#${s.level()}`)
-        id.refEnt(ent)
-        return ent
-      }
-      s = s.outer
+
+    // while (s) {
+    //   // dlog(`lookupImm ${id} in ${s}`)
+    //   const ent = s.lookupImm(id.value)
+    //   if (ent) {
+    //     // dlog(`${id} found in scope#${s.level()}`)
+    //     id.refEnt(ent)
+    //     return ent
+    //   }
+    //   s = s.outer
+    // }
+
+    let ent = s.lookup(id.value)
+    if (ent) {
+      // dlog(`${id} found in scope#${s.level()}`)
+      id.refEnt(ent)
+      return ent
     }
+
     // dlog(`${id} not found`)
     // all local scopes are known, so any unresolved identifier
     // must be found either in the file scope, package scope
@@ -344,6 +385,9 @@ export class Parser extends scanner.Scanner {
     let ent = p.resolveEnt(x)
     if (ent) {
       if (!ent.decl.isType()) {
+        if (ent.decl.isTemplateVar()) {
+          x.type = ent.type
+        }
         p.syntaxError(`${x} is not a type`, x.pos)
       } else if (ent.type) {
         x.type = ent.type
@@ -358,7 +402,7 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // resolveType resolved identifier x as an expression.
+  // resolveType resolves identifier x as an expression.
   // If the identifier was successfully resolved, x.ent is set to the resolved Ent
   // and x.type is set to either UndefinedType or a known Type.
   resolveVal<T extends Ident|SelectorExpr|IndexExpr>(x :T) :T {
@@ -370,20 +414,29 @@ export class Parser extends scanner.Scanner {
     }
     let ent = p.resolveEnt(x)
     if (ent) {
-      if (ent.decl.isTypeDecl()) {
-        // identifier names a type
-        x.type = ent.decl.type
+      // identifier names a value or is not yet known
+      if (!ent.type) {
+        x.type = p.types.markUnresolved(x)
       } else {
-        // identifier names a value or is not yet known
-        if (!ent.type) {
-          x.type = p.types.markUnresolved(x)
-          return x  // return to avoid double ref
-        }
         x.type = ent.type
+        if (x.type.isUnresolvedType()) {
+          x.type.addRef(x)
+        }
       }
-      if (x.type.isUnresolvedType()) {
-        x.type.addRef(x)
-      }
+      // if (ent.decl.isTypeDecl()) {
+      //   // identifier names a type
+      //   x.type = ent.decl.type
+      // } else {
+      //   // identifier names a value or is not yet known
+      //   if (!ent.type) {
+      //     x.type = p.types.markUnresolved(x)
+      //     return x  // return to avoid double ref
+      //   }
+      //   x.type = ent.type
+      // }
+      // if (x.type.isUnresolvedType()) {
+      //   x.type.addRef(x)
+      // }
     }
     return x
   }
@@ -428,6 +481,8 @@ export class Parser extends scanner.Scanner {
       imports,
       decls,
       p.unresolved,
+      p.endPos,
+      p.endMeta,
     )
   }
 
@@ -476,10 +531,132 @@ export class Parser extends scanner.Scanner {
     const d = new ImportDecl(p.pos, p.scope, path, localIdent)
 
     if (hasLocalIdent && localIdent) {
-      p.declare(p.filescope, localIdent, d, null)
+      p.declare(p.filescope, localIdent, d)
     }
 
     return d
+  }
+
+  // directive is a C preprocessor-like piece of metadata of the form "#directive [attrs];"
+  //
+  // Directive    = endDirective
+  // endDirective = "#end" Expr* (";"? <CR>? <LF> <data> | EOF)
+  //
+  directive() {
+    const p = this
+    let directive = p.stringValue()
+
+    // we only support #end for now, so let's keep this simple.
+    if (directive != "end") {
+      p.next()
+      p.syntaxError(`invalid directive #${directive}`)
+      return
+    }
+
+    // parsing #end
+
+    // make sure endMeta is empty
+    assert(p.endMeta.length == 0)
+
+    let pos :Pos
+    let directivePos = p.pos
+
+    if (p.ch == -1) {  // EOF
+      pos = p.sfile.pos(p.offset)
+    } else if (p.ch == 0x0A) { // \n  (common case)
+      pos = p.sfile.pos(p.offset + 1)
+    } else {
+      // next: optional sequence of expressions and comments
+
+      // disable comment scanning and save scan mode
+      let scanMode = p.mode
+      p.mode |= ~scanner.Mode.ScanComments
+
+      // scan expressions and comments until we encounder a semicolon
+      p.next()
+      while (p.tok != token.SEMICOLON && p.tok != token.EOF) {
+        p.endMeta.push(p.expr(/*ctx*/null))
+      }
+
+      // restore scanner mode
+      p.mode = scanMode
+
+      // consume optional CR
+      if (p.ch == 0x0D) {
+        p.readchar()  // readchar instead of incrementing offset, so we can check for LF
+      }
+
+      // compute pos from offset
+      pos = p.sfile.pos(p.offset)
+
+      // now, require a line break or EOF
+      if (p.ch == 0x0A) {
+        // read explicit semicolon; read LF
+        pos = p.sfile.pos(p.offset + 1)
+      } else if (p.ch == -1) {
+        pos = p.sfile.pos(p.offset)
+      } else {
+        //
+        // Okay, so this is a little gnarly, a little tricky.
+        //
+        // Say we have a trailing comment:
+        //    #end // comment
+        //    hello
+        // What happens is that we end up with p.ch=='h' (first letter of "hello").
+        //
+        // Okay, now consider this where we have an explicit semicolon before the comment:
+        //    #end; // comment
+        //    hello
+        // What happens is that we end up with p.ch==' ' (space just before the comment).
+        //
+        // There's really no good way to tell if we are at the beginning of the data part,
+        // or if there is a trailing line comment.
+        // This happens because our scanner is proactive; we scan ahead. But we can't scan ahead
+        // into the data part, since it very possibly does not contains valid Co code, which
+        // would cause an error.
+        //
+        // One idea that may seem obvious:
+        //   We could disable error reporting on the scanner, scan ahead, and then look at
+        //   the results to determine if we are done.
+        // However, this still had the issue of ambiguity -- how do we know that we didn't just
+        // scan into the data part that happened to contain ";"?
+        //
+        // Instead, we employ a simple workaround:
+        //   If the current source line is the same as where "#end" begun, blindly advance until
+        //   the first LF or EOF.
+        //
+        // This works well in all cases but one:
+        //   Example:
+        //     #end fun(){
+        //     } // comment
+        //     hello
+        //   Since we allow any expression to immediately follow #end, multi-line expressions
+        //   like a function is valid, and it would cause line position advance, which would
+        //   "trick" us into thinking that we found the start of the data, but in fact we would
+        //   be positioned at the beginning of the comment.
+        //
+        // The example above is a such and edge case, and really, bad practice,
+        // so we roll with it.
+        //
+        let position = p.sfile.position(pos)
+        let directivePosition = p.sfile.position(directivePos)
+        if (directivePosition.line == position.line) {
+          // find end of line or end of file
+          while (p.ch != 0x0A && p.ch != -1) {
+            p.readchar()
+          }
+          pos = p.sfile.pos(p.ch == -1 ? p.offset : p.offset + 1)  // +1 for LF
+        } else {
+          pos = p.sfile.pos(p.offset)
+        }
+      }
+    }
+
+    // compute source position information from pos
+    p.endPos = p.sfile.position(pos)
+
+    // set scanner state to EOF to make sure we don't try to interpret the data following #end
+    p.setEOF()
   }
 
   parseFileBody() :Decl[] {
@@ -505,7 +682,9 @@ export class Parser extends scanner.Scanner {
           decls.push(p.funExpr(null))
           break
 
-        // TODO: token.TYPE
+        case token.DIRECTIVE:
+          this.directive()
+          break
 
         default: {
           if (
@@ -562,27 +741,48 @@ export class Parser extends scanner.Scanner {
     // // is "X = Y" rather than "X Y"?
     // const isSimpleAlias = p.got(token.ASSIGN)  // type X = Y
 
-    let isAlias = p.tok == token.NAME
+    // template?
+    let template :Template<Type>|null = null
+    if (p.tok == token.LSS) {
+      p.pushScope()
+      template = new Template<Type>(p.pos, p.scope, [], types.nil)
+      p.scope.context = template
+      p.templateVars(template)
+    }
 
-    let t = p.maybeType(id)
+    let isAlias = p.tok == token.NAME
+    let t :Type|Template<Type>|TemplateInvocation<Type>|null = p.maybeType(id)
     if (!t) {
+      if (template) {
+        p.popScope()
+      }
       t = p.bad<Type>(pos, "type")
       p.syntaxError("in type declaration")
       p.advanceUntil(token.SEMICOLON, token.RPAREN)
-    }
-
-    // create new alias type, which is basically a Template witout params
-    if (isAlias) {
-      t = new AliasType(id.pos, id.value, t)
+    } else {
+      if (template) {
+        // t => (Template t)
+        assert(t.isType()) // Note: we may have to allow TemplateInvocation
+        template.base = t
+        t = template
+        // Note: popScope() checks for unused vars defined in the scope, which
+        // means that for e.g. "type Foo<A,B> { a A }" a "warning" diagnostic is
+        // emitted saying "B declared and not used".
+        p.popScope()
+      } else if (isAlias) {
+        // create new alias type, which is basically a Template witout params
+        assert(t.isType())
+        t = new AliasType(id.pos, id.value, t as Type)
+      }
     }
 
     // scope. ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
     // declare id => t
-    p.declare(scope, id, t, null)
+    p.declare(scope, id, t!)
 
-    return new TypeDecl(pos, scope, id, t, group)
+    return new TypeDecl(pos, scope, id, t as Type, group)
   }
 
   varDecl(pos :Pos, idents :Ident[]) :VarDecl|Assignment {
@@ -590,12 +790,10 @@ export class Parser extends scanner.Scanner {
     //           ( Type [ "=" ExpressionList ] | "=" ExpressionList )
     const p = this
     const typ = p.maybeType(null)
-    let isError = false
-
     // ids at the file level are declared in the package scope
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
-
-    const d = new VarDecl(pos, scope, idents, null, typ, null)
+    const d = new VarDecl(pos, scope, null, idents, typ, null)
+    let isError = false
 
     if (p.got(token.ASSIGN)) {
       // e.g. x, y = 1, 2
@@ -617,6 +815,63 @@ export class Parser extends scanner.Scanner {
 
     return d
   }
+
+  // templateVars parses template var definitions.
+  //
+  // TemplateVarDef = "<" (TemplateVars ","? )? ">"
+  // TemplateVars   = TemplateVar (("," | ";") TemplateVar)*
+  // TemplateVar    = Ident Constraint? ("=" Default)?
+  // Constraint     = Type
+  // Default        = Expr
+  //
+  templateVars<T extends Expr>(template :Template<T>) {
+    const p = this
+    const pos = p.pos
+    const scope = p.scope
+
+    p.want(token.LSS)  // consume "<"
+
+    // seenDefault is set to true if we see a typevar with a default value
+    // in which case any following typevars also need default values.
+    let seenDefault = false
+
+    while (p.tok != token.GTR && p.tok != token.SHR && p.tok != token.EOF) {
+      let name = p.ident()
+
+      // constraint? e.g. "A T"
+      let constraint = p.maybeType(null)
+
+      // default? e.g. "A = T"
+      let def :T|null = null
+      if (p.got(token.ASSIGN)) {
+        // def = p.type()
+        def = p.expr(constraint) as T
+        seenDefault = true
+      } else if (seenDefault) {
+        p.syntaxError(
+          `variable without default value following variable with a default value`,
+          name.pos
+        )
+      }
+
+      if (name.value.isEmpty) {
+        p.syntaxError(`invalid template variable name "_"`, name.pos)
+      } else {
+        let tvar = new TemplateVar<T>(name.pos, scope, name, constraint, def)
+        p.declare(scope, name, tvar)
+        template.vars.push(tvar)
+      }
+
+      // if we get ";" or ",", continue with maybe parsing another typevar
+      if (p.tok == token.COMMA || p.tok == token.SEMICOLON) {
+        p.next()
+      } else {
+        break
+      }
+    }
+    p.wantGtr()  // ">"
+  }
+
 
   funExpr(ctx :exprCtx) :FunExpr {
     //
@@ -689,7 +944,7 @@ export class Parser extends scanner.Scanner {
         // expressions are not declared in the scope.
         // E.g. the statement "x = fun y(){}" should only declare x in the scope,
         // but not y.
-        p.declare(scope, name, f, f)
+        p.declare(scope, name, f)
       }
     }
 
@@ -1019,7 +1274,7 @@ export class Parser extends scanner.Scanner {
 
           // declare name in function scope
           assert(f.name)
-          p.declare(scope, f.name!, f, null)
+          p.declare(scope, f.name!, f)
         }
       } else {
         // All named, all have types
@@ -1030,7 +1285,7 @@ export class Parser extends scanner.Scanner {
           }
           assert(f.name)
           f.name!.type = f.type
-          p.declare(scope, f.name!, f, null)
+          p.declare(scope, f.name!, f)
         }
       }
     }
@@ -1260,7 +1515,7 @@ export class Parser extends scanner.Scanner {
 
       if (p.unresolved) { p.unresolved.delete(id) } // may be noop
       // p.declare(id._scope, id, decl, rval)
-      p.declare(id._scope, id, decl, null)
+      p.declare(id._scope, id, decl)
 
       if (id.type.isUnresolvedType()) {
         id.type.addRef(id)
@@ -1708,6 +1963,11 @@ export class Parser extends scanner.Scanner {
     const p = this
     let x = p.unaryExpr(pr, ctx)
 
+    if ((p.tok == token.GTR || p.tok == token.SHR) && ctx instanceof Template) {
+      // when we parse template expansion, ">" terminates
+      return x
+    }
+
     // if (ctx && !ctx.type && ctx instanceof Assignment) {
     //   let ctxt = p.ctxType(ctx)
     //   if (!ctxt) {
@@ -1727,10 +1987,11 @@ export class Parser extends scanner.Scanner {
   maybeBinaryExpr(x :Expr, pr :prec, ctx :exprCtx) :Expr {
     const p = this
     while (token.operator_beg < p.tok && p.tok < token.operator_end && p.prec > pr) {
+      const op = p.tok
+
       // save operator info and parse next token
       const pos = p.pos
       const pr2 = p.prec
-      const op = p.tok
       p.next()
 
       // expect some expression to follow
@@ -1757,7 +2018,8 @@ export class Parser extends scanner.Scanner {
     const p = this
     assert(p.tok == token.LSS)  // enter at token.LSS "<"
 
-    // // TODO: re-introduce generics/templates
+    dlog("TODO: re-introduce generics/templates")
+
     return p.maybeBinaryExpr(lhs, pr, ctx)
     // return p.tryWithBacktracking(
 
@@ -1986,6 +2248,7 @@ export class Parser extends scanner.Scanner {
       default: {
         const x = p.bad()
         p.syntaxError("expecting expression")
+        p.next()
         return x
       }
     }
@@ -2068,7 +2331,10 @@ export class Parser extends scanner.Scanner {
       // convertToType may change these properties.
       let xv = x.value
       let xt = x.type
-      if (!x.convertToType(reqt)) {
+      let x2 = x.convertToType(reqt)
+      if (x2) {
+        x = x2
+      } else {
         if ((xt instanceof IntType) == (reqt instanceof IntType)) {
           p.syntaxError(`constant ${xv} overflows ${reqt.name}`, x.pos)
         } else {
@@ -2249,8 +2515,9 @@ export class Parser extends scanner.Scanner {
 
     if (p.got(token.RBRACKET)) {
       // list type expression. e.g. x[]
-      dlog(`TODO: FIXUP generics`)
-      // let opt :Type = p.types.resolve(operand).canonicalType()
+      let elementType = p.types.resolve(operand).canonicalType()
+      print(`list elementType: ${elementType}`)
+      return new ListType(elementType)
       // let lt = p.types.getGenericInstance(t_list, [opt])
       // return new TypeExpr(pos, p.scope, lt)
     }
@@ -2325,6 +2592,11 @@ export class Parser extends scanner.Scanner {
     const pos = p.pos
     p.want(token.LPAREN)
 
+    // erase template from ctx as paren escapes template
+    if (ctx instanceof Template) {
+      ctx = null
+    }
+
     const l :Expr[] = []
     while (true) {
       l.push(p.expr(ctx))
@@ -2334,8 +2606,8 @@ export class Parser extends scanner.Scanner {
         p.want(token.RPAREN)
         return x
       }
-      if (!p.ocomma(token.RPAREN)) {
-        break  // error: unexpected ;, expecting comma, or )
+      if (!p.got(token.SEMICOLON) && !p.ocomma(token.RPAREN)) {
+        break  // error: unexpected X, expecting comma, or )
       }
       if (p.tok == token.RPAREN) {
         break
@@ -2392,29 +2664,40 @@ export class Parser extends scanner.Scanner {
     switch (p.tok) {
 
       case token.NAME: {
-        // TODO: resolveType on dotident, not leaf ident
         let x = p.dotident(null, p.ident())
         p.resolveType(x)
         t = p.types.resolve(x)
-        // TODO: re-introduce generics/templates
-        //
-        // Here, we want to check t and make sure it's a TemplateType,
-        // then we'll try to resolve its free type variables with the
-        // provided ones (e.g. A and B in Foo<A,B>).
-        //
-        // It's possible that we will not be able to bind all variables,
-        // which is probably fine and we would in that case produce
-        // another TemplateType with a scope with the provided bindings.
-        //
-        // Idea: Track Template parse scope in Scope. That way we could
-        // check right here if Foo<A,B> is an expansion of a template or not.
-        //
-        // This because we could be inside a template already, e.g.
-        //   type Bar<T> List<T>
-        //   type Foo<A,B> {
-        //     x Bar<A>  // <-  Bar<A> is a template over Bar<T> with binding A=T
-        //   }
-        //
+
+        // template instance? e.g. "List<int>"
+        if (p.tok as token == token.LSS) {
+          // Here, we want to check t and make sure it's a TemplateType,
+          // then we'll try to resolve its free type variables with the
+          // provided ones (e.g. A and B in Foo<A,B>).
+          if (t.isUnresolvedType()) {
+            // we don't know what t actually is yet, but we'll assume it's a template
+            // since the input seems to assume it is.
+            t = p.templateInvocation(Type, name, new Template<Type>(t.pos, t._scope, [], t))
+            assert(t.isType())
+          } else if (t.isTemplate()) {
+            let ti = p.templateInvocation(Type, name, t)
+            if (ti.isType()) {
+              t = ti
+            } else {
+              // TODO: for unexpanded TemplateInvocations, check ti.template.type
+              p.syntaxError(`expected type but got ${ti}`, x.pos)
+            }
+          } else {
+            // if (t.isUnresolvedType()) {
+            //   dlog(`TODO: handle UnresolvedType used in template expansion ${t.repr()}`)
+            //   let template = new Template(NoPos, p.scope, t, [])
+            //   let args = p.templateArgs(template)
+            // } else {
+            p.syntaxError(`providing template arguments to non-template type ${t}`, x.pos)
+            // }
+            p.advanceUntil(token.GTR)
+            p.next()
+          }
+        }
         break
       }
 
@@ -2428,21 +2711,36 @@ export class Parser extends scanner.Scanner {
 
     }
 
-    if (t) {
-      // optional, e.g. "x Foo?"
-      if (p.got(token.QUESTION)) {
-        let t1 = t
-        t = new OptionalType(t.pos, t1)
-        if (t1.isUnresolvedType()) {
-          t1.addRef(t)
-        }
+    if (!t) {
+      return null
+    }
+
+    // optional, e.g. "Foo?"
+    if (p.got(token.QUESTION)) {
+      let t1 = t
+      t = new OptionalType(t.pos, t1)
+      if (t1.isUnresolvedType()) {
+        t1.addRef(t)
       }
-      // list. e.g. Foo[][]
-      while(p.tok == token.LBRACKET) {
-        t = p.listType(t)
+    }
+    // list. e.g. Foo[][]
+    while (p.tok == token.LBRACKET) {
+      t = p.listType(t)
+    }
+    // Note: Optional list is invalid since empty list==nil.
+    // i.e. x Foo[]? is a syntax error
+
+    // union, e.g. A|B
+    if (p.got(token.OR)) {
+      let t2 = p.type()
+      if (t2.isUnionType()) {
+        // parsed another union type, i.e. A|B|C parsed as (A|(B|C))
+        t2.types = new Set<Type>([t].concat(Array.from(t2.types)))
+        t = t2
+      } else {
+        let types = new Set<Type>([t, t2])
+        t = new UnionType(t.pos, types)
       }
-      // Note: Optional list is invalid since empty list==nil.
-      // i.e. x Foo[]? is a syntax error
     }
 
     return t
@@ -2504,7 +2802,7 @@ export class Parser extends scanner.Scanner {
 
     // struct has its own scope
     p.pushScope()
-    let st = new StructType(pos, name, decls)
+    let st = new StructType(pos, p.scope, name, decls)
     p.scope.context = st
 
     // { TopLevelDecl ";" }
@@ -2545,45 +2843,73 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // // GenericTypeInstance = Type "<" (TypeArgs ","? )? ">"
-  // // TypeArgs            = Type ("," Type)*
-  // //
-  // genericType(t :Type) :Type {
-  //   const p = this
-  //   const pos = p.pos
-  //   const args :Type[] = []
+  // TemplateArgs = Expr (("," | ";") Expr)*
+  //
+  templateArgs(template :Template) :Node[] {
+    const p = this
+    // Parse input arguments
+    p.want(token.LSS)  // consume "<"
+    let args :Node[] = []
+    while (p.tok != token.GTR && p.tok != token.SHR && p.tok != token.EOF) {
+      args.push(p.expr(template))
+      // if we get ";" or ",", continue with maybe parsing another typevar
+      if (p.tok == token.COMMA || p.tok == token.SEMICOLON) {
+        p.next()
+      } else {
+        break
+      }
+    }
+    p.wantGtr()  // consume ">"
+    return args
+  }
 
-  //   p.want(token.LSS)  // consume "<"
 
-  //   if (!t.isGenericType()) {
-  //     p.syntaxError(`unexpected type vars for non-generic type ${t}`, pos)
-  //     return t
-  //   }
+  // TemplateInvocation = "<" TemplateArgs? ">" Template
+  //
+  // Returns TemplateInvocation in case the template base is unresolved, or
+  // we are currently parsing the definition of another template.
+  //
+  templateInvocation<T extends Node>(
+    ntype :Constructor<T>,
+    name :Ident|null,
+    tp :Template<T>,
+  ) :T|Template<T>|TemplateInvocation<T> {
+    const p = this
+    const pos = p.pos
+    const scope = p.scope
 
-  //   while (p.tok != token.GTR) {
-  //     args.push(p.type())
-  //     if (p.tok == token.COMMA) {
-  //       p.next() // consume optional comma
-  //     } else {
-  //       // end of type def
-  //       if (p.tok == token.SHR) {
-  //         // convert token ">>" to ">", effectively creating the appearance
-  //         // that there are a token ">" followed by a token ">".
-  //         // This happens because the scanner is unable to distinguish between
-  //         // ">>" and ">".
-  //         p.tok = token.GTR
-  //       } else {
-  //         if (p.tok as token != token.GTR) {
-  //           p.syntaxError(`expecting comma or >`)
-  //           p.advanceUntil(token.GTR)
-  //         }
-  //         p.next() // consume ">"
-  //       }
-  //       break
-  //     }
-  //   }
-  //   return p.types.getGenericInstance(t, args)
-  // }
+    // Parse input arguments
+    let args = p.templateArgs(tp)
+
+    // template instance
+    let ti = new TemplateInvocation<T>(pos, p.scope, name, args, tp)
+
+    if (tp.base.isUnresolvedType()) {
+      tp.base.addRef(ti)  // expand later, when resolved
+      return ti
+    }
+
+    if (args.length > tp.vars.length) {
+      p.syntaxError(`too many template arguments for ${tp}`, pos)
+    }
+
+    // if we're inside a template definition, we don't attempt expansion
+    if (p.scope.templateScope()) {
+      if (tp.vars.length > args.length) {
+        p.syntaxError(`not enough template arguments for ${tp}`, pos)
+      }
+      return ti
+    }
+
+    return template.expand(ntype, ti, null, (message :string, pos :Pos) => {
+      // error handler
+      message += ` when expanding template ${ti} as ${ntype.name}`
+      for (let t of ti.template.aliases()) {
+        message += `\n  alias for ${t}`
+      }
+      p.syntaxError(message, pos)
+    })
+  }
 
 
   // IdentifierList = identifier { "," identifier } .
@@ -2652,15 +2978,12 @@ export class Parser extends scanner.Scanner {
   ocomma(follow :token) :bool {
     const p = this
 
-    switch (p.tok) {
-      case token.COMMA:
-        p.next()
-        return true
-
-      case token.RPAREN:
-      case token.RBRACE:
-        // comma is optional before ) or }
-        return true
+    if (p.tok == token.COMMA) {
+      p.next()
+      return true
+    }
+    if (p.tok == follow) {
+      return true
     }
 
     p.syntaxError("expecting comma, or " + tokstr(follow))

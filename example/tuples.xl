@@ -2,5 +2,9 @@ t0 = (1, 2)
 t1 = (1, 2,)
 t2 = (1,)
 t3 = (1, (2, 3))
-var tt0 (int, float)
-var tt1 (int,)
+t4 = (
+  1
+  2
+)
+tt0 (int, f32)
+tt1 (int,)

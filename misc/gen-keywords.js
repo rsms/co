@@ -89,6 +89,7 @@ const keywordsJS = genBTree(cdat, new Map([
   ["import",  "token.IMPORT"],
   ["interface",  "token.INTERFACE"],
   ["in",  "token.IN"],
+  ["is",  "token.IS"],
   //["map",   "token.MAP"],
   //["package",   "token.PACKAGE"],
   //["range",   "token.RANGE"],

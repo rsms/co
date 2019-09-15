@@ -66,9 +66,9 @@ export class Scanner extends ErrorReporter {
   public mode  :Mode = 0      // scanning mode
 
   // scanning state
-  private ch         :int = -1 // current character (unicode; -1=EOF)
-  protected offset   :int = 0  // character offset
-  private rdOffset   :int = 0  // reading offset (position after current char)
+  public  ch         :int = -1 // current character (unicode; -1=EOF)
+  public  offset     :int = 0  // character offset
+  public rdOffset   :int = 0  // reading offset (position after current char)
   private lineOffset :int = 0  // current line offset
   private insertSemi :bool = false // insert a semicolon before next newline
   private parenL     :int = 0  // parenthesis level, for string interpolation
@@ -118,7 +118,7 @@ export class Scanner extends ErrorReporter {
     sfile :SrcFile,
     sdata :Uint8Array,
     errh? :ErrorHandler|null,
-    mode  :Mode =Mode.None,
+    mode  :Mode = Mode.None,
   ) {
     const s = this
     // Explicitly initialize all fields since a scanner may be reused
@@ -193,6 +193,14 @@ export class Scanner extends ErrorReporter {
     s.offset = s.rdOffset = offs
   }
 
+  // setEOF sets the state to EOF, as if we had scanned until the end
+  setEOF() {
+    const s = this
+    s.setOffset(s.sdata.length)
+    s.ch = -1 // eof
+    s.tok = token.EOF
+  }
+
   // Read the next Unicode char into s.ch.
   // s.ch < 0 means end-of-file.
   readchar() {
@@ -255,7 +263,7 @@ export class Scanner extends ErrorReporter {
 
   currentPosition() :Position {
     const s = this
-    return s.sfile.position(s.sfile.pos(s.offset))
+    return s.sfile.position(s.pos)
   }
 
   // byteValue returns a byte buffer representing the literal value of the
@@ -271,13 +279,22 @@ export class Scanner extends ErrorReporter {
   }
 
   // takeByteValue returns a new byte buffer that is not referenced by
-  // the scanner. The buffer is still immutable.
+  // the scanner.
+  // If Mode.CopySource is set, a mutable copy is returned, otherwise an immutable
+  // view on the underlying source code is returned.
   //
   takeByteValue() :Uint8Array {
     const s = this
     const b = s.byteValue()
     s.byteval = null
     return (this.mode & Mode.CopySource) ? b.slice() : b
+  }
+
+  // stringValue returns a string of the literal value of the
+  // current token. This is mainly a convenience method; it
+  // decodes the underlying buffer as UTF-8.
+  stringValue() :string {
+    return utf8.decodeToString(this.byteValue())
   }
 
   // Increment errorCount and call any error handler
@@ -418,10 +435,10 @@ export class Scanner extends ErrorReporter {
         break
       }
 
-      case 0x2c: // ,
+      case 0x2C: // ,
         s.tok = token.COMMA
         break
-      case 0x3b: // ;
+      case 0x3B: // ;
         s.tok = token.SEMICOLON
         break
 
@@ -532,18 +549,17 @@ export class Scanner extends ErrorReporter {
           insertSemi = s.insertSemi // persist s.insertSemi
         } else if (s.ch == 0x2a) { // /*
           const CRcount = s.scanGeneralComment()
-          if (s.mode & Mode.ScanComments) {
-            s.tok = token.COMMENT
-            if (CRcount) {
-              // strip CR characters from comment
-              const v = s.sdata.subarray(
-                s.startoffs,
-                s.endoffs == -1 ? s.offset : s.endoffs
-              )
-              s.byteval = stripByte(v, 0xD, CRcount) // copy; no mutation
-            }
-          } else {
+          if (!(s.mode & Mode.ScanComments)) {
             continue
+          }
+          s.tok = token.COMMENT
+          if (CRcount) {
+            // strip CR characters from comment
+            const v = s.sdata.subarray(
+              s.startoffs,
+              s.endoffs == -1 ? s.offset : s.endoffs
+            )
+            s.byteval = stripByte(v, 0xD, CRcount) // copy; no mutation
           }
           insertSemi = s.insertSemi // persist s.insertSemi
         } else {
@@ -674,6 +690,18 @@ export class Scanner extends ErrorReporter {
           s.prec = prec.ADD
         }
         break
+
+      case 0x23: { // #
+        s.startoffs++ // skip #
+        let c = s.ch
+        if (c < utf8.UniSelf && (asciiFeats[c] & langIdent)) {
+          s.readchar()
+          s.scanIdentifier(c)
+        }
+        s.tok = token.DIRECTIVE
+        insertSemi = true
+        break
+      }
 
       default: {
         if (
@@ -1461,7 +1489,7 @@ const
   langIdent = 1<< 1 -1,
   langIdentStart = 1<< 2 -1
 
-// must smaller than utf8.UniSelf
+// values must be smaller than utf8.UniSelf
 const asciiFeats = new Uint8Array([
   /* 0    0  NUL */ 0,
   /* 1    1  SOH */ 0,

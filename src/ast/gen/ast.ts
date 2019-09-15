@@ -1,13 +1,14 @@
-import { Pos, NoPos, SrcFile } from "../pos"
-import { token } from "../token"
-import { ByteStr } from "../bytestr"
-import { Int64 } from "../int64"
-import { Num } from "../num"
-import { numconv } from "../numconv"
-import { Scope, Ent, nilScope } from "../ast_scope"
-import { Visitable, Visitor } from "../ast_visit"
-import { ReprVisitor } from "../ast_repr"
-import { StrWriter } from "../util"
+import { Pos, NoPos, SrcFile, Position } from "../../pos"
+import { token } from "../../token"
+import { ByteStr } from "../../bytestr"
+import { Int64 } from "../../int64"
+import { Num } from "../../num"
+import { numconv } from "../../numconv"
+import { StrWriter } from "../../util"
+
+import { Scope, Ent, nilScope } from "../scope"
+import { NodeVisitor } from "../visit"
+import { ReprVisitor, ReprOptions } from "../repr"
 
 // --------------------------------------------------------------------------------
 
@@ -15,23 +16,19 @@ export interface TypedNode {
   type :Type
 }
 
-class Node implements Visitable {
-  pos :Pos
+class Node {
+  _scope? :Scope = undefined
+  pos     :Pos
 
   toString() :string { return this.constructor.name }
 
   // repr returns a human-readable and machine-parsable string representation
   // of the tree represented by this node.
-  repr(sep? :string) :string
-  repr(sep :string, w :StrWriter) :void
-  repr(sep :string = "\n", w? :StrWriter) :string|void {
-    let v = new ReprVisitor(sep, w)
+  // If a custom writer is provided via options.w, the empty string is returned.
+  repr(options? :ReprOptions) :string {
+    let v = new ReprVisitor(options)
     v.visitNode(this)
-    if (!w) { return v.toString() }
-  }
-
-  foofoo() {
-    Storage[Storage.Int]
+    return v.toString()
   }
 
   isUnresolved() :this is UnresolvedType|TypedNode {
@@ -44,6 +41,17 @@ class Node implements Visitable {
   }
   // Auto-generated methods:
   // isTYPE() :this is TYPE
+
+  isType() :this is Type {
+    return (
+      this instanceof Type &&
+      (
+        this instanceof Template ? this.base.isType() :
+        this instanceof TemplateInvocation ? this.template.isType() :
+        true
+      )
+    )
+  }
 }
 
 class Package extends Node {
@@ -59,9 +67,11 @@ class File extends Node {
   pos = NoPos
   sfile       :SrcFile
   _scope      :Scope
-  imports?    :ImportDecl[]  // imports in this file
-  decls       :(Decl|FunExpr)[]   // top-level declarations
-  unresolved? :Set<Ident>    // unresolved references
+  imports     :ImportDecl[]      // imports in this file
+  decls       :(Decl|FunExpr)[]  // top-level declarations
+  unresolved? :Set<Ident>        // unresolved references
+  endPos      :Position|null     // when non-null, the position of #end "data tail"
+  endMeta     :Expr[]            // Any metadata as part of #end
 
   toString() :string { return `(File ${JSON.stringify(this.sfile.name)})` }
 }
@@ -125,8 +135,8 @@ class UnresolvedType extends Type {
   //
   // Whenever something refers to this type, you must call addRef(x) where
   // x is the thing that uses/refers to this type. This makes it possible
-  // for the TypeResolver to--when resolving this type--go in an edit all
-  // the uses of this type, updating them with the concrete, resolved type.
+  // for the TypeResolver to--when resolving this type--go in and edit all
+  // the uses of this type, updating them with a concrete, resolved type.
   refs? :Set<Node> = null  // things that references this type
   def   :Expr
 
@@ -139,8 +149,8 @@ class UnresolvedType extends Type {
     }
   }
 
-  repr(sep :string = "\n  ") {
-    return '~' + this.def.repr(sep)
+  repr(options? :ReprOptions) {
+    return '~' + this.def.repr(options)
   }
 }
 
@@ -186,9 +196,6 @@ const StorageSize = {
   [Storage.f64]  : 8,
 }
 
-// class NativeType extends Type {
-//   // NativeType represents all built-in types, like i32, str, bool, etc.
-// }
 class PrimType extends Type {  // was "BasicType"
   // primitive type, e.g. i32, f64, bool, etc.
   pos = NoPos
@@ -199,6 +206,9 @@ class PrimType extends Type {  // was "BasicType"
 
   // storageSize returns the underlying storage size in bytes
   storageSize() :int { return this._storageSize }
+
+  // simplified type te
+  isType() :this is Type { return true }
 
   // convenience function used by arch rewrite rules
   isI8()   :bool { return this.storage == Storage.i8 }
@@ -211,7 +221,7 @@ class PrimType extends Type {  // was "BasicType"
   isPtr()  :bool { return this.storage == Storage.Ptr }
   isNil()  :bool { return this.storage == Storage.None }
   toString() :string { return this.name }
-  repr(sep :string = "") :string { return this.name }
+  repr(options? :ReprOptions) :string { return this.name }
 }
 class NilType extends PrimType {}
 class BoolType extends PrimType {}
@@ -247,8 +257,9 @@ class StrType extends Type {
   // StrType = "str" ("<" length ">")?
   len :int // -1 means length only known at runtime
 
+  toString() :string { return this.len == -1 ? "str" : `str<${this.len}>` }
   equals(t :Type) :bool { return this === t || t.isStrType() }
-  repr(sep :string = "") :string { return this.len == -1 ? "str" : `str<${this.len}>` }
+  repr(options? :ReprOptions) :string { return this.toString() }
 }
 
 class UnionType extends Type {
@@ -294,7 +305,8 @@ class UnionType extends Type {
       return true
     }
     if (!(other instanceof UnionType)) {
-      return false
+      // e.g. (int|i32|i64) accepts i32
+      return this.types.has(other)
     }
     // Note: This relies on type instances being singletons (being interned)
     // make sure that we have at least the types of `other`.
@@ -310,61 +322,6 @@ class UnionType extends Type {
   }
 }
 
-class TypeVar {
-  name        :ByteStr
-  def?        :Type     // e.g. "T = int"  TODO: remove and instead use TemplateType._scope
-  constraint? :Type     // e.g. "T is ConstraintType"
-
-  equals(t :TypeVar) :bool {
-    return (
-      // this.name.equals(t.name) &&
-      !this.def == !t.def &&
-      (!this.def || this.def.equals(t.def!)) &&
-      !this.constraint == !t.constraint &&
-      (!this.constraint || this.constraint.equals(t.constraint!))
-    )
-  }
-}
-
-class TemplateType extends Type {
-  _scope :Scope  // holds bindings for `type`
-  type   :Type   // type this template is based on
-  vars   :Map<ByteStr,TypeVar>  // never empty.  position and name are both important
-}
-
-// class GenericType extends Type {
-//   // GenericType describes a type with potential type variables.
-//   // At definition site "<T>" defines a new TypeVar, and "T" references it.
-//   // Note: A GenericType object without any vars denotes a concrete type.
-//   vars     :TypeVar[]  // named placeholders
-//   restvar? :TypeVar    // non-null when rest/spread is accepted as last var
-//   // init() { assert(this.rest || this.vars.length > 0, `generic type without any typevars`) }
-
-//   // isTemplate returns true if there are any type vars
-//   isTemplate() :bool {
-//     return !!(this.vars.length > 0 || this.restvar)
-//   }
-
-//   equals(t :Type) :bool {
-//     if (this === t) {
-//       return true
-//     }
-//     if (
-//       t.constructor !== this.constructor ||
-//       this.vars.length != (t as GenericType).vars.length ||
-//       !this.restvar != !(t as GenericType).restvar ||
-//       (this.restvar && !this.restvar.equals((t as GenericType).restvar!))
-//     ) {
-//       return false
-//     }
-//     for (let i = 0; i < this.vars.length; i++) {
-//       if (!this.vars[i].equals((t as GenericType).vars[i])) {
-//         return false
-//       }
-//     }
-//     return true
-//   }
-// }
 
 class AliasType extends Type {
   // AliasType = "type" Ident Type
@@ -411,8 +368,9 @@ class RestType extends ListType {
 
 class StructType extends Type {
   // StructType = "{" (Decl ";")* "}"
-  name  :Ident|null
-  decls :Decl[]
+  _scope :Scope
+  name   :Ident|null
+  decls  :Decl[]
 
   toString() :string {
     return this.name ? this.name.toString() : "{anon}"
@@ -436,7 +394,94 @@ class FunType extends Type {
   }
 }
 
-// end of types
+// -----------------------------------------------------------------------------
+// Template
+
+class Template<T extends Node=Node> extends Type {
+  // Note on extends Type:
+  //   Template can be both a value and a type.
+  //   Node.isType has been specialized to check template's base.
+  //   This means that:
+  //     let n1 = new Template<Expr>(someExpr)
+  //     let n2 = new Template<Type>(someType)
+  //     n1.isType() // == false
+  //     n2.isType() // == true
+  //
+
+  _scope :Scope
+  vars   :TemplateVar[]             // never empty.  position and name are both important
+  base   :T | TemplateInvocation<T> // node this template can instantiate
+
+  // bottomBase returns the bottom-most base
+  bottomBase() :Node {
+    return this.base instanceof Template ? this.base.bottomBase() : this.base
+  }
+
+  // aliases returns a possibly-empty list of Templates which this template
+  // uses as its base.
+  //
+  // Example:
+  //   type A<T> {x T}
+  //   type B<X> A<X>
+  //   type C<Y> B<Y>
+  //
+  // Template(A).aliases() => []  // none
+  // Template(B).aliases() => [ Template(A) ]
+  // Template(C).aliases() => [ Template(B), Template(A) ]
+  //
+  aliases() :Template[] {
+    let a :Template[] = []
+    let bn :Node = this.base
+    while (true) {
+      if (bn instanceof TemplateInvocation) {
+        bn = bn.template
+      } else if (bn instanceof Template) {
+        a.push(bn)
+        bn = bn.base
+      } else {
+        break
+      }
+    }
+    return a
+  }
+
+  toString() :string {
+    return (
+      this.bottomBase() +
+      "<" + this.vars.map(v => v.name).join(",") + ">"
+    )
+  }
+}
+
+class TemplateInvocation<T extends Node=Node> extends Type {
+  // Note on extends Type: See note in Template class definition.
+  _scope   :Scope
+  name     :Ident|null  // e.g "Foo2" from "Foo2<X> Foo<X>"
+  args     :Node[]
+  template :Template<T>
+
+  toString() :string {
+    return (
+      (this.name ? this.name.toString() : this.template.bottomBase().toString()) +
+      "<" + this.args.join(",") + ">"
+    )
+  }
+}
+
+class TemplateVar<T extends Node=Node> extends Type {
+  // TemplateVar = Ident Constraint? ("=" Default)?
+  // Constraint  = Node
+  // Default     = Expr
+
+  _scope      :Scope
+  name        :Ident
+  constraint? :Node  // e.g. "T is ConstraintType"
+  def?        :T     // e.g. "T = int"
+
+  equals(t :TemplateVar) :bool { return this === t }
+  toString() :string { return `(TemplateVar ${this.name})` }
+}
+
 // -----------------------------------------------------------------------------
 // Flow control
 
@@ -478,8 +523,8 @@ class MultiDecl extends Decl {
 }
 class VarDecl extends Decl {
   // VarDecl = Idents (Type | Type? "=" Values)
-  idents  :Ident[]
   group   :Object|null   // null means not part of a group
+  idents  :Ident[]
   type    :Type|null     // null means no type
   values  :Expr[]|null   // null means no values
 }
@@ -523,7 +568,6 @@ class Ident extends Expr {
   }
 
   toString() :string { return this.value.toString() }
-  repr(sep :string = "") :string { return this.toString() }
 }
 
 class Block extends Expr {
@@ -584,14 +628,26 @@ class NumLit extends LiteralExpr {
   type  :NumType
 
   // convertToType coverts the value of the literal to the provided basic type.
-  // Returns true if the conversion was lossless.
+  // Returns null if the conversion would be lossy.
   //
-  convertToType(t :NumType) :bool {
+  convertToType(t :NumType) :NumLit|null {
+    if (t === this.type) {
+      return this
+    }
     let [v, lossless] = numconv(this.value, t)
-    this.type = t
-    this.value = v
-    return lossless
+    if (lossless) {
+      if (t instanceof FloatType) {
+        return new FloatLit(this.pos, v as number, t)
+      }
+      if (t instanceof IntType) {
+        return new IntLit(this.pos, v, t, token.INT)
+      }
+      throw new Error(`unexpected NumType ${t.constructor}`)
+    }
+    return null
   }
+
+  toString() :string { return this.value.toString() }
 }
 class IntLit extends NumLit {
   format :token.INT | token.INT_BIN | token.INT_OCT | token.INT_HEX
@@ -606,6 +662,15 @@ class IntLit extends NumLit {
     }
   }
 
+  convertToType(t :NumType) :NumLit|null {
+    // specialization of NumLit.convertToType that carries over format
+    let n = super.convertToType(t)
+    if (n && n !== this && n instanceof IntLit) {
+      n.format = this.format
+    }
+    return n
+  }
+
   toString() :string {
     switch (this.format) {
       case token.INT_HEX: return '0x' + this.value.toString(16)
@@ -615,15 +680,43 @@ class IntLit extends NumLit {
     }
   }
 
-  visit(v: Visitor) {
+  visit(v: NodeVisitor) {
     v.visitFieldN("type", this.type)
     v.visitField("value", this.value)
-    v.visitFieldS("format", token[this.format])
+    v.visitFieldE("format", this.format, token)
   }
 }
+const zeros = "00000000"
 class RuneLit extends NumLit {
   type = t_rune
-  value :int
+  value :int  // codepoint
+
+  // 'a', '\n', '\x00', '\u0000', '\U00000000'
+  toString() :string {
+    let c = this.value
+    switch (c) {
+    // see scanner/scanEscape
+    case 0x00: return "'\\0'"
+    case 0x07: return "'\\a'"
+    case 0x08: return "'\\b'"
+    case 0x09: return "'\\t'"
+    case 0x0A: return "'\\n'"
+    case 0x0B: return "'\\v'"
+    case 0x0C: return "'\\f'"
+    case 0x0D: return "'\\r'"
+    case 0x27: return "'\\''"
+    case 0x5C: return "'\\\\'"
+    }
+    if (c >= 0x20 && c <= 0x7E) { // visible printable ASCII
+      return `'${String.fromCharCode(c)}'`
+    }
+    let s = c.toString(16).toUpperCase(), z = s.length
+    return (
+      z > 4 ?         ("'\\U" + (z < 8 ? zeros.substr(0, 8-z) : ""))
+            : z > 2 ? ("'\\u" + (z < 4 ? zeros.substr(0, 4-z) : ""))
+                    : ("'\\x" + (z < 4 ? zeros.substr(0, 2-z) : ""))
+    ) + s + "'"
+  }
 }
 class FloatLit extends NumLit {
   value :number

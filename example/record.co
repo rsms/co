@@ -1,18 +1,164 @@
-type Pos int
-type Scope int
-
-type Node {
-  next     Node?
-  pos      Pos
-  _scope   Scope
-  foo, bar u32 = 123, 456
-  name     str
+type Point<T> {
+  x T
+  y T
 }
+x Point<int>
 
-x = [
-  1
-  2
-]
+// // partial expansion
+// type Point<T, Y int|i32|i64> {
+//   x T
+//   y Y
+//   z int
+// }
+// x Point<int>
+
+// // partial expansion
+// type Point<T int|i32, Y T|i64> {
+//   x T
+//   y Y
+//   z int
+// }
+// x Point<int,i64>
+
+// // with aliases
+// type Point<T int|i32|i64> {
+//   x T
+// }
+// // p0 Point<f32>
+// type Point0<X> Point<X>
+// // p1 Point0<int>
+// type Point1<Y> Point0<Y>
+// p2 Point1<f32>
+
+// // with defaults
+// type Node <
+//   A
+//   B List<A> = A[]
+//   C int|i32|i64 = int
+// > {
+//   a A
+//   b B
+//   c C
+// }
+// x Node<int,f32[],bool> // => { a int, b f32[], c bool }
+// x Node<int,f32[]> // => { a int, b f32[], c int }
+// y Node<int> // => { a int, b int[], c int }
+
+// xs List<int>
+
+// type Foo<E> List<E>
+// xs Foo<int>
+
+// xs Foo<int>
+// type Foo<T> List<T>
+
+
+// type Point<X,Y=X> {
+//   x X
+//   y Y
+// }
+
+// type Point<X,Y> {
+//   x X
+//   y Y
+// }
+// type Point0<T> Point<T,T>
+// // type Point0<T> Point<T> // error: not enough template arguments
+
+// type Point<X,Y=X> {
+//   x X
+//   y Y
+// }
+
+
+
+/*
+(def Point
+  (Template $1
+    vars = (T)
+    type = (Struct (fields (x T))) ))
+
+// type Point0<X> Point<X>
+
+(def Point0
+  (Template
+    vars = (X)
+    type = (TemplateInstance (X) (Template $1))
+  ))
+
+
+(Package
+  (scope &2
+    Point = Point<T>
+    Point0 = Point<X>)
+  (name "example")
+  (files
+    (File
+      (scope &4
+        x = VarDecl)
+      (sfile SrcFile)
+      (imports)
+      (decls
+        (TypeDecl
+          (scope &2)
+          (ident (Ident "Point"))
+          (type (TemplateType &6
+            (scope &7
+              T = (TypeVar T))
+            (type (StructType &8
+              (scope &9
+                x = VarDecl)
+              (name (Ident "Point"))
+              (decls
+                (VarDecl
+                  (scope &9)
+                  (type (TypeVar &11
+                    (name (Ident "T"))))
+                  (idents
+                    (Ident "x" (TypeVar &11)))))))
+            (vars (Map
+              T (TypeVar &11))))))
+        (TypeDecl
+          (scope &2)
+          (ident (Ident "Point0"))
+          (type (TemplateType &13
+            (scope &14
+              X = (TypeVar X))
+            (type (TemplateType &6))
+            (vars (Map
+              X (TypeVar &15
+                  (name (Ident "X"))))))))
+        (VarDecl
+          (scope &2)
+          (type (TemplateType &13))
+          (idents
+            (Ident "x" (TemplateType &13))))))))
+*/
+
+
+// type Line<T> {
+//   p1 Point<T,T>
+//   // p2 Point<T,T>
+// }
+// l Line<int>
+
+// p Point<i32,f64>
+// p Point<i32,f64,int>  // error: too many template arguments
+// p Point<i32,(f64>f32)>
+// p = Point<i32,f64>()
+
+
+// type Pos int
+// type Scope int
+
+// type Node {
+//   next     Node?
+//   pos      Pos
+//   _scope   Scope
+//   foo, bar u32 = 123, 456
+//   name     str
+// }
+
 
 // type A { a A }
 // type A { a A? }
