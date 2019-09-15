@@ -45,8 +45,7 @@ export { Diagnostic, DiagKind as DiagnosticKind }
 // ast describes the Co syntax as an Abstract Syntax Tree
 export { ast }
 
-// CompilerHost represents the full suite of functioanality for parsing and
-// compiling programs.
+// CompilerHost represents the full suite of functionality for parsing and compiling programs.
 export interface CompilerHost {
   readonly fs :FileSystem
   scanFile(filename :string, f: ScanCallback, cb? :DiagnosticCallback, mode? :ScanMode) :Promise<void>
