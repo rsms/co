@@ -1,6 +1,7 @@
 import * as utf8 from "../utf8"
 import { StrWriter } from "../util"
 import * as termstyle from "../termstyle"
+import { Position } from "../pos"
 import { NodeVisitor } from "./visit"
 import { Scope } from "./scope"
 import { Node, Type, PrimType, StrType, Ident, NumLit, StringLit, TemplateVar } from "./nodes"
@@ -213,6 +214,12 @@ export class ReprVisitor implements NodeVisitor {
     this.w(")")
   }
 
+  visitPosition(p :Position) {
+    this.w("(Position ")
+    this.w([p.filename, p.offset, p.line, p.column].join(" "))
+    this.w(")")
+  }
+
   visitValue(v :any) {
     if (v === null || v === undefined) {
       this.w("null")
@@ -231,6 +238,8 @@ export class ReprVisitor implements NodeVisitor {
         this.w(JSON.stringify(utf8.decodeToString(v)))
       } else if (v instanceof Node) {
         this.visitNode(v)
+      } else if (v instanceof Position) {
+        this.visitPosition(v)
       } else if (v.toString !== Object.prototype.toString) {
         this.w(v.toString())
       } else {

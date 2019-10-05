@@ -5,6 +5,7 @@ import * as utf8 from './utf8'
 import { TypeResolver } from './resolve'
 import { debuglog as dlog } from './util'
 import { ByteStr } from "./bytestr"
+import * as template from "./template"
 import {
   Node,
   Scope,
@@ -20,6 +21,7 @@ import {
   ImportDecl,
   Expr,
   StringLit,
+  TemplateInvocation,
 } from "./ast"
 
 
@@ -45,26 +47,26 @@ export class PkgBinder extends ErrorReporter {
   imports = new Map<string,Ent>()
   undef :Set<Ident>|null = null // track undefined so we don't report twice
 
-  pkg      :Package
+  // pkg      :Package
+  // importer :Importer|null
   fset     :SrcFileSet
-  importer :Importer|null
   types    :TypeResolver
 
   constructor(
-    pkg      :Package,
+    // pkg      :Package,
+    // importer :Importer|null,
     fset     :SrcFileSet,
-    importer :Importer|null,
     types    :TypeResolver,
     errh     :ErrorHandler|null,
   ) {
     super('E_RESOLVE', errh)
-    this.pkg = pkg
+    // this.pkg = pkg
+    // this.importer = importer
     this.fset = fset
-    this.importer = importer
     this.types = types
   }
 
-  bind() :Promise<int> {  // returns errorCount
+  importAndBind(importer :Importer, files :File[]) :Promise<int> {  // returns errorCount
     const b = this
     //
     // binding happens in three steps:
@@ -75,21 +77,26 @@ export class PkgBinder extends ErrorReporter {
     //
     // step 1: complete file scopes with imports
     return Promise.all(
-      b.pkg.files.map(f => this._resolveImports(f))
+      files.map(f => this._resolveImports(f, importer))
     ).then(() => {
-      if (b.errorCount == 0) {
-        // step 2: resolve identifiers
-        for (let f of b.pkg.files) {
-          b._resolveIdents(f)
-        }
-        // step 3: resolve types
-        b._resolveTypes()
-      }
-      return b.errorCount
+      return b.bind(files)
     })
   }
 
-  _resolveImports(f :File) :Promise<void> {
+  bind(files :File[]) :int {  // returns errorCount
+    const b = this
+    if (b.errorCount == 0) {
+      // step 2: resolve identifiers
+      for (let f of files) {
+        b._resolveIdents(f)
+      }
+      // step 3: resolve types
+      b._resolveTypes()
+    }
+    return b.errorCount
+  }
+
+  _resolveImports(f :File, importer :Importer) :Promise<void> {
     // step 1: complete file scopes with imports
     const b = this
 
@@ -100,11 +107,11 @@ export class PkgBinder extends ErrorReporter {
     const pv :Promise<void>[] = []
 
     for (let decl of f.imports) {
-      if (!b.importer) {
-        b.error(`unresolvable import ${decl.path}`, decl.path.pos)
-        break
-      }
-      pv.push(b.importer(b.imports, decl.path)
+      // if (!b.importer) {
+      //   b.error(`unresolvable import ${decl.path}`, decl.path.pos)
+      //   break
+      // }
+      pv.push(importer(b.imports, decl.path)
         .then((pkg :Ent) => { b.integrateImport(f, decl, pkg) })
         .catch(err => {
           b.error(`could not import ${decl.path} (${err.message || err})`, decl.path.pos)
@@ -131,6 +138,20 @@ export class PkgBinder extends ErrorReporter {
       f._scope.declareEnt(new Ent(name, imp, null, null, pkg.data))
     }
   }
+
+
+  expandTemplate<T extends Node>(ntype :Constructor<T>, ti :TemplateInvocation<T>) :T|null {
+    const b = this
+    let n = template.expand(ntype, ti, null, (message :string, pos :Pos) => {
+      b.error(message, pos)
+    })
+    if (n instanceof ntype) {
+      return n as T
+    }
+    b.error(`partially expanded template`, ti.pos)
+    return null
+  }
+
 
   _resolveIdents(f :File) {
     // step 2: resolve identifiers
@@ -183,9 +204,19 @@ export class PkgBinder extends ErrorReporter {
       // delegate type to any expressions that reference this type
       dlog(`resolved to ${id.type}; len(t.refs)=${t.refs ? t.refs.size : 0}`)
       if (t.refs) for (let ref of t.refs) {
-        // dlog(`- ref ${ref} ${b.fset.position(ref.pos)}`)
+        dlog(`- ref ${ref} ${b.fset.position(ref.pos)}`)
         if (ref.isFunSig() || ref.isFunType()) {
           ref.result = id.type
+        } else if (ref.isTemplateInvocation()) {
+          if (id.type.isTemplate()) {
+            ref.template = id.type
+            let n = b.expandTemplate(Type, ref as TemplateInvocation<Type>)
+            if (n) {
+              ref.convertToNodeInPlace(n)
+            }
+          } else {
+            b.error(`not a template`, ref.name ? ref.name.pos : ref.pos)
+          }
         } else {
           assert((ref as any).type !== undefined)
           ;(ref as any).type = id.type
@@ -195,6 +226,7 @@ export class PkgBinder extends ErrorReporter {
       this.checkCyclicTypeRef(scope, id)
     }
   }
+
 
   _resolveTypes() {
     // step 3: resolve types
@@ -231,6 +263,8 @@ export class PkgBinder extends ErrorReporter {
       if (t.refs) for (let ref of t.refs) {
         if (ref.isFunSig() || ref.isFunType()) {
           ref.result = restyp
+        } else if (ref.isTemplateInvocation()) {
+          dlog(`TODO TemplateInvocation`)
         } else {
           assert(ref instanceof Expr)
           ;(ref as Expr).type = restyp
@@ -288,19 +322,19 @@ export class PkgBinder extends ErrorReporter {
 }
 
 
-// bindpkg resolves any undefined names (usually across source files) and,
-// unless there are errors, all identifiers in the package will have Ident.ent
-// set, pointing to whatever entity a name references.
-//
-// Returns false if there were errors
-//
-export function bindpkg(
-  pkg      :Package,
-  fset     :SrcFileSet,
-  importer :Importer|null,
-  typeres  :TypeResolver,
-  errh     :ErrorHandler,
-) :Promise<bool> {
-  const b = new PkgBinder(pkg, fset, importer, typeres, errh)
-  return b.bind().then(() => b.errorCount != 0)
-}
+// // bindpkg resolves any undefined names (usually across source files) and,
+// // unless there are errors, all identifiers in the package will have Ident.ent
+// // set, pointing to whatever entity a name references.
+// //
+// // Returns false if there were errors
+// //
+// export function bindpkg(
+//   pkg      :Package,
+//   fset     :SrcFileSet,
+//   importer :Importer|null,
+//   typeres  :TypeResolver,
+//   errh     :ErrorHandler,
+// ) :Promise<bool> {
+//   const b = new PkgBinder(pkg, fset, importer, typeres, errh)
+//   return b.bind().then(() => b.errorCount != 0)
+// }

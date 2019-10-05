@@ -184,6 +184,10 @@ export class TypeResolver extends ErrorReporter {
   maybeResolve(n :Expr|ReturnStmt) :Type|null {
     const r = this
 
+    if (n.isType()) {
+      return n
+    }
+
     if (isResolvedType(n.type)) {
       // already resolved
       return n.type

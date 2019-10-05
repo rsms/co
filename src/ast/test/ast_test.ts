@@ -193,6 +193,7 @@ TEST('#directive', () => {
     #end foo "bar" 45 6.78
     hello world
     `))
+    print("file:", file.repr())
     assertEq(api.getErrorCount(file), 0)
     assert(file.endPos)  // in this test we only care about endPos being set
     assertEq(file.endMeta.length, 4)

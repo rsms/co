@@ -204,6 +204,11 @@ export function expand<R extends Node, T extends R>(
     }
   }
 
+  // if (n.isType()) {
+  //   // erase own type
+  //   n.type = null
+  // }
+
   if (DEBUG_EXPANSION) {
     ast.print(n)
     if (ind == "") { process.exit(0) }

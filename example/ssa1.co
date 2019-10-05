@@ -66,18 +66,35 @@
 // _ = fun(x int)int -> x
 // lol = 9223372036854775807
 
-fun foo(x, _, y int) int {
-  z int = 0
-  // _, _, fooz = z + 1, 2, 3
-  // _ = "hello"
-  while x < 5 {
-    x++
-    for i = 0; x > i; i++ {
-      z++
-    }
+
+fun foo(x, a, b int) {
+  type T1<A,B> {
+    a A
+    b B
   }
-  return x + z
+  _ = x < a && b > a      // (assign _ (ANDAND (LSS x a) (GTR b a)))
+  _ = T1<int,f32>(1, 2.0) // (assign _ (call (type tuple<int,f32>) ()))
+  _ = T2<int,f32>(1, 2.0) // (assign _ (call (type tuple<int,f32>) ()))
 }
+
+type T2<A,B> {
+  a A
+  b B
+}
+
+// fun foo(x, _, y int) int {
+//   z int = 0
+//   // _, _, fooz = z + 1, 2, 3
+//   // _ = "hello"
+//   while x < 5 {
+//     x++
+//     for i = 0; x > i; i++ {
+//       z++
+//     }
+//   }
+//   return x + z
+// }
+
 
 // fun half(x int) int {
 //   x / 2

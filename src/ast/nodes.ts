@@ -39,6 +39,20 @@ export class Node {
                 this instanceof TemplateInvocation ? this.template.isType() :
                     true));
     }
+    // convertToNodeInPlace is a destructive action which transforms the receiver
+    // to become a copy of otherNode.
+    convertToNodeInPlace<T extends Node>(otherNode: T): T {
+        let dst = this as any;
+        let src = otherNode as any;
+        dst.__proto__ = src.__proto__;
+        for (let k in dst) {
+            delete dst[k];
+        }
+        for (let k in src) {
+            dst[k] = src[k];
+        }
+        return dst as T;
+    }
     visit(v: NodeVisitor) { }
     isPackage(): this is Package { return this instanceof Package; }
     isFile(): this is File { return this instanceof File; }

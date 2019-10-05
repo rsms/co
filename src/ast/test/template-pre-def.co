@@ -1,0 +1,63 @@
+// template definition preceeds template use.
+//
+// See template-future-def.co for the "inverse"
+// The TypeDecl and FunExpr are identical between the two files, with the only
+// difference being position.
+
+type T1<A,B> {
+  a A
+  b B
+}
+// At this point in parse time, T1 is defined as a struct template
+
+fun foo {
+  // At this point in parse time, T1 is known and will resolve immediately
+  _ = T1<int,f32>(1, 2.0)
+}
+
+#end lisp // expected
+(
+  (TypeDecl
+    (type
+      (Template
+        (vars
+          (TemplateVar (name (id A)))
+          (TemplateVar (name (id B)))
+        )
+        (base
+          (StructType
+            (name (id T1))
+            (decls
+              (VarDecl (idents (id a (TemplateVar))) (type (TemplateVar)))
+              (VarDecl (idents (id b (TemplateVar))) (type (TemplateVar)))
+            )
+          )
+        )
+      )
+    )
+  )
+
+  (FunExpr
+    (body (Block (list
+      (Assignment
+        (type (StructType
+          (name (id T1<int,f32>))
+          (decls
+            (VarDecl (idents (id a int)) (type int))
+            (VarDecl (idents (id b f32)) (type f32))
+          )
+        ))
+        (op ASSIGN)
+        (lhs (id _))
+        (rhs
+          (CallExpr
+            (type (StructType))
+            (receiver (StructType))
+            (args (IntLit 1 int) (FloatLit 2 f64))
+          )
+        )
+      )
+    )))
+  )
+
+)

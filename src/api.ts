@@ -45,6 +45,9 @@ export { Diagnostic, DiagKind as DiagnosticKind }
 // ast describes the Co syntax as an Abstract Syntax Tree
 export { ast }
 
+// IRBuilderFlags
+export { IRBuilderFlags }
+
 // CompilerHost represents the full suite of functionality for parsing and compiling programs.
 export interface CompilerHost {
   readonly fs :FileSystem
@@ -266,8 +269,8 @@ class CHost implements CompilerHost {
 
     // bind package together, resolving cross-file references and imports
     if (errcount == 0 && typeres.errorCount == 0) {
-      let pkgBinder = new PkgBinder(pkg, fset, this.importPackage, typeres, diags.errh)
-      errcount += typeres.errorCount + await pkgBinder.bind()
+      let binder = new PkgBinder(fset, typeres, diags.errh)
+      errcount += typeres.errorCount + await binder.importAndBind(this.importPackage, pkg.files)
     } else {
       // add errors from type resolver (avoids double counting)
       errcount += typeres.errorCount
@@ -299,10 +302,18 @@ class CHost implements CompilerHost {
       let diags = new DiagReporter(cb)
       let typeres = this.typeres.alloc()
       typeres.init(fset, this.universe, diags.errh)
+
       let [f, errcount] = this._parseFile(filename, data, ps, fset, typeres, diags, smode)
+
       errcount += typeres.errorCount
       this.typeres.free(typeres)
       diags.assignTo(f)
+
+      if (errcount == 0) {
+        let binder = new PkgBinder(fset, typeres, diags.errh)
+        errcount += typeres.errorCount + binder.bind([ f ])
+      }
+
       // save error count to ast node
       if (errcount > 0) {
         ;(f as any)[errcountKey] = errcount

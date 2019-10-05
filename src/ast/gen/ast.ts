@@ -39,6 +39,7 @@ class Node {
       (!this.isType() && (this as any).type instanceof UnresolvedType)
     )
   }
+
   // Auto-generated methods:
   // isTYPE() :this is TYPE
 
@@ -51,6 +52,21 @@ class Node {
         true
       )
     )
+  }
+
+  // convertToNodeInPlace is a destructive action which transforms the receiver
+  // to become a copy of otherNode.
+  convertToNodeInPlace<T extends Node>(otherNode :T) :T {
+    let dst = this as any
+    let src = otherNode as any
+    dst.__proto__ = src.__proto__
+    for (let k in dst) {
+      delete dst[k]
+    }
+    for (let k in src) {
+      dst[k] = src[k]
+    }
+    return dst as T
   }
 }
 

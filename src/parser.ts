@@ -144,6 +144,7 @@ export class Parser extends scanner.Scanner {
   throwOnSyntaxError :bool = false  // throw SyntaxError instead of reporting
   endPos     :Position|null = null  // when non-null, the position of #end "data tail"
   endMeta    :Expr[] = [] // any metadata immediately following #end
+  reachedEnd = false
 
   initParser(
     sfile      :SrcFile,
@@ -172,6 +173,7 @@ export class Parser extends scanner.Scanner {
     p.throwOnSyntaxError = false
     p.endPos = null
     p.endMeta = []
+    p.reachedEnd = false
 
     if (smode & scanner.Mode.ScanComments) {
       // sub token reader with one that does does not ignore comments
@@ -331,6 +333,10 @@ export class Parser extends scanner.Scanner {
 
   resolveEnt(id :Ident) :Ent|null {
     const p = this
+    if (p.reachedEnd) {
+      // don't try to resolve things that appear after end of file, like foo in "#end foo"
+      return null
+    }
     // if (id.value.isEmpty) {
     //   return null  // "_" never resolves
     // }
@@ -407,36 +413,38 @@ export class Parser extends scanner.Scanner {
   // and x.type is set to either UndefinedType or a known Type.
   resolveVal<T extends Ident|SelectorExpr|IndexExpr>(x :T) :T {
     const p = this
-    if (!x.isIdent() || x.value.isEmpty) {
+    if (!x.isIdent()) {
       // TODO: Support SelectorExpr, e.g. "foo.Bar"
       p.syntaxError(`expected identifier`, x.pos)
       return x
     }
-    let ent = p.resolveEnt(x)
-    if (ent) {
-      // identifier names a value or is not yet known
-      if (!ent.type) {
-        x.type = p.types.markUnresolved(x)
-      } else {
-        x.type = ent.type
-        if (x.type.isUnresolvedType()) {
-          x.type.addRef(x)
+    if (!x.value.isEmpty) {
+      let ent = p.resolveEnt(x)
+      if (ent) {
+        // identifier names a value or is not yet known
+        if (!ent.type) {
+          x.type = p.types.markUnresolved(x)
+        } else {
+          x.type = ent.type
+          if (x.type.isUnresolvedType()) {
+            x.type.addRef(x)
+          }
         }
+        // if (ent.decl.isTypeDecl()) {
+        //   // identifier names a type
+        //   x.type = ent.decl.type
+        // } else {
+        //   // identifier names a value or is not yet known
+        //   if (!ent.type) {
+        //     x.type = p.types.markUnresolved(x)
+        //     return x  // return to avoid double ref
+        //   }
+        //   x.type = ent.type
+        // }
+        // if (x.type.isUnresolvedType()) {
+        //   x.type.addRef(x)
+        // }
       }
-      // if (ent.decl.isTypeDecl()) {
-      //   // identifier names a type
-      //   x.type = ent.decl.type
-      // } else {
-      //   // identifier names a value or is not yet known
-      //   if (!ent.type) {
-      //     x.type = p.types.markUnresolved(x)
-      //     return x  // return to avoid double ref
-      //   }
-      //   x.type = ent.type
-      // }
-      // if (x.type.isUnresolvedType()) {
-      //   x.type.addRef(x)
-      // }
     }
     return x
   }
@@ -554,6 +562,7 @@ export class Parser extends scanner.Scanner {
     }
 
     // parsing #end
+    p.reachedEnd = true
 
     // make sure endMeta is empty
     assert(p.endMeta.length == 0)
@@ -2008,30 +2017,46 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // maybeGenericTypeInstance parses either a "less than" binop, e.g. "x<y",
+  // maybeTemplateInstanceOrLess parses either a "less than" binop, e.g. "x<y",
   // or a generic type instance expression, e.g. "type<arg>".
   //
   // LtBinOp         = Expr "<" Expr
   // GenericTypeExpr = TypeExpr "<" ExprList ","? ">"
   //
-  maybeGenericTypeInstance(lhs :Expr, pr :prec, ctx :exprCtx) :Expr {
+  maybeTemplateInstanceOrLess(lhs :Expr, pr :prec, ctx :exprCtx) :Expr {
     const p = this
     assert(p.tok == token.LSS)  // enter at token.LSS "<"
+    let pos = p.pos
+    return p.tryWithBacktracking(
 
-    dlog("TODO: re-introduce generics/templates")
+      // try to parse as generic type, e.g. "x<y>"
+      () :Expr => {
+        let t = p.types.resolve(lhs)
+        let templateName = lhs.isIdent() ? lhs : null
+        if (t.isUnresolvedType()) {
+          // we don't know what t actually is yet, but we'll assume it's a template
+          // since the input seems to assume it is.
+          return p.templateInvocation(
+            Type,
+            templateName,
+            new Template<Type>(t.pos, t._scope, [], t)
+          )
+        } else if (t.isTemplate()) {
+          let n = p.templateInvocation(Type, templateName, t)
+          if (n.isExpr()) {
+            // Note: Type is an Expr
+            return n
+          }
+          p.syntaxError(`expected expression but got ${n}`, pos)
+        } else {
+          p.syntaxError(`expected template expression`)
+        }
+        return p.bad()
+      },
 
-    return p.maybeBinaryExpr(lhs, pr, ctx)
-    // return p.tryWithBacktracking(
-
-    //   // try to parse as generic type, e.g. "x<y>"
-    //   () => {
-    //     let t = p.types.resolve(lhs)
-    //     return p.genericType(t)
-    //   },
-
-    //   // else, parse as binary expression, e.g. "x < y"
-    //   () => p.maybeBinaryExpr(lhs, pr, ctx),
-    // )
+      // else, parse as binary expression, e.g. "x < y"
+      () => p.maybeBinaryExpr(lhs, pr, ctx),
+    )
   }
 
 
@@ -2109,7 +2134,7 @@ export class Parser extends scanner.Scanner {
 
       case token.LSS:
         // could be either x<y (LT x y) or x<y> (type x y)
-        x = p.maybeGenericTypeInstance(x, pr, ctx)
+        x = p.maybeTemplateInstanceOrLess(x, pr, ctx)
         break
 
       default:
@@ -2136,9 +2161,9 @@ export class Parser extends scanner.Scanner {
 
     // do we know the function type?
     if (receiver.isType()) {
-      dlog(`calling a type ${receiver.type} (via receiver.isType)`)
+      dlog(`note: calling a type ${receiver} (via receiver.isType)`)
       if (receiver.isPrimType()) {
-        // TODO: fast path for common case: conversion to primitive type
+        dlog(`TODO: fast path for common case: conversion to primitive type`)
         // return p.callPrimType(receiver, receiver.type.type)
       }
       argtypes = [ receiver ]

@@ -1,21 +1,5 @@
-import { Parser } from './parser'
-import { bindpkg } from './bind'
-import * as scanner from './scanner'
-import * as ast from './ast'
-import { Universe } from './universe'
-import { TypeResolver } from './resolve'
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
-import { strings } from "./bytestr"
-import * as utf8 from './utf8'
 import * as api from "./api"
-
-import { Pkg as IRPkg } from './ir/ssa'
-import { IRBuilder, IRBuilderFlags } from './ir/builder'
-import { runPassesDev } from './ir/passes'
-import { Program } from './asm/prog'
-import { archs } from './ir/arch'
-import { Config } from "./ir/config"
-
 import * as cli from "./cli"
 
 import './all_tests'
@@ -64,7 +48,7 @@ async function main(argv :string[]) :Promise<int> {
 
   // only print ast?
   if (opt.ast) {
-    ast.print(pkg)
+    api.ast.print(pkg)
     return numerrs > 0 ? 1 : 0
   }
 
@@ -83,7 +67,7 @@ async function main(argv :string[]) :Promise<int> {
 
   // compile AST -> IR
   try {
-    let flags = IRBuilderFlags.Comments
+    let flags = api.IRBuilderFlags.Comments
     let irpkg = chost.compilePackage(pkg, target, printDiag, flags)
 
     // Run in development VM

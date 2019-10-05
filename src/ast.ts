@@ -50,9 +50,14 @@ export const types = {
   //
   // type Str<size=-1> <intrinsic>
   str: t_str, // size known at runtime. i.e. "str"
-  // //
+  //
   // // type Tuple<T...> <intrinsic>
-  // Tuple: new n.TupleType(tplVarT),
+  // Tuple: new n.Template(
+  //   NoPos,
+  //   nilScope,
+  //   [Tuple_tvar0],
+  //   new n.TupleType(Tuple_tvar0)
+  // ),
   //
   // type List<T> <intrinsic>
   List: new n.Template(NoPos, nilScope, [List_tvar0], new n.ListType(List_tvar0)),
