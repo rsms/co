@@ -75,7 +75,7 @@ function archsGen() {
       if (v instanceof UInt64) {
         ln(`  ${k}: ${fmtRegSetJs(v, "  ")},`)
       } else {
-        ln(`  ${k}: ${utillib.inspect(v, false, 4).replace(/\n/g, "\n    ")},`)
+        ln(`  ${k}: ${fmtjs(v).replace(/\n/g, "\n    ")},`)
       }
     }
 
@@ -986,9 +986,9 @@ function loadRewriteRules(a :ArchDescr, rulesFile :string, outFile :string) :sex
     let src = readFileSync(rulesFile, "utf8")
     return sexpr.parse(src, {
       filename: rpath(rulesFile),
-      brackAsPre: true, // parse [...] as Pre
-      braceAsPre: true, // parse {...} as Pre
-      ltgtAsPre: true,  // parse <...> as Pre
+      brack: sexpr.AS_PRE, // parse [...] as Pre
+      brace: sexpr.AS_PRE, // parse {...} as Pre
+      ltgt:  sexpr.AS_PRE, // parse <...> as Pre
     })
   } catch (err) {
     if (err.code == "ENOENT") {
@@ -1175,7 +1175,7 @@ function typename(t :PrimType|StrType) :string {
 
 
 function fmtop(op :OpInfo, opcode :int) :string {
-  let s = "  { name: " + js(op.name) + ",\n"
+  let s = "  { name: " + fmtjs(op.name) + ",\n"
   for (let k of Object.keys(op).sort()) {
     if (k != "name") {
       let v = (op as any)[k]
@@ -1194,7 +1194,7 @@ function fmtop(op :OpInfo, opcode :int) :string {
       } else if (v instanceof PrimType || v instanceof StrType) {
         v = typename(v)
       } else {
-        v = js(v)
+        v = fmtjs(v)
       }
       s += `    ${k}: ${v},\n`
     }
@@ -1251,8 +1251,9 @@ function getU64Const(u :UInt64) :string {
 }
 
 
-function js(value :any) :string {
-  return JSON.stringify(value)
+function fmtjs(value :any) :string {
+  return utillib.inspect(value, false, 4)
+  // return JSON.stringify(value)
 }
 
 
