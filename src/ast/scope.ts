@@ -38,21 +38,24 @@ export class Ent {
 
   constructor(
     name  :ByteStr,
-    s     :Stmt,
+    decl  :Stmt,
     value :Expr|null,
     type  :Type|null = null,
     data  :any = null,
   ) {
     this.name = name
-    this.decl = s
+    this.decl = decl
     this.value = value
-    this.type = type
-    if (s.isType()) {
-      this.type = s
-    } else if (s.isFieldDecl() || s.isVarDecl() || s.isTypeDecl()) {
-      this.type = s.type
+    if (type) {
+      this.type = type
+    } else if (decl.isType()) {
+      this.type = decl
+    } else if (decl.isFieldDecl() || decl.isVarDecl() || decl.isTypeDecl()) {
+      this.type = decl.type
     } else if (value) {
       this.type = value.type
+    } else {
+      this.type = null
     }
     this.data = data
   }
@@ -76,7 +79,7 @@ export class Ent {
   }
 
   toString() :string {
-    return `(Ent ${this.name} ${this.decl})`
+    return `(Ent ${this.name} (decl ${this.decl}) (value ${this.value}))`
   }
 }
 

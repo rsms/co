@@ -159,6 +159,10 @@ export class TypeResolver extends ErrorReporter {
       return n.type
     }
 
+    if (n.isIdent() && n.value.isEmpty) {
+      throw new Error(`attempt to resolve type of "_"`)
+    }
+
     const r = this
     let t = r.maybeResolve(n)
 
@@ -476,7 +480,17 @@ export class TypeResolver extends ErrorReporter {
     const r = this
     if (n.lhs.length == 1) {
       // single assignment (common case)
-      return r.resolve(n.lhs[0])
+
+      // assert(n.rhs.length == 1)
+      // return r.resolve(n.rhs[0])
+
+      let lhs = n.lhs[0]
+      if (lhs.isIdent() && lhs.value.isEmpty) {
+        assert(n.rhs.length == 1)
+        return r.resolve(n.rhs[0])
+      } else {
+        return r.resolve(lhs)
+      }
     }
     // multi-assignment yields tuple
     // E.g.
@@ -485,7 +499,24 @@ export class TypeResolver extends ErrorReporter {
     //   t = a, b = 1, 2.3
     //   typeof(t)  // => (i32, f64)
     //
-    return r.maybeResolveTupleType(n.lhs)
+
+    // variant of maybeResolveTupleType that considers LHS first and RHS second
+    let types :Type[] = []
+    for (let i = 0; i < n.lhs.length; i++) {
+      let x = n.lhs[i]
+      if (x.isIdent() && x.value.isEmpty) {
+        x = n.rhs[i]
+      }
+      // Note: _ = _ is invalid, so no need to check x for empty ident again.
+      //
+      // Note: We don't check for unresolved types.
+      //
+      // TODO: when x is unresolved, register the tuple _type_ as a dependency
+      // for that unresolved type, so that laste-bind can wire it up.
+      //
+      types.push(r.resolve(x))
+    }
+    return r.getTupleType(types)
   }
 
 
@@ -929,6 +960,14 @@ export class TypeResolver extends ErrorReporter {
   // Does NOT set expr.type but instead returns an UnresolvedType object.
   //
   markUnresolved(expr :Expr) :UnresolvedType {
+    if (expr.isIdent() && expr.toString() == "x") {
+      throw new Error("XXX")
+    }
+    if (DEBUG) for (let t of this.unresolved) {
+      if (t.def === expr) {
+        throw new Error(`double-mark of ${expr} at ${this.fset.position(expr.pos)}`)
+      }
+    }
     const t = new UnresolvedType(expr.pos, expr)
     dlog(`expr ${expr} at ${this.fset.position(expr.pos)}`)
     this.unresolved.add(t)

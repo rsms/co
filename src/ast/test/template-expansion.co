@@ -10,27 +10,24 @@ x Point<int>
     (ident (id Point))
     (type (Template
       (vars
-        (TemplateVar (name (id T))))
+        (TemplateVar (name (id T)))
+      )
       (base (StructType
         (name (id Point))
         (decls
-          (VarDecl
-            (idents (id x))
-            (type (TemplateVar)))
-          (VarDecl
-            (idents (id y))
-            (type (TemplateVar)))))))))
+          (VarDecl (idents (id x)) (type (TemplateVar)))
+          (VarDecl (idents (id y)) (type (TemplateVar)))
+        )
+      ))
+    ))
+  )
 
-  (VarDecl
-    (idents
-      (id x
-        (StructType
-          (name (id Point<int>))
-          (decls
-            (VarDecl
-              (idents (id x int))
-              (type int))
-            (VarDecl
-              (idents (id y int))
-              (type int)))))))
+  (VarDecl (idents (id x
+    (StructType
+      (name (id Point<int>))
+      (decls
+        (VarDecl (idents (id x int)) (type int))
+        (VarDecl (idents (id y int)) (type int)))
+    )
+  )))
 )
