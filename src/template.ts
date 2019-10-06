@@ -91,9 +91,9 @@ export function expand<R extends Node, T extends R>(
       val = tvar2
     } else {
       let pos = val.pos
-      if (val.isIdent() && val.ent && val.ent.decl.isType()) {
+      if (val.isIdent() && val.ent && val.ent.value.isType()) {
         // val is a name of a type
-        val = val.ent.decl
+        val = val.ent.value
       }
       // check constraint on tvar
       assert(!tvar2.constraint == !tvar.constraint)
@@ -156,9 +156,10 @@ export function expand<R extends Node, T extends R>(
       // copy & filter scope to only include unexpanded vars
       expanded.vars = []
       expanded._scope = expanded._scope.filter((name, ent) => {
-        assert(ent.decl.isTemplateVar(), `non-tvar in template scope: ${ent.decl}`)
-        if (lookupCache.get(ent.decl as TemplateVar) === ent.decl) {
-          expanded.vars.push(ent.decl as TemplateVar)
+        let tvar = ent.value as TemplateVar
+        assert(tvar.isTemplateVar(), `non-tvar in template scope: ${tvar}`)
+        if (lookupCache.get(tvar) === tvar) {
+          expanded.vars.push(tvar)
           return true
         }
         return false

@@ -1,6 +1,7 @@
 fun generics {
-  type T1 (int, f32, list<int>)
+  // type T1 (int, f32, list<int>)
   type S1<A,B> { a A; b B }
+  type S2 S1  // tests AliasType resolution
 
   // _ u32[]
   // _ u32[][]
@@ -14,13 +15,9 @@ fun generics {
   // _ T1.2[]    // int[][] because T1.2 = list<int>
 
   // ambiguous expressions
-  type t S1
-
   a, b, x = 1, 2, 3
-  // a, b, x int = 1, 2, 3
-
   _ = x < a && b > a     // (assign _ (ANDAND (LSS x a) (GTR b a)))
-  _ = t<int,f32>()       // (assign _ (call (type tuple<int,f32>) ()))
+  _ = S2<int,f32>()       // (assign _ (call (type tuple<int,f32>) ()))
 
   // _ = unkn<int,f32>()    // (assign _ (call (type ~unkn<int,f32>) ()))
   // _ = list<int>()        // (assign _ (call (type int[]) ()))

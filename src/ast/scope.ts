@@ -24,10 +24,8 @@ import { Node, Stmt, Type, Template, Expr, FunExpr } from "./nodes"
 //
 export class Ent {
   name  :ByteStr
-  decl  :Stmt      // Statement that introduced the entity
-  value :Expr|null // value. e.g. "(IntLit 3)" in "(VarDecl (Ident x) (IntLit 3))"
+  value :Stmt
   type  :Type|null
-  data  :any
 
   writes :int = 0  // Tracks stores
   nreads :int = 0  // Tracks loads
@@ -38,26 +36,20 @@ export class Ent {
 
   constructor(
     name  :ByteStr,
-    decl  :Stmt,
-    value :Expr|null,
-    type  :Type|null = null,
-    data  :any = null,
+    value :Stmt,
+    type  :Type|null,
   ) {
     this.name = name
-    this.decl = decl
     this.value = value
     if (type) {
       this.type = type
-    } else if (decl.isType()) {
-      this.type = decl
-    } else if (decl.isFieldDecl() || decl.isVarDecl() || decl.isTypeDecl()) {
-      this.type = decl.type
-    } else if (value) {
+    } else if (value.isType()) {
+      this.type = value
+    } else if (value.isFieldDecl() || value.isVarDecl() || value.isTypeDecl()) {
       this.type = value.type
     } else {
-      this.type = null
+      this.type = (value as any).type || null
     }
-    this.data = data
   }
 
   // // getTypeExpr returns the Expr which type should represent this
@@ -75,11 +67,11 @@ export class Ent {
   }
 
   get scope() :Scope {
-    return this.decl._scope
+    return this.value._scope
   }
 
   toString() :string {
-    return `(Ent ${this.name} (decl ${this.decl}) (value ${this.value}))`
+    return `(Ent ${this.name} ${this.value}${this.type ? " " + this.type : ""})`
   }
 }
 
@@ -106,14 +98,6 @@ export class Scope {
   lookupImm(s :ByteStr) :Ent | null {
     const d = this.decls && this.decls.get(s)
     return d || null
-  }
-
-  // declare registers a name in this scope.
-  // If the name is already registered, null is returned.
-  //
-  declare(name: ByteStr, s :Stmt, x: Expr|null) :Ent|null {
-    const ent = new Ent(name, s, x)
-    return this.declareEnt(ent) ? ent : null
   }
 
   // declareEnt returns true if ent was declared, and false it's already

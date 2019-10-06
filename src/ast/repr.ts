@@ -135,7 +135,7 @@ export class ReprVisitor implements NodeVisitor {
       assert(s instanceof Scope)
       this.pushScope()
       for (let [k,v] of s.decls) {
-        this.w(`${this.sep}${k} ${v.decl}`)
+        this.w(`${this.sep}${k} ${v.value}`)
         // this.visitNode(v.decl)
         // this.visitValue(v)
       }

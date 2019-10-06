@@ -42,7 +42,7 @@ export function numEval(x :Expr) :Num|null {
     let ent = x.ent!
     assert(ent, 'unresolved identifier')
     assert(ent.value, 'unresolved identifier value')
-    if (ent.value && (ent.isConstant() || ent.nreads == 1)) {
+    if (ent.value.isExpr() && (ent.isConstant() || ent.nreads == 1)) {
       // Note: ent is either constant (never written to)
       // or we are the only ones reading it.
       return numEval(ent.value)

@@ -80,6 +80,9 @@ import {
 import { debuglog as dlog } from './util'
 // const dlog = function(..._ :any[]){} // silence dlog
 
+// Enable debugging of ambiguos syntax parsed with backtracking
+const DEBUG_BACKTRACKING = DEBUG && false
+
 const kEmptyByteArray = new Uint8Array(0) // used for empty string
 
 const str_dot  = strings.get(new Uint8Array([0x2e])) // "."
@@ -261,16 +264,16 @@ export class Parser extends scanner.Scanner {
     // check for unused declarations
     if (s.decls) for (let [name, ent] of s.decls) {
       if (ent.nreads == 0) {
-        if (ent.decl.isFieldDecl()) {
-          p.diag("warn", `${name} not used`, ent.decl.pos, (
-            ent.decl._scope.context instanceof FunExpr ? 'E_UNUSED_PARAM' :
+        if (ent.value.isFieldDecl()) {
+          p.diag("warn", `${name} not used`, ent.value.pos, (
+            ent.value._scope.context instanceof FunExpr ? 'E_UNUSED_PARAM' :
             'E_UNUSED_FIELD'
           ))
         } else if (!(ent.scope.context instanceof StructType)) {
           p.diag(
             "warn",
             `${name} declared and not used`,
-            ent.decl.pos,
+            ent.value.pos,
             'E_UNUSED_VAR'
           )
         }
@@ -291,9 +294,10 @@ export class Parser extends scanner.Scanner {
     return s
   }
 
-  // declare registers name as declared by decl of value.
+  // declare registers name => value (of type)
+  // If type is null, type is inferred from value (by Ent)
   //
-  declare(scope :Scope, ident: Ident, decl :Stmt, value: Expr|null) {
+  declare(scope :Scope, ident: Ident, value :Stmt, type: Type|null) {
     const p = this
 
     if (ident.value.isEmpty) {
@@ -303,12 +307,12 @@ export class Parser extends scanner.Scanner {
 
     assert(ident.ent == null, `redeclaration of ${ident}`)
 
-    const ent = new Ent(ident.value, decl, value)
+    const ent = new Ent(ident.value, value, type)
     if (!scope.declareEnt(ent)) {
       p.syntaxError(`${ident} redeclared`, ident.pos)
     }
 
-    // dlog(`declare ${ident} at ${decl} (value=${value}) in ${scope} [${ent.type}]`)
+    // dlog(`declare ${ident} at ${value} (value=${value}) in ${scope} [${ent.type}]`)
 
     ident.ent = ent
 
@@ -318,22 +322,6 @@ export class Parser extends scanner.Scanner {
 
     // TODO: in the else branch, we could count locals/registers needed here.
     // For instance, "currFun().local_i32s_needed++"
-  }
-
-  // declarev performs multiple declarations at once
-  //
-  declarev(scope :Scope, idents: Ident[], val :Stmt, xs: Expr[]|null) {
-    const p = this
-    if (xs) {
-      assert(xs.length == idents.length)
-      for (let i = 0; i < idents.length; ++i) {
-        p.declare(scope, idents[i], val, xs[i])
-      }
-    } else {
-      for (let i = 0; i < idents.length; ++i) {
-        p.declare(scope, idents[i], val, null)
-      }
-    }
   }
 
 
@@ -396,8 +384,8 @@ export class Parser extends scanner.Scanner {
     }
     let ent = p.resolveEnt(x)
     if (ent) {
-      if (!ent.decl.isType()) {
-        if (ent.decl.isTemplateVar()) {
+      if (!ent.value.isType()) {
+        if (ent.value.isTemplateVar()) {
           x.type = ent.type
         }
         p.syntaxError(`${x} is not a type`, x.pos)
@@ -427,8 +415,6 @@ export class Parser extends scanner.Scanner {
     if (!x.value.isEmpty) {
       let ent = p.resolveEnt(x)
       if (ent) {
-        dlog(`ent.type=${ent.type}`)
-
         // identifier names a value or is not yet known
         if (!ent.type) {
           x.type = p.types.markUnresolved(x)
@@ -438,9 +424,9 @@ export class Parser extends scanner.Scanner {
             x.type.addRef(x)
           }
         }
-        // if (ent.decl.isTypeDecl()) {
+        // if (ent.value.isTypeDecl()) {
         //   // identifier names a type
-        //   x.type = ent.decl.type
+        //   x.type = ent.value.type
         // } else {
         //   // identifier names a value or is not yet known
         //   if (!ent.type) {
@@ -797,7 +783,7 @@ export class Parser extends scanner.Scanner {
     const scope = p.scope === p.filescope ? p.pkgscope : p.scope
 
     // declare id => t
-    p.declare(scope, id, t!, null)
+    p.declare(scope, id, t!, t)
 
     return new TypeDecl(pos, scope, id, t as Type, group)
   }
@@ -959,7 +945,8 @@ export class Parser extends scanner.Scanner {
         // expressions are not declared in the scope.
         // E.g. the statement "x = fun y(){}" should only declare x in the scope,
         // but not y.
-        p.declare(scope, name, f, f)
+        p.types.resolve(f)
+        p.declare(scope, name, f, f.type)
       }
     }
 
@@ -1289,7 +1276,7 @@ export class Parser extends scanner.Scanner {
 
           // declare name in function scope
           assert(f.name)
-          p.declare(scope, f.name!, f, f)
+          p.declare(scope, f.name!, f, f.type)
         }
       } else {
         // All named, all have types
@@ -1300,7 +1287,7 @@ export class Parser extends scanner.Scanner {
           }
           assert(f.name)
           f.name!.type = f.type
-          p.declare(scope, f.name!, f, f)
+          p.declare(scope, f.name!, f, f.type)
         }
       }
     }
@@ -1468,7 +1455,7 @@ export class Parser extends scanner.Scanner {
   ) {
     const p = this
 
-    dlog(`at ${p.currentPosition()} ${p.scope}`)
+    // dlog(`at ${p.currentPosition()} ${p.scope}`)
 
     // Check each left-hand identifier against scope and unresolved.
     // Note that exprList already has called p.resolve on all ids.
@@ -1498,8 +1485,8 @@ export class Parser extends scanner.Scanner {
 
         let typ = id.ent.type
         if (!typ) {
-          assert(id.ent.value)
-          typ = p.types.resolve(id.ent.value!)
+          assert(id.ent.value.isExpr())
+          typ = p.types.resolve(id.ent.value as Expr)
         }
 
         // const typexpr = id.ent.getTypeExpr()
@@ -1536,8 +1523,13 @@ export class Parser extends scanner.Scanner {
 
       // dlog(`declare ${id}=${rval ? rval.repr() : null} at ${p.currentPosition()} ${p.scope}`)
 
-      p.declare(id._scope, id, decl, rval)
+      // p.declare(id._scope, id, decl, rval)
       // p.declare(id._scope, id, decl)
+      if (rval) {
+        p.declare(id._scope, id, rval, rval.type || decl.type)
+      } else {
+        p.declare(id._scope, id, decl, decl.type)
+      }
 
       if (id.value.isEmpty) {
         id.type = null
@@ -2045,49 +2037,65 @@ export class Parser extends scanner.Scanner {
   maybeTemplateInstanceOrLess(lhs :Expr, pr :prec, ctx :exprCtx) :Expr {
     const p = this
     assert(p.tok == token.LSS)  // enter at token.LSS "<"
-    let pos = p.pos
 
-    dlog(`FORK template/less at ${p.currentPosition()} ${lhs._scope}`)
+    if (DEBUG_BACKTRACKING) {
+      dlog(`FORK template/less at ${p.currentPosition()} ${lhs._scope}`)
+    }
 
     let n = p.tryWithBacktracking(
 
       // try to parse as generic type, e.g. "x<y>"
       () :Expr => {
-        dlog("FORK template/less try template")
-        let t = p.types.resolve(lhs)
-        let templateName = lhs.isIdent() ? lhs : null
-        if (t.isUnresolvedType()) {
-          // we don't know what t actually is yet, but we'll assume it's a template
-          // since the input seems to assume it is.
-          dlog("FORK template/less try template: exit 1")
-          return p.templateInvocation(
-            Type,
-            templateName,
-            new Template<Type>(t.pos, t._scope, [], t)
-          )
-        } else if (t.isTemplate()) {
-          let n = p.templateInvocation(Type, templateName, t)
-          if (n.isExpr()) {
-            // Note: Type is an Expr
-            dlog("FORK template/less try template: exit 2")
-            return n
-          }
-          p.syntaxError(`expected expression but got ${n}`, pos)
-        } else {
-          p.syntaxError(`expected template expression`)
+        if (DEBUG_BACKTRACKING) {
+          dlog("FORK template/less try template")
         }
-        return p.bad()
+        return p.maybeTemplateExpansion(lhs)
       },
 
       // else, parse as binary expression, e.g. "x < y"
       () => {
-        dlog("FORK template/less try less")
+        if (DEBUG_BACKTRACKING) {
+          dlog("FORK template/less try less")
+        }
         return p.maybeBinaryExpr(lhs, pr, ctx)
       }
       // () => p.maybeBinaryExpr(lhs, pr, ctx),
     )
-    dlog("END FORK template/less")
+    if (DEBUG_BACKTRACKING) {
+      dlog("END FORK template/less")
+    }
     return n
+  }
+
+
+  maybeTemplateExpansion(x :Expr) {
+    const p = this
+    let t = p.types.resolve(x)
+    let templateName = x.isIdent() ? x : null
+
+    if (t.isUnresolvedType()) {
+      // we don't know what t actually is yet, but we'll assume it's a template
+      // since the input seems to assume it is.
+      return p.templateInvocation(Type,
+                                  templateName,
+                                  new Template<Type>(t.pos, t._scope, [], t))
+    }
+
+    // resolve any aliases to get to the actual template
+    let ct = t.canonicalType()
+
+    if (ct.isTemplate()) {
+      let n = p.templateInvocation(Type, templateName, ct)
+      if (n.isExpr()) {
+        // Note: Type is an Expr
+        return n
+      }
+      p.syntaxError(`expected expression but got ${n}`, x.pos)
+      return p.bad()
+    }
+
+    p.syntaxError(`expected template but got ${x}` + (ct && ct !== t ? ` (${ct})` : ""))
+    return p.bad()
   }
 
 
@@ -2192,7 +2200,7 @@ export class Parser extends scanner.Scanner {
 
     // do we know the function type?
     if (receiver.isType()) {
-      dlog(`note: calling a type ${receiver} (via receiver.isType)`)
+      // dlog(`Note: calling a type ${receiver} (via receiver.isType)`)
       if (receiver.isPrimType()) {
         dlog(`TODO: fast path for common case: conversion to primitive type`)
         // return p.callPrimType(receiver, receiver.type.type)
@@ -3100,6 +3108,9 @@ export class Parser extends scanner.Scanner {
         } catch (e) {
           if (!(e instanceof SyntaxError)) { throw e }
           // fall through and try next function
+          if (DEBUG_BACKTRACKING) {
+            dlog(`branch ${i} failed: ${e}`)
+          }
         }
         i++
         this.restoreSnapshot(s)
@@ -3172,6 +3183,9 @@ export class Parser extends scanner.Scanner {
     const p = this
 
     if (p.throwOnSyntaxError) {
+      if (DEBUG_BACKTRACKING) {
+        p.errorAt(msg, p.sfile.position(pos))
+      }
       throw new SyntaxError(msg, pos)
     }
 

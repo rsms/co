@@ -25,10 +25,8 @@ export class Universe {
       assert(t.isType(), `t ${t} (${t.constructor.name}) not a type`)
       const namebuf = strings.get(asciibuf(name))
       // declare t as namebuf of type t.type
-      let ident = new Ident(NoPos, this.scope, namebuf)
-      // let d = new TypeDecl(NoPos, this.scope, ident, t, g)
-      // decls.set(namebuf, new Ent(namebuf, d, null, t))
-      decls.set(namebuf, new Ent(namebuf, t, null, t))
+      // let ident = new Ident(NoPos, this.scope, namebuf)
+      decls.set(namebuf, new Ent(namebuf, t, t))
     }
 
     // export all built-in values (true, false, nil, etc)
@@ -37,7 +35,7 @@ export class Universe {
       assert(v.isExpr())
       const namebuf = strings.get(asciibuf(name))
       // define v as namebuf with value v of type v.type
-      decls.set(namebuf, new Ent(namebuf, v, v, v.type))
+      decls.set(namebuf, new Ent(namebuf, v, v.type))
     }
 
     this.scope.decls = decls

@@ -135,7 +135,7 @@ export class PkgBinder extends ErrorReporter {
       // (do not re-use pkg in the file scope but create
       // a new ent instead; the Decl field is different
       // for different files)
-      f._scope.declareEnt(new Ent(name, imp, null, null, pkg.data))
+      f._scope.declareEnt(new Ent(name, imp, null))
     }
   }
 
@@ -173,7 +173,7 @@ export class PkgBinder extends ErrorReporter {
         continue
       }
 
-      dlog(`${id} (${ent.decl.constructor.name}) at ${b.fset.position(id.pos)}`)
+      dlog(`${id} (${ent.value.constructor.name}) at ${b.fset.position(id.pos)}`)
 
       id.refEnt(ent) // reference ent
 
@@ -184,21 +184,16 @@ export class PkgBinder extends ErrorReporter {
         continue
       }
 
-      if (ent.value) {
-        // TODO: kill ent.value
+      assert(ent.value, `UnresolvedType with ent.value=null`)
+      if (ent.value.isType()) {
+        id.type = ent.value
+      } else if (ent.value.isExpr()) {
         id.type = b.types.resolve(ent.value as Expr)
         assert(!(id.type instanceof UnresolvedType), 'still unresolved')
       } else {
-        // TODO: FIXME: ent.decl is Stmt and might not have type. It's messy.
-        // see if we can narrow down the type on Ent.decl
-        assert(ent.decl != null, `UnresoledType with null ent.value and ent.decl`)
-        if (ent.decl.isType()) {
-          id.type = ent.decl
-        } else {
-          let t = (ent.decl as any).type as Type|null
-          assert(t && t.isType(), `${ent.decl} does not have type (.type=${t})`)
-          id.type = (ent.decl as any).type as Type
-        }
+        let t = (ent.value as any).type as Type|null
+        assert(t && t.isType(), `${ent.value} does not have type (.type=${t})`)
+        id.type = (ent.value as any).type as Type
       }
 
       // delegate type to any expressions that reference this type

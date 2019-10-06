@@ -261,7 +261,7 @@ export class TypeResolver extends ErrorReporter {
       if (isResolvedType(n.ent.type)) {
         return n.ent.type
       }
-      if (n.ent.value) {
+      if (n.ent.value.isExpr()) {
         return r.maybeResolve(n.ent.value)
       }
     }
@@ -337,7 +337,7 @@ export class TypeResolver extends ErrorReporter {
   // }
 
 
-  maybeResolveCallExpr = (n :ast.CallExpr) => {
+  maybeResolveCallExpr = (n :ast.CallExpr) :Type|null => {
     const r = this
     const receiverType = r.resolve(n.receiver)
 
@@ -995,7 +995,7 @@ export class TypeResolver extends ErrorReporter {
     }
     let id :Expr|null = x
     while (id instanceof ast.Ident && id.ent && id.ent.isConstant()) {
-      id = id.ent.value
+      id = id.ent.value as Expr|null
       if (id instanceof LiteralExpr) {
         return id
       }

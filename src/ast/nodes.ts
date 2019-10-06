@@ -244,6 +244,7 @@ export class OptionalType extends Type {
             t === t_nil // e.g. "x T?; x = nil"
         );
     }
+    toString(): string { return `${this.type}?`; }
     visit(v: NodeVisitor) { v.visitFieldN("type", this.type); }
 }
 // Storage denotes the storage type needed for a primitive type
@@ -461,7 +462,14 @@ export class AliasType extends Type {
     equals(other: Type): bool {
         return this === other || (other.isAliasType() && this.type.equals(other.type));
     }
-    canonicalType(): Type { return this.type; }
+    canonicalType(): Type {
+        let t: Type = this.type;
+        while (t instanceof AliasType) {
+            t = t.type;
+        }
+        return t;
+    }
+    toString(): string { return `(AliasType ${this.type})`; }
     visit(v: NodeVisitor) {
         v.visitFieldN("type", this.type);
         v.visitField("name", this.name);
@@ -719,7 +727,7 @@ export class Ident extends Expr {
     }
     // ref registers a reference to this ent from an identifier
     refEnt(ent: Ent) {
-        assert(this !== ent.decl, "ref declaration");
+        assert(this !== ent.value, "ref declaration");
         ent.nreads++;
         this.ent = ent;
     }
