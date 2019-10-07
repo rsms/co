@@ -369,35 +369,41 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  // resolveType resolved identifier x as a type.  x is expected to name a type.
-  // If the identifier was successfully resolved, x.ent is set to the resolved Ent.
+  // resolveType resolves x as a type; x is expected to refer to a type.
+  //
+  // If x is an identifier and was successfully resolved, x.ent is set to the resolved Ent.
   // x.type is always set to either UndefinedType or a known Type. Returns x.type.
   //
   // Note: This function accepts all types for x which are parsed from dotident
   // for convenience, but actually doesn't support all types named for x.
-  resolveType(x :Ident|SelectorExpr|IndexExpr) :Type {
+  resolveType(x :Expr) :Type {
     const p = this
-    if (!x.isIdent() || x.value.isEmpty) {
-      // TODO: Support SelectorExpr, e.g. "foo.Bar"
-      p.syntaxError(`expected type`, x.pos)
-      return p.bad<Type>(x.pos, "type")
-    }
-    let ent = p.resolveEnt(x)
-    if (ent) {
-      if (!ent.value.isType()) {
-        if (ent.value.isTemplateVar()) {
-          x.type = ent.type
+    if (!x.type) {
+      if (!x.isIdent() || x.value.isEmpty) {
+        // TODO: Support SelectorExpr, e.g. "foo.Bar"
+        if (x.isIdent() && x.value.isEmpty) {
+          dlog(`TODO support ${x.constructor.name}`)
         }
-        p.syntaxError(`${x} is not a type`, x.pos)
-      } else if (ent.type) {
-        x.type = ent.type
-        if (x.type.isUnresolvedType()) {
-          x.type.addRef(x)
-        }
-        return x.type
+        p.syntaxError(`expected type`, x.pos)
+        return p.bad<Type>(x.pos, "type")
       }
+      let ent = p.resolveEnt(x)
+      if (ent) {
+        if (!ent.value.isType()) {
+          if (ent.value.isTemplateVar()) {
+            x.type = ent.type
+          }
+          p.syntaxError(`${x} is not a type`, x.pos)
+        } else if (ent.type) {
+          x.type = ent.type
+          if (x.type.isUnresolvedType()) {
+            x.type.addRef(x)
+          }
+          return x.type
+        }
+      }
+      x.type = p.types.markUnresolved(x)
     }
-    x.type = p.types.markUnresolved(x)
     return x.type
   }
 
@@ -1983,7 +1989,7 @@ export class Parser extends scanner.Scanner {
     const p = this
     let x = p.unaryExpr(pr, ctx)
 
-    if ((p.tok == token.GTR || p.tok == token.SHR) && ctx instanceof Template) {
+    if (ctx instanceof Template && (p.tok == token.GTR || p.tok == token.SHR)) {
       // when we parse template expansion, ">" terminates
       return x
     }
@@ -2068,7 +2074,7 @@ export class Parser extends scanner.Scanner {
   }
 
 
-  maybeTemplateExpansion(x :Expr) {
+  maybeTemplateExpansion(x :Expr) :Expr {
     const p = this
     let t = p.types.resolve(x)
     let templateName = x.isIdent() ? x : null
@@ -2087,10 +2093,10 @@ export class Parser extends scanner.Scanner {
     if (ct.isTemplate()) {
       let n = p.templateInvocation(Type, templateName, ct)
       if (n.isExpr()) {
-        // Note: Type is an Expr
         return n
       }
-      p.syntaxError(`expected expression but got ${n}`, x.pos)
+      // Partial expansion
+      p.syntaxError(`template ${t} not fully expanded`)
       return p.bad()
     }
 
@@ -2174,7 +2180,11 @@ export class Parser extends scanner.Scanner {
       case token.LSS:
         // could be either x<y (LT x y) or x<y> (type x y)
         x = p.maybeTemplateInstanceOrLess(x, pr, ctx)
-        break
+        if (x.isOperation()) {
+          break // continue loop
+        }
+        // template expansion
+        break loop
 
       default:
         break loop
@@ -2456,16 +2466,16 @@ export class Parser extends scanner.Scanner {
     case token.INT_HEX:
       // e.g. "t.3"
       let x = new IndexExpr(pos, p.scope, operand, p.intLit(ctx, p.tok))
-      let optype = operand.type ? operand.type.canonicalType() : null
+      let optype = p.resolveType(operand).canonicalType()
       if (optype instanceof TupleType) {
-        if (!p.types.maybeResolveTupleAccess(x)) {
+        if (!p.types.maybeResolveTupleAccess(x, optype)) {
           x.type = p.types.markUnresolved(x)
         }
       } else {
         // numeric access on something that's not a tuple
         x.type = p.types.markUnresolved(x)
         p.syntaxError(
-          `numeric field access on non-tuple type ${optype}`,
+          `numeric field access on non-tuple type ${optype} (operand ${operand.repr()})`,
           pos
         )
       }
@@ -2505,7 +2515,7 @@ export class Parser extends scanner.Scanner {
       let x = p.expr(itemtype)
       if (!t) {
         if (x.type && !x.type.isUnresolved()) {
-          t = new ListType(x.type)
+          t = p.types.getListType(x.type)
         }
       } else {
         x = p.types.convert(t.type, x) || x
@@ -2581,7 +2591,7 @@ export class Parser extends scanner.Scanner {
       // list type expression. e.g. x[]
       let elementType = p.types.resolve(operand).canonicalType()
       print(`list elementType: ${elementType}`)
-      return new ListType(elementType)
+      return p.types.getListType(elementType)
       // let lt = p.types.getGenericInstance(t_list, [opt])
       // return new TypeExpr(pos, p.scope, lt)
     }
@@ -2630,11 +2640,12 @@ export class Parser extends scanner.Scanner {
     assert(x1!.isExpr())
 
     let x = new IndexExpr(pos, p.scope, operand, x1!)
+    let optype = p.resolveType(operand).canonicalType()
 
-    if (operand.type instanceof TupleType) {
+    if (optype.isTupleType()) {
       // non-uniform operand type
       // we need to resolve index to find type
-      if (!p.types.maybeResolveTupleAccess(x)) {
+      if (!p.types.maybeResolveTupleAccess(x, optype)) {
         x.type = p.types.markUnresolved(x)
       }
       return x
@@ -2775,9 +2786,13 @@ export class Parser extends scanner.Scanner {
 
     }
 
-    if (!t) {
-      return null
-    }
+    return t ? p.postType(t) : null
+  }
+
+
+  // postType parses possible things following a type, like "?" or "[]"
+  postType(t :Type) :Type {
+    const p = this
 
     // optional, e.g. "Foo?"
     if (p.got(token.QUESTION)) {
@@ -2816,7 +2831,7 @@ export class Parser extends scanner.Scanner {
     const p = this
     p.want(token.LBRACKET)
     p.want(token.RBRACKET)
-    return new ListType(t)
+    return p.types.getListType(t)
   }
 
 
@@ -2915,7 +2930,11 @@ export class Parser extends scanner.Scanner {
     p.want(token.LSS)  // consume "<"
     let args :Node[] = []
     while (p.tok != token.GTR && p.tok != token.SHR && p.tok != token.EOF) {
-      args.push(p.expr(template))
+      let x = p.expr(template)
+      if (x.isType()) {
+        x = p.postType(x)
+      }
+      args.push(x)
       // if we get ";" or ",", continue with maybe parsing another typevar
       if (p.tok == token.COMMA || p.tok == token.SEMICOLON) {
         p.next()

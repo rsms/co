@@ -103,6 +103,10 @@ export class TypeResolver extends ErrorReporter {
     return this.universe.internType(new TupleType(tv))
   }
 
+  getListType(t :Type) :ListType {
+    return this.universe.internType(new ListType(t))
+  }
+
   getRestType(t :Type) :RestType {
     return this.universe.internType(new RestType(t))
   }
@@ -614,7 +618,7 @@ export class TypeResolver extends ErrorReporter {
       // defer to bind stage
       dlog(`[index type] deferred to bind stage`)
     } else if (opt.isTupleType()) {
-      r.maybeResolveTupleAccess(n)
+      r.maybeResolveTupleAccess(n, opt)
     } else {
       dlog(`[index type] operand is not a tuple; opt = ${opt}`)
     }
@@ -834,7 +838,7 @@ export class TypeResolver extends ErrorReporter {
       // defer to bind stage
       dlog(`[index type] deferred to bind stage`)
     } else if (opt.isTupleType()) {
-      r.maybeResolveTupleAccess(x)
+      r.maybeResolveTupleAccess(x, opt)
     } else {
       dlog(`TODO [index type] operand is not a tuple; opt = ${opt}`)
     }
@@ -918,10 +922,10 @@ export class TypeResolver extends ErrorReporter {
   // x.index must be constant.
   // Return true if resolution succeeded.
   //
-  maybeResolveTupleAccess(x :IndexExpr) :bool {
+  maybeResolveTupleAccess(x :IndexExpr, tupletype :TupleType) :bool {
     const p = this
 
-    let tupletype = (x.operand.type as Type).canonicalType() as TupleType
+    // let tupletype = x.operand.type!.canonicalType() as TupleType
     assert(tupletype, 'unresolved operand type')
     assert(tupletype.isTupleType())
     assert(tupletype.types.length > 0, 'empty tuple')
