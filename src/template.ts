@@ -1,5 +1,6 @@
 import { Pos, NoPos } from "./pos"
 import { strings } from "./bytestr"
+import { PathMap } from "./pathmap"
 import * as utf8 from "./utf8"
 import * as ast from "./ast"
 import { Node, Template, TemplateInvocation, TemplateVar } from "./ast"
@@ -15,6 +16,70 @@ let dbg = DEBUG_EXPANSION ? (...args :any[]) :void => {
 
 
 export type ErrorCallback = (message :string, pos :Pos) => any
+
+
+class CacheEnt {
+  key   :Node[]
+  value :Node|null
+
+  constructor(key :Node[], value: Node|null) {
+    this.key = key
+    this.value = value
+  }
+}
+
+const instanceCache = new class {
+  tmap = new Map<Template<Node>,CacheEnt[]>()
+
+  get(t :Template<Node>, args :Node[]) :Node|null {
+    let entries = this.tmap.get(t)
+    if (!entries) {
+      return null
+    }
+
+    // TODO: replace this with something more efficient, like a trie.
+
+    let nargs = args.length
+
+    ent_loop:
+    for (let ent of entries) {
+      if (ent.key.length == nargs) {
+        for (let i = 0; i < nargs; i++) {
+          let arg = args[i]
+          if (!this.equals(args[i], ent.key[i])) {
+            continue ent_loop
+          }
+        }
+        return ent.value
+      }
+    }
+
+    return null
+  }
+
+  set(t :Template<Node>, args :Node[], value :Node) {
+    let ent = new CacheEnt(args, value)
+    let v = this.tmap.get(t)
+    if (!v) {
+      this.tmap.set(t, [ent])
+    } else {
+      v.push(ent)
+    }
+  }
+
+  equals(a :Node, b :Node) :bool {
+    if (a === b) {
+      return true
+    }
+    if (a.isType() && b.isType()) {
+      return a.equals(b)
+    }
+    if (a.isIdent() && b.isIdent()) {
+      return a.ent === b.ent
+    }
+    return false
+  }
+}
 
 
 // expand a template, possibly returning a partially expanded template.
@@ -43,6 +108,11 @@ export function expand<R extends Node, T extends R>(
   // TODO: instance cache.
   // e.g. instanceCache.get([ti.template, ti.args])
   // We can use PathMap for this.
+
+  let cached = instanceCache.get(ti.template, ti.args)
+  if (cached) {
+    return cached as T|Template<T>
+  }
 
   let tp = ti.template
 
@@ -175,6 +245,7 @@ export function expand<R extends Node, T extends R>(
     // we essentially get it for free (no special logic).
 
     // return visitChildren(expanded) // maybe we need a second pass..?
+    instanceCache.set(ti.template, ti.args, expanded)
     return expanded as Template<T>
   }
 
@@ -209,6 +280,8 @@ export function expand<R extends Node, T extends R>(
   //   // erase own type
   //   n.type = null
   // }
+
+  instanceCache.set(ti.template, ti.args, n)
 
   if (DEBUG_EXPANSION) {
     ast.print(n)

@@ -55,8 +55,8 @@ export class TypeResolver extends ErrorReporter {
   // genericInstanceCache = new PathMap<Type,GenericTypeInstance<GenericType>>()
   //   // maintains a collection of generic type instances
 
-  constructor() {
-    super('E_RESOLVE')
+  constructor(traceInDebugMode? :bool) {
+    super('E_RESOLVE', null, traceInDebugMode)
     this.setupResolvers()
   }
 
@@ -148,6 +148,10 @@ export class TypeResolver extends ErrorReporter {
       this.universe.internType(new StrType(NoPos, length))
     )
   }
+
+  // getStructType(t :Type) :RestType {
+  //   return this.universe.internType(new RestType(t))
+  // }
 
   // resolve attempts to resolve or infer the type of n.
   // Returns UnresolvedType if the type refers to an undefined identifier.

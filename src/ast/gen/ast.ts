@@ -399,6 +399,37 @@ class StructType extends Type {
   toString() :string {
     return this.name ? this.name.toString() : "{anon}"
   }
+
+  // equals(t :Type) :bool {
+  //   if (this === t) {
+  //     return true
+  //   }
+  //   if (t instanceof StructType) {
+  //     if (
+  //       this.decls.length != t.decls.length ||
+  //       ( this.name !== t.name &&
+  //         (!this.name || !t.name || this.name.value !== t.name.value)
+  //       )
+  //     ) {
+  //       return false
+  //     }
+  //     for (let i = 0; i < this.decls.length; i++) {
+  //       let a = this.decls[i]
+  //       let b = t.decls[i]
+  //       if (a !== b) {
+  //         if (a.isType() && b.isType()) {
+  //           if (!a.equals(b)) {
+  //             return false
+  //           }
+  //         } else {
+  //           return false
+  //         }
+  //       }
+  //     }
+  //     return true
+  //   }
+  //   return false
+  // }
 }
 
 class FunType extends Type {

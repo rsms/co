@@ -95,8 +95,8 @@ export class Scanner extends ErrorReporter {
   // public state - ok to modify
   public errorCount :int = 0 // number of errors encountered
 
-  constructor() {
-    super('E_SYNTAX')
+  constructor(traceInDebugMode? :bool) {
+    super('E_SYNTAX', null, traceInDebugMode)
   }
 
   // Init prepares the scanner s to tokenize the text sdata by setting the

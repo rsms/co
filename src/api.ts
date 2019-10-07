@@ -57,6 +57,11 @@ export interface CompilerHost {
   parseFile(filename :string, source :SourceData, gscope? :ast.Scope, cb? :DiagnosticCallback, mode? :ScanMode) :ast.File
   parsePackage(name :string, sources :Iterable<Source>, cb? :DiagnosticCallback, mode? :ScanMode) :Promise<ast.Package>
   compilePackage(pkg :ast.Package, target :string|Config, cb? :DiagnosticCallback, flags? :IRBuilderFlags) :ssa.Pkg
+
+  //[DEBUG only]
+  // traceInDebugMode controls output of trace-level messages in DEBUG builds.
+  // When left undefined, the bult-in default is used.
+  traceInDebugMode? :bool
 }
 
 // FileSystem represents the interface to some underlying file system.
@@ -207,13 +212,14 @@ class CHost implements CompilerHost {
   universe = new Universe(new TypeSet())
 
   // Exclusive resources
-  typeres   = new Pool(()=>new TypeResolver())
-  parser    = new Pool(()=>new Parser())
-  scanner   = new Pool(()=>new Scanner())
+  typeres   = new Pool(()=>new TypeResolver(this.traceInDebugMode))
+  parser    = new Pool(()=>new Parser(this.traceInDebugMode))
+  scanner   = new Pool(()=>new Scanner(this.traceInDebugMode))
   irbuilder = new Pool(()=>new IRBuilder())
 
   parseComments = true // TODO: pass this to parse/scan invocations somehow
   serialMode = false   // do not perform work in a concurrent "async" manner
+  traceInDebugMode? :bool
 
   constructor(fs :FileSystem) {
     this.fs = fs
@@ -269,7 +275,7 @@ class CHost implements CompilerHost {
 
     // bind package together, resolving cross-file references and imports
     if (errcount == 0 && typeres.errorCount == 0) {
-      let binder = new PkgBinder(fset, typeres, diags.errh)
+      let binder = new PkgBinder(fset, typeres, diags.errh, this.traceInDebugMode)
       errcount += typeres.errorCount + await binder.importAndBind(this.importPackage, pkg.files)
     } else {
       // add errors from type resolver (avoids double counting)
@@ -310,7 +316,7 @@ class CHost implements CompilerHost {
       diags.assignTo(f)
 
       if (errcount == 0) {
-        let binder = new PkgBinder(fset, typeres, diags.errh)
+        let binder = new PkgBinder(fset, typeres, diags.errh, this.traceInDebugMode)
         errcount += typeres.errorCount + binder.bind([ f ])
       }
 

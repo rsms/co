@@ -11,9 +11,11 @@ interface ReprScope {
 }
 
 export interface ReprOptions {
-  colors? :bool            // default: false
-  sep?    :string          // default: "\n"
-  w?      :StrWriter|null  // defaults to internal buffering; read via toString
+  colors?  :bool            // default: false
+  sep?     :string          // default: "\n"
+  w?       :StrWriter|null  // defaults to internal buffering; read via toString
+  noRefs?  :bool            // don't include references in output (e.g. "&4", "#4")
+  noScope? :bool            // exclude scopes
 }
 
 export class ReprVisitor implements NodeVisitor {
@@ -24,6 +26,8 @@ export class ReprVisitor implements NodeVisitor {
   seen = new Map<any,int>()
   nextid = 0
   style :termstyle.Style
+  showRefs :bool
+  includeScope: bool
 
   constructor(options? :ReprOptions) {
     this.sep = (options && options.sep) || "\n"
@@ -33,6 +37,8 @@ export class ReprVisitor implements NodeVisitor {
     } else {
       this.style = termstyle.noStyle
     }
+    this.showRefs = !options || !options.noRefs
+    this.includeScope = !options || !options.noScope
   }
 
   toString() :string {
@@ -66,11 +72,14 @@ export class ReprVisitor implements NodeVisitor {
   }
 
   fmtid(seen :bool, id :int) :string {
+    if (!this.showRefs) {
+      return ""
+    }
     // unseen id represents definition. e.g. "#5"
     // seen id represents a reference. e.g. "&5"
     let s = (seen ? "&" : "#") + id.toString(36)
     if (this.style === termstyle.noStyle) {
-      return s
+      return " " + s
     }
     let styles = [
       this.style.blue,
@@ -82,7 +91,7 @@ export class ReprVisitor implements NodeVisitor {
       this.style.red,
       this.style.yellow,
     ]
-    return styles[id % (styles.length-1)](s)
+    return " " + styles[id % (styles.length-1)](s)
   }
 
   visitNode(n :Node) {
@@ -111,11 +120,11 @@ export class ReprVisitor implements NodeVisitor {
       let [seen, id] = this.markSeen(n)
       this.w(`(${this.style.bold(n.constructor.name)}`)
       if (seen || n.isType()) {
-        this.w(` ${this.fmtid(seen, id)}`)
+        this.w(`${this.fmtid(seen, id)}`)
       }
       if (!seen) {
         this.pushScope()
-        if (!(n instanceof TemplateVar)) {
+        if (!(n instanceof TemplateVar) && this.includeScope) {
           let scope = (n as any)._scope as Scope|null
           if (scope && scope.decls && scope.decls.size > 0) {
             this.visitScope(scope)
@@ -129,8 +138,11 @@ export class ReprVisitor implements NodeVisitor {
   }
 
   visitScope(s :Scope) {
+    if (!this.includeScope) {
+      return
+    }
     let [seen, id] = this.markSeen(s)
-    this.w(`${this.sep}(scope ${this.fmtid(seen, id)}`)
+    this.w(`${this.sep}(scope${this.fmtid(seen, id)}`)
     if (!seen && s.decls) {
       assert(s instanceof Scope)
       this.pushScope()

@@ -47,21 +47,16 @@ export class PkgBinder extends ErrorReporter {
   imports = new Map<string,Ent>()
   undef :Set<Ident>|null = null // track undefined so we don't report twice
 
-  // pkg      :Package
-  // importer :Importer|null
-  fset     :SrcFileSet
-  types    :TypeResolver
+  fset  :SrcFileSet
+  types :TypeResolver
 
   constructor(
-    // pkg      :Package,
-    // importer :Importer|null,
     fset     :SrcFileSet,
     types    :TypeResolver,
     errh     :ErrorHandler|null,
+    traceInDebugMode? :bool,
   ) {
-    super('E_RESOLVE', errh)
-    // this.pkg = pkg
-    // this.importer = importer
+    super('E_RESOLVE', errh, traceInDebugMode)
     this.fset = fset
     this.types = types
   }
@@ -203,14 +198,15 @@ export class PkgBinder extends ErrorReporter {
         if (ref.isFunSig() || ref.isFunType()) {
           ref.result = id.type
         } else if (ref.isTemplateInvocation()) {
-          if (id.type.isTemplate()) {
-            ref.template = id.type
+          let ttype = id.type.canonicalType()
+          if (ttype.isTemplate()) {
+            ref.template = ttype
             let n = b.expandTemplate(Type, ref as TemplateInvocation<Type>)
             if (n) {
               ref.convertToNodeInPlace(n)
             }
           } else {
-            b.error(`not a template`, ref.name ? ref.name.pos : ref.pos)
+            b.error(`not a template (${ttype})`, ref.name ? ref.name.pos : ref.pos)
           }
         } else {
           assert((ref as any).type !== undefined)

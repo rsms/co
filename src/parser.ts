@@ -2180,7 +2180,7 @@ export class Parser extends scanner.Scanner {
       case token.LSS:
         // could be either x<y (LT x y) or x<y> (type x y)
         x = p.maybeTemplateInstanceOrLess(x, pr, ctx)
-        if (x.isOperation()) {
+        if (x.isOperation() || !ctx || !ctx.isType()) {
           break // continue loop
         }
         // template expansion
@@ -2514,8 +2514,10 @@ export class Parser extends scanner.Scanner {
     while (p.tok != token.RBRACKET && p.tok != token.EOF) {
       let x = p.expr(itemtype)
       if (!t) {
-        if (x.type && !x.type.isUnresolved()) {
-          t = p.types.getListType(x.type)
+        let xt = x.isType() ? x : (x.type || p.types.resolve(x))
+        if (!xt.isUnresolved()) {
+          // dlog(`list type inferred from expr ${x} as ${xt}`)
+          t = p.types.getListType(xt)
         }
       } else {
         x = p.types.convert(t.type, x) || x
@@ -2532,7 +2534,7 @@ export class Parser extends scanner.Scanner {
     p.want(token.RBRACKET)
 
     if (l.length == 0 && !t) {
-      p.syntaxError(`unable to infer type of empty list`, pos)
+      p.syntaxError(`empty list without explicit type`, pos)
     }
 
     return new ListExpr(pos, p.scope, l, t)
@@ -3235,7 +3237,7 @@ export class Parser extends scanner.Scanner {
       `unexpected ${tokstr(p.tok)}`
     )
     p.errorAt(cond + msg, position)
-    if (DEBUG) {
+    if (DEBUG && this.traceInDebugMode) {
       // print token state when compiled in debug mode
       console.error(`  p.tok = ${token[p.tok]} ${tokstr(p.tok)}`)
     }

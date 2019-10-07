@@ -193,7 +193,7 @@ TEST('#directive', () => {
     #end foo "bar" 45 6.78
     hello world
     `))
-    print("file:", file.repr())
+    // print("file:", file.repr())
     assertEq(api.getErrorCount(file), 0)
     assert(file.endPos)  // in this test we only care about endPos being set
     assertEq(file.endMeta.length, 4)
@@ -262,9 +262,12 @@ TEST('suite', async () => {
     // find difference between what is expected and what was actually parsed
     let diff = S.diff(expect, actual)
     if (diff) {
+      // TODO: use a textual diff library that we load lazily here and show any diff chunk
+      // which has different prefix (L vs R)
       print("---\nexpect:\n" + expect.toString("\n"))
       print("---\nactual:\n" + actual.toString("\n"))
-      print("---\ndiff:\n" + (diff && diff.toString("\n")))
+      // diff is rarely useful, it's been disabled here below
+      // print("---\ndiff:\n" + (diff && diff.toString("\n")))
       assert(false, `unexpected parse result for ${rpath(filename)}`)
     }
   }
@@ -283,7 +286,11 @@ function parseFile(filename :string, code :api.SourceData, mode? :api.ScanMode) 
 
 
 function fileToSExpr(file :api.ast.File) :S.List {
-  let decls = (parseSExpr(file.sfile.name, file.repr(), 0)[0] as S.List).get("decls") as S.List
+  let aststr = file.repr({
+    noRefs: true, // disable e.g. "$4" and "#4" in output
+    noScope: true, // exclude scope
+  })
+  let decls = (parseSExpr(file.sfile.name, aststr, 0)[0] as S.List).get("decls") as S.List
   decls.shift() // pop "decls" keyword at beginning of list
   return decls
 }
@@ -299,7 +306,11 @@ function parseSExpr(filename :string, source :string, lineOffset :int) :S.List {
 let _chost :api.CompilerHost|null = null
 
 function getCompilerHost() {
-  return _chost || (_chost = api.createCompilerHost())
+  if (!_chost) {
+    _chost = api.createCompilerHost()
+    _chost.traceInDebugMode = false  // disable trace-level log messages
+  }
+  return _chost
 }
 
 

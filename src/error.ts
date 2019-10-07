@@ -31,7 +31,8 @@ export class ErrorReporter {
 
   constructor(
     public defaultErrCode :ErrorCode,
-    public errh :ErrorHandler|null = null,
+    public errh :ErrorHandler|null,
+    public traceInDebugMode :bool = true,  // default val. (supers pass in undef by default.)
   ) {}
 
   errorAt(msg :string, position :Position, code? :ErrorCode) {
@@ -42,7 +43,7 @@ export class ErrorReporter {
 
     // when compiling in debug mode, also show stack trace when reporting error
     if (DEBUG) {
-      if (this.errh) {
+      if (this.errh && this.traceInDebugMode) {
         let e = new Error()
         let maxlen = 0, SP = '                              '
         const S = termColorSupport ? style : noStyle

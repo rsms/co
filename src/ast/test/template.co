@@ -1,0 +1,255 @@
+fun generics {
+  type T1 (int, f32, List<int>)
+  type S1<A,B> { a A; b B }
+  type S2 S1  // tests AliasType resolution
+
+  _ u32[]
+  _ u32[][]
+  _ S1<i32,S1<u32,f32>> // (i32, (u32, f32))
+  _ S1<i32,S1<i32,S1<u32,f32>>> // (i32, (i32, (u32, f32)))
+  _ S1<int,str>[]  // S1<int,str>[]
+  _ List<S1<int,str>>[]  // S1<int,str>[][]
+  _ List<S1<int,str>[]>  // S1<int,str>[][]
+  _ List<S1<int,str>[]>[]  // S1<int,str>[][][]
+
+  _ List<int> // int[]
+  _ List<int> // int[]
+  _ List<f32> // f32[]
+  _ List<f32> // f32[]
+  _ T1.2    // int[] because T1.2 = List<int>
+  _ T1.2[]  // int[][] because T1.2 = List<int>
+
+  // ambiguous expressions
+  a, b, x = 1, 2, 3
+  _ = x < a && b > a     // (assign _ (ANDAND (LSS x a) (GTR b a)))
+  _ = S2<int,f32>()      // (assign _ (call (type S2<int,f32>) ()))
+  _ = unkn<int,f32>()    // (assign _ (call (type ~unkn<int,f32>) ()))
+  _ = List<int>()        // (assign _ (call (type int[]) ()))
+  _ int[] = List<int>()  // (var _ (call (type int[]) ()))
+  _, _ = a<b,a>b         // (assign _ (LSS a b) (GTR a b))
+  _ = [a<b,a>b]          // (assign _ (List (LSS a b) (GTR a b)))
+  _ = [S1<int,f32>]      // (assign _ (List (type S1<int,f32>)))
+  S1<int,f32>()          // (call (type S1<int,f32>)) ())
+  List<int>()            // (call (type int[]) ())
+}
+
+// late-resolved type alias
+type unkn List
+
+#end lisp // expected
+(
+  (FunExpr (body (Block (list
+
+    ; type T1 (int, f32, List<int>)
+    (TypeDecl
+      (ident (id T1))
+      (type (TupleType
+        (types
+          int
+          f32
+          (ListType
+            (type int))))))
+
+    ; type S1<A,B> { a A; b B }
+    (TypeDecl
+      (ident (id S1))
+      (type (Template
+        (vars
+          (TemplateVar (name (id A)))
+          (TemplateVar (name (id B))))
+        (base (StructType
+          (name (id S1))
+          (decls
+            (VarDecl (idents (id a (TemplateVar))) (type (TemplateVar)))
+            (VarDecl (idents (id b (TemplateVar))) (type (TemplateVar)))
+          )
+        ))
+      ))
+    )
+
+    ; type S2 S1
+    (TypeDecl
+      (ident (id S2))
+      (type (AliasType (type (Template)) (name S2)))
+    )
+
+    ; _ u32[]
+    (VarDecl (idents (id _)) (type (ListType (type u32))))
+
+    ; _ u32[][]
+    (VarDecl (idents (id _)) (type (ListType (type (ListType)))))
+
+    ; _ S1<i32,S1<u32,f32>>
+    (VarDecl (idents (id _))
+      (type (StructType
+        (name (id S1<i32,S1<u32,f32>>))
+        (decls
+          (VarDecl (idents (id a i32)) (type i32))
+          (VarDecl
+            (idents (id b
+              (StructType (name (id S1<u32,f32>))
+                (decls
+                  (VarDecl (idents (id a u32)) (type u32))
+                  (VarDecl (idents (id b f32)) (type f32))
+                )
+              )
+            ))
+            (type (StructType))
+          )
+        )
+      ))
+    )
+
+    ; _ S1<i32,S1<i32,S1<u32,f32>>>
+    (VarDecl (idents (id _))
+      (type (StructType
+        (name (id S1<i32,S1<i32,S1<u32,f32>>>))
+        (decls
+          (VarDecl (idents (id a i32)) (type i32))
+          (VarDecl (idents (id b (StructType))) (type (StructType)))
+        )
+      ))
+    )
+
+    ; _ S1<int,str>[]
+    (VarDecl (idents (id _))
+      (type (ListType
+        (type (StructType
+          (name (id S1<int,str>))
+          (decls
+            (VarDecl (idents (id a int)) (type int))
+            (VarDecl (idents (id b str)) (type str))
+          )
+        ))
+      ))
+    )
+
+    ; _ List<S1<int,str>>[]
+    (VarDecl (idents (id _)) (type (ListType (type (ListType (type (StructType)))))))
+    ; _ List<S1<int,str>[]>
+    (VarDecl (idents (id _)) (type (ListType (type (ListType)))))
+    ; _ List<S1<int,str>[]>[]
+    (VarDecl (idents (id _)) (type (ListType (type (ListType)))))
+
+    ; _ List<int> // int[]
+    (VarDecl (idents (id _)) (type (ListType)))
+    ; _ List<int> // int[]
+    (VarDecl (idents (id _)) (type (ListType)))
+    ; _ List<f32> // f32[]
+    (VarDecl (idents (id _)) (type (ListType (type f32))))
+    ; _ List<f32> // f32[]
+    (VarDecl (idents (id _)) (type (ListType)))
+
+    ; _ T1.2
+    (VarDecl (idents (id _)) (type (ListType)))
+    ; _ T1.2[]
+    (VarDecl (idents (id _)) (type (ListType (type (ListType)))))
+
+    ; a, b, x = 1, 2, 3
+    (Assignment
+     (type (TupleType (types int int int)))
+     (op ASSIGN)
+     (lhs (id a int)     (id b int)     (id x int))
+     (rhs (IntLit 1 int) (IntLit 2 int) (IntLit 3 int))
+    )
+
+    ; _ = x < a && b > a
+    (Assignment (type bool) (op ASSIGN)
+      (lhs (id _))
+      (rhs (Operation (type bool)
+             (op ANDAND)
+             (x (Operation (type bool) (op LSS) (x (id x int)) (y (id a int))))
+             (y (Operation (type bool) (op GTR) (x (id b int)) (y (id a int))))
+      ))
+    )
+
+    ; _ = S2<int,f32>()
+    (Assignment
+      (type (StructType
+              (name (id S1<int,f32>))
+              (decls
+                (VarDecl (idents (id a int)) (type int))
+                (VarDecl (idents (id b f32)) (type f32))
+              )
+      ))
+      (op ASSIGN)
+      (lhs (id _))
+      (rhs (CallExpr (type (StructType)) (receiver (StructType)) (args)))
+    )
+
+    ; _ = unkn<int,f32>()
+    (Assignment
+      (type (ListType (type int)))
+      (op ASSIGN)
+      (lhs (id _))
+      (rhs (CallExpr (type (ListType)) (receiver (ListType)) (args)))
+    )
+
+    ; _ = List<int>()
+    (Assignment
+      (type (ListType))
+      (op ASSIGN)
+      (lhs (id _))
+      (rhs (CallExpr (type (ListType)) (receiver (ListType)) (args)))
+    )
+
+    ; _ int[] = List<int>()
+    (VarDecl
+      (idents (id _))
+      (type (ListType (type int)))
+      (values (CallExpr (type (ListType)) (receiver (ListType)) (args)))
+    )
+
+    ; _, _ = a<b,a>b
+    (Assignment
+      (type (TupleType (types bool bool)))
+      (op ASSIGN)
+      (lhs (id _) (id _))
+      (rhs
+        (Operation (type bool) (op LSS) (x (id a int)) (y (id b int)))
+        (Operation (type bool) (op GTR) (x (id a int)) (y (id b int)))
+      )
+    )
+
+    ; _ = [a<b,a>b]
+    (Assignment
+      (type (ListType (type bool)))
+      (op ASSIGN)
+      (lhs (id _))
+      (rhs (ListExpr
+             (type (ListType))
+             (entries
+               (Operation (type bool) (op LSS) (x (id a int)) (y (id b int)))
+               (Operation (type bool) (op GTR) (x (id a int)) (y (id b int)))
+             )
+      ))
+    )
+
+    ; _ = [S1<int,f32>]
+    (Assignment
+      (type (ListType (type (StructType))))
+      (op ASSIGN)
+      (lhs (id _))
+      (rhs (ListExpr))
+    )
+
+    ; S1<int,f32>()
+    (CallExpr (type (StructType)) (receiver (StructType)) (args))
+
+    ; List<int>()
+    (CallExpr (type (ListType)) (receiver (ListType)) (args)))
+
+  ))) ; FunExpr body Block list
+
+  ; type unkn List
+  (TypeDecl
+    (ident (id unkn))
+    (type (AliasType
+      (type (Template
+              (vars
+                (TemplateVar (name (id T))))
+              (base (ListType (type (TemplateVar)))) ))
+      (name unkn)
+    ))
+  )
+)
