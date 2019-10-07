@@ -192,9 +192,9 @@ export class PkgBinder extends ErrorReporter {
       }
 
       // delegate type to any expressions that reference this type
-      dlog(`resolved to ${id.type}; len(t.refs)=${t.refs ? t.refs.size : 0}`)
+      // dlog(`resolved to ${id.type}; len(t.refs)=${t.refs ? t.refs.size : 0}`)
       if (t.refs) for (let ref of t.refs) {
-        dlog(`- ref ${ref} ${b.fset.position(ref.pos)}`)
+        // dlog(`- ref ${ref} ${b.fset.position(ref.pos)}`)
         if (ref.isFunSig() || ref.isFunType()) {
           ref.result = id.type
         } else if (ref.isTemplateInvocation()) {

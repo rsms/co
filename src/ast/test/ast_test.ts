@@ -207,13 +207,51 @@ TEST('#directive', () => {
   assertParseError(mstr(`
   x = 1
   #lol
-  `), /invalid directive/)
+  `), /invalid directive/i)
 
   // invalid metadata (not just expressions)
   assertParseError(mstr(`
   x = 1
   #end x = 1
-  `), /expecting expression/)
+  `), /expecting expression/i)
+})
+
+
+TEST("cyclic-type-ref", () => {
+  // This tests parser-state checks for cyclic type references,
+  // which would cause infinite recursion when default-initialized.
+
+  // When a type references itself or a parent in a chain, it must
+  // break the cycle with "optional":
+  let file = parseFile("a.co", `type A { a A? }`)
+  assertEq(api.getErrorCount(file), 0)
+
+  assertParseError(mstr(`
+  type A { a A }
+  `), /cyclic type reference/i)
+
+  assertParseError(mstr(`
+  type A { a B }
+  type B { b A }
+  `), /cyclic type reference/i)
+
+  assertParseError(mstr(`
+  type A { a B }
+  type B { b C }
+  type C { c A }
+  `), /cyclic type reference/i)
+
+  assertParseError(mstr(`
+  type A { a B }
+  type B { b C }
+  type C { c D }
+  type D { c E }
+  type E { c F }
+  type F { c G }
+  type G { c H }
+  type H { c I }
+  type I { c A }
+  `), /cyclic type reference/i)
 })
 
 
@@ -281,6 +319,8 @@ TEST('suite', async () => {
 
 function parseFile(filename :string, code :api.SourceData, mode? :api.ScanMode) :api.ast.File {
   let chost = getCompilerHost()
+  // TODO: Find a way to collect diagnostic messages and only print them when a test fails.
+  // This so that we can ignore messages like "x declared but not used".
   return chost.parseFile(filename, code, undefined, d => console.error(d.toString()), mode)
 }
 

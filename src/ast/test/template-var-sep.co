@@ -1,0 +1,44 @@
+// test template variable parsing
+type _<A,B,> A
+type _<A;B;> A
+type _<A;B,> A
+type _<A;B> A
+type _<
+  A
+  B
+> A
+type _<
+  A,
+  B
+> A
+type _<
+  A,
+  B,
+> A
+type _<
+  A;
+  B,
+> A
+type _<
+  A;
+  B
+> A
+type _<
+  A;
+  B;
+> A
+
+#end lisp // expected
+(
+  ; every production should be identical
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+  (TypeDecl (ident) (type (Template (vars (TemplateVar (name (id A))) (TemplateVar (name (id B))) ) (base) )))
+)

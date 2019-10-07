@@ -1,42 +1,42 @@
 fun generics {
   type T1 (int, f32, List<int>)
   type S1<A,B> { a A; b B }
-  type S2 S1  // tests AliasType resolution
+  type S2 S1
 
   _ u32[]
   _ u32[][]
-  _ S1<i32,S1<u32,f32>> // (i32, (u32, f32))
-  _ S1<i32,S1<i32,S1<u32,f32>>> // (i32, (i32, (u32, f32)))
-  _ S1<int,str>[]  // S1<int,str>[]
-  _ List<S1<int,str>>[]  // S1<int,str>[][]
-  _ List<S1<int,str>[]>  // S1<int,str>[][]
-  _ List<S1<int,str>[]>[]  // S1<int,str>[][][]
+  _ S1<i32,S1<u32,f32>>
+  _ S1<i32,S1<i32,S1<u32,f32>>>
+  _ S1<int,str>[]
+  _ List<S1<int,str>>[]
+  _ List<S1<int,str>[]>
+  _ List<S1<int,str>[]>[]
 
-  _ List<int> // int[]
-  _ List<int> // int[]
-  _ List<f32> // f32[]
-  _ List<f32> // f32[]
-  _ T1.2    // int[] because T1.2 = List<int>
-  _ T1.2[]  // int[][] because T1.2 = List<int>
+  _ List<int>
+  _ List<int>
+  _ List<f32>
+  _ List<f32>
+  _ T1.2
+  _ T1.2[]
 
   // ambiguous expressions
   a, b, x = 1, 2, 3
-  _ = x < a && b > a     // (assign _ (ANDAND (LSS x a) (GTR b a)))
-  _ = S2<int,f32>()      // (assign _ (call (type S2<int,f32>) ()))
-  _ = unkn<int,f32>()    // (assign _ (call (type ~unkn<int,f32>) ()))
-  _ = List<int>()        // (assign _ (call (type int[]) ()))
-  _ int[] = List<int>()  // (var _ (call (type int[]) ()))
-  _, _ = a<b,a>b         // (assign _ (LSS a b) (GTR a b))
-  _ = [a<b,a>b]          // (assign _ (List (LSS a b) (GTR a b)))
-  _ = [S1<int,f32>]      // (assign _ (List (type S1<int,f32>)))
-  S1<int,f32>()          // (call (type S1<int,f32>)) ())
-  List<int>()            // (call (type int[]) ())
+  _ = x < a && b > a
+  _ = S2<int,f32>()
+  _ = unkn<int,f32>()
+  _ = List<int>()
+  _ int[] = List<int>()
+  _, _ = a<b,a>b
+  _ = [a<b,a>b]
+  _ = [S1<int,f32>]
+  S1<int,f32>()
+  List<int>()
 }
 
 // late-resolved type alias
 type unkn List
 
-#end lisp // expected
+#end lisp
 (
   (FunExpr (body (Block (list
 
@@ -131,13 +131,13 @@ type unkn List
     ; _ List<S1<int,str>[]>[]
     (VarDecl (idents (id _)) (type (ListType (type (ListType)))))
 
-    ; _ List<int> // int[]
+    ; _ List<int>
     (VarDecl (idents (id _)) (type (ListType)))
-    ; _ List<int> // int[]
+    ; _ List<int>
     (VarDecl (idents (id _)) (type (ListType)))
-    ; _ List<f32> // f32[]
+    ; _ List<f32>
     (VarDecl (idents (id _)) (type (ListType (type f32))))
-    ; _ List<f32> // f32[]
+    ; _ List<f32>
     (VarDecl (idents (id _)) (type (ListType)))
 
     ; _ T1.2
