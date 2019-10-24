@@ -532,7 +532,8 @@ export class RegAllocator {
         // place the spill here (after the phis).
         if (b.preds.length == 1) {
           //for _, e := range s.endRegs[b.Preds[0].b.ID]
-          for (let e of a.endRegs[b.preds[0].id]) {
+          let endRegs = a.endRegs[b.preds[0].id]
+          if (endRegs) for (let e of endRegs) {
             if (e.v == v) {
               // Found a better spot for the spill.
               best = b
@@ -543,7 +544,8 @@ export class RegAllocator {
           }
         } else {
           // for _, e := range s.startRegs[b.ID]
-          for (let e of a.startRegs[b.id]) {
+          let startRegs = a.startRegs[b.id]
+          if (startRegs) for (let e of startRegs) {
             if (e.v == v) {
               // Found a better spot for the spill.
               best = b
