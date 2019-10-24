@@ -450,7 +450,7 @@ class CHost implements CompilerHost {
     this.irbuilder.free(irbuilder)
 
     // run IP passes separately for debugging (normally run online)
-    let stopAtPass = "lower" // ""
+    let stopAtPass = config.arch == "generic" ? "lower" : ""
     // stopAtPass = "lowered deadcode"
     for (let [ , f] of irpkg.funs) {
       runIRPasses(f, config, stopAtPass, pass => {
@@ -467,6 +467,7 @@ class CHost implements CompilerHost {
 
     if (DEBUG) {
       for (let [ , f] of irpkg.funs) {
+        print("")
         printir(f)
       }
     }
