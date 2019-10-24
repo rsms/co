@@ -184,7 +184,8 @@ function printblock(f :IRFmt, b :Block, indent :string) {
 function printfun(f :IRFmt, fn :Fun) {
   f.println(
     f.style.white(fn.toString()) +
-    ' (' + fn.type.args.join(' ') + ')->' + fn.type.result
+    " " +
+    f.style.purple(`<(${fn.type.args.join(' ')})->${fn.type.result}>`)
   )
   for (let b of fn.blocks) {
     printblock(f, b, /*indent*/'  ')
