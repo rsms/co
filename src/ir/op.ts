@@ -31,13 +31,13 @@ export enum AuxType {
   Float32,       // auxInt is a float32 (encoded with math.Float64bits)
   Float64,       // auxInt is a float64 (encoded with math.Float64bits)
   String,        // aux is a string
-  Sym,           // aux is a symbol (a *gc.Node for locals or an *obj.LSym for globals)
+  Sym,           // aux is a symbol
   SymOff,        // aux is a symbol, auxInt is an offset
-  SymValAndOff,  // aux is a symbol, auxInt is a ValAndOff
+  // SymValAndOff,  // aux is a symbol, auxInt is a ValAndOff
   SymInt32,      // aux is a symbol, auxInt is a 32-bit integer
   Type,          // aux is a type
-  TypeSize,      // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
-  CCop,          // aux is a ssa.Op that represents a flags-to-bool conversion (e.g. LessThan)
+  // TypeSize,      // aux is a type, auxInt is a size, must have (aux as Type).size == AuxInt
+  // CCop,          // aux is a ssa.Op that represents a flags-to-bool conversion (e.g. LessThan)
 }
 
 // export function auxTypeHasAuxInt(at :AuxType) :bool {

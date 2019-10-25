@@ -104,14 +104,14 @@ const ops :OpDescription[] = [
 
   // load & store from memory
   // auxint+aux == add auxint and the offset of the symbol in aux (if any) to the effective address
-  ["Load8",  2, t.u8,  FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 1 byte from arg0+auxint+aux. arg1=mem. Zero extend.
-  ["Load16", 2, t.u16, FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 2 bytes from arg0+auxint+aux. arg1=mem. Zero extend.
-  ["Load32", 2, t.u32, FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 4 bytes from arg0+auxint+aux. arg1=mem.  Zero extend. Like x86 MOVL.
-  ["Load64", 2, t.u64, FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 8 bytes from arg0+auxint+aux. arg1=mem. Zero extend.
-  ["Store8",  3, t.addr, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 1 byte in arg1 to arg0+auxint+aux. arg2=mem.
-  ["Store16", 3, t.addr, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 2 bytes in arg1 to arg0+auxint+aux. arg2=mem.
-  ["Store32", 3, t.addr, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 4 bytes in arg1 to arg0+auxint+aux. arg2=mem. Like x86 MOVL.
-  ["Store64", 3, t.addr, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 8 bytes in arg1 to arg0+auxint+aux. arg2=mem.
+  ["Load8",  2, t.u8,   FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 1 byte from arg0+auxint+aux. arg1=mem. Zero extend.
+  ["Load16", 2, t.u16,  FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 2 bytes from arg0+auxint+aux. arg1=mem. Zero extend.
+  ["Load32", 2, t.u32,  FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 4 bytes from arg0+auxint+aux. arg1=mem.  Zero extend. Like x86 MOVL.
+  ["Load64", 2, t.u64,  FaultOnNilArg0, { reg: gpload, aux: "SymOff", symEffect: SymEffect.Read}], // load 8 bytes from arg0+auxint+aux. arg1=mem. Zero extend.
+  ["Store8",  3, t.mem, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 1 byte in arg1 to arg0+auxint+aux. arg2=mem.
+  ["Store16", 3, t.mem, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 2 bytes in arg1 to arg0+auxint+aux. arg2=mem.
+  ["Store32", 3, t.mem, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 4 bytes in arg1 to arg0+auxint+aux. arg2=mem. Like x86 MOVL.
+  ["Store64", 3, t.mem, FaultOnNilArg0, { reg: gpstore, aux: "SymOff", symEffect: SymEffect.Write}], // store 8 bytes in arg1 to arg0+auxint+aux. arg2=mem.
 
   // Arithmetic
   ["ADD32", 2, Commutative, t.u32, { reg: gp21 }], // arg0 + arg1
@@ -121,7 +121,7 @@ const ops :OpDescription[] = [
   ["MUL32", 2, Commutative, t.u32, { reg: gp21 }], // arg0 + arg1
 
   // call
-  ["CALL", 1, Call, ClobberFlags, { reg: regInfo([], [], /*clobbers*/ callerSave), aux: "SymOff" }], // call static function aux.(SB). arg0=mem, auxint=argsize, returns mem
+  ["CALL", 1, t.mem, Call, ClobberFlags, { reg: regInfo([], [], /*clobbers*/ callerSave), aux: "SymOff" }], // call static function aux.(SB). arg0=mem, auxint=argsize, returns mem
 
   // misc
   ["LowNilCheck", 2, t.nil, NilCheck, FaultOnNilArg0, { reg: gp10 }], // panic if arg0 is nil. arg1=mem.

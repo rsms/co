@@ -7,6 +7,19 @@ import (
   . "meow"
 )
 
+// Consider Elm-like "exposing" syntax for adding specific package members
+// to the local package scope:
+//
+//   import "util" exposing *
+//   import "os" as OS exposing fopen fclose
+//
+//   someUtilFun()
+//   util.someUtilFun()  // package name still available
+//   f = fopen()
+//   OS.fstat(f)         // aliased package name (os => OS)
+//   fclose(f)
+//
+
 /*const (
   a int = 0
   b, c

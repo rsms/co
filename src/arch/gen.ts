@@ -1058,6 +1058,9 @@ function opsGen() {
 }
 
 
+let longestOpName = 0
+
+
 function buildOpTables() {
   for (let a of archs) {
     let opnames = buildOpTable(a)
@@ -1066,6 +1069,9 @@ function buildOpTables() {
 
   opcodes.push("// END")
   opcodes.push("OpcodeMax")
+  opcodeMap.set("OpcodeMax", opcodeMap.size)
+
+  write(`export const opnameMaxLen = ${longestOpName};\n`)
 
   write(
     "export const ops = {\n  " +
@@ -1123,6 +1129,9 @@ function buildOpTable(a :ArchDescr) :Set<string> {
     // add to arch-specific list of local names
     assert(!opnames.has(op.name), `duplicate op ${op.name}`)
     opnames.add(op.name)
+
+    // find longest name
+    longestOpName = Math.max(longestOpName, op.name.length)
 
     // canonical opname
     const opname = opnamePrefix + op.name

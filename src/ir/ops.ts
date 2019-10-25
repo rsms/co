@@ -22,6 +22,7 @@ const u64_ffff = new UInt64(65535,0),
       u64_10000ffff = new UInt64(65535,1),
       u64_ffffffff = new UInt64(-1,0);
 
+export const opnameMaxLen = 14;
 export const ops = {
   
   // generic
@@ -292,13 +293,13 @@ export const ops = {
   AtomicLoadPtr: 264,
   AtomicStore32: 265,
   AtomicStore64: 266,
-  AtomicStorePtrNoWB: 267,
-  AtomicExchange32: 268,
-  AtomicExchange64: 269,
+  AtomicStorePtr: 267,
+  AtomicSwap32: 268,
+  AtomicSwap64: 269,
   AtomicAdd32: 270,
   AtomicAdd64: 271,
-  AtomicCompareAndSwap32: 272,
-  AtomicCompareAndSwap64: 273,
+  AtomicCAS32: 272,
+  AtomicCAS64: 273,
   AtomicAnd8: 274,
   AtomicOr8: 275,
 
@@ -321,7 +322,7 @@ export const ops = {
   CovmZeroLarge: 291,
 
   // END
-  OpcodeMax: undefined,
+  OpcodeMax: 292,
 };
 
 export const opinfo :OpInfo[] = [
@@ -1664,18 +1665,18 @@ export const opinfo :OpInfo[] = [
     generic: true,
     hasSideEffects: true,
   },
-  { name: 'AtomicStorePtrNoWB',
+  { name: 'AtomicStorePtr',
     argLen: 3,
     generic: true,
     hasSideEffects: true,
-    type: t_uintptr,
+    type: t_mem,
   },
-  { name: 'AtomicExchange32',
+  { name: 'AtomicSwap32',
     argLen: 3,
     generic: true,
     hasSideEffects: true,
   },
-  { name: 'AtomicExchange64',
+  { name: 'AtomicSwap64',
     argLen: 3,
     generic: true,
     hasSideEffects: true,
@@ -1690,12 +1691,12 @@ export const opinfo :OpInfo[] = [
     generic: true,
     hasSideEffects: true,
   },
-  { name: 'AtomicCompareAndSwap32',
+  { name: 'AtomicCAS32',
     argLen: 4,
     generic: true,
     hasSideEffects: true,
   },
-  { name: 'AtomicCompareAndSwap64',
+  { name: 'AtomicCAS64',
     argLen: 4,
     generic: true,
     hasSideEffects: true,
@@ -1804,7 +1805,7 @@ export const opinfo :OpInfo[] = [
       clobbers: UInt64.ZERO
     },
     symEffect: 2,
-    type: t_uintptr,
+    type: t_mem,
   },
   { name: 'Store16',
     argLen: 3,
@@ -1819,7 +1820,7 @@ export const opinfo :OpInfo[] = [
       clobbers: UInt64.ZERO
     },
     symEffect: 2,
-    type: t_uintptr,
+    type: t_mem,
   },
   { name: 'Store32',
     argLen: 3,
@@ -1834,7 +1835,7 @@ export const opinfo :OpInfo[] = [
       clobbers: UInt64.ZERO
     },
     symEffect: 2,
-    type: t_uintptr,
+    type: t_mem,
   },
   { name: 'Store64',
     argLen: 3,
@@ -1849,7 +1850,7 @@ export const opinfo :OpInfo[] = [
       clobbers: UInt64.ZERO
     },
     symEffect: 2,
-    type: t_uintptr,
+    type: t_mem,
   },
   { name: 'ADD32',
     argLen: 2,
@@ -1921,6 +1922,7 @@ export const opinfo :OpInfo[] = [
       outputs: [],
       clobbers: u64_ffffffff /*RegSet { r0 r1 r2 r3 r4 r5 r6 r7 r8 r9 r10 r11 r12 r13 r14 r15 r16 r17 r18 r19 r20 r21 r22 r23 r24 r25 r26 r27 r28 r29 r30 r31 }*/
     },
+    type: t_mem,
   },
   { name: 'LowNilCheck',
     argLen: 2,

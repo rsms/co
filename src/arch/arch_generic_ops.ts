@@ -455,13 +455,13 @@ const ops :OpDescription[] = [
   ["AtomicLoadPtr", 2, /*{type: "(BytePtr,Mem)"}*/], // Load from arg0.  arg1=memory.  Returns loaded value and new memory.
   ["AtomicStore32", 3, HasSideEffects /*{type: "Mem"}*/], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
   ["AtomicStore64", 3, HasSideEffects /*{type: "Mem"}*/], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
-  ["AtomicStorePtrNoWB", 3, HasSideEffects, t.addr], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
-  ["AtomicExchange32", 3, HasSideEffects /*{type: "(UInt32,Mem)"}*/], // Store arg1 to *arg0.  arg2=memory. Returns old contents of *arg0 and new memory.
-  ["AtomicExchange64", 3, HasSideEffects /*{type: "(UInt64,Mem)"}*/], // Store arg1 to *arg0.  arg2=memory. Returns old contents of *arg0 and new memory.
+  ["AtomicStorePtr", 3, HasSideEffects, t.mem], // Store arg1 to *arg0.  arg2=memory.  Returns memory.
+  ["AtomicSwap32", 3, HasSideEffects /*{type: "(UInt32,Mem)"}*/], // Store arg1 to *arg0.  arg2=memory. Returns old contents of *arg0 and new memory.  like std::atomic::exchange
+  ["AtomicSwap64", 3, HasSideEffects /*{type: "(UInt64,Mem)"}*/], // Store arg1 to *arg0.  arg2=memory. Returns old contents of *arg0 and new memory.  like std::atomic::exchange
   ["AtomicAdd32", 3, HasSideEffects /*{type: "(UInt32,Mem)"}*/], // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
   ["AtomicAdd64", 3, HasSideEffects /*{type: "(UInt64,Mem)"}*/], // Do *arg0 += arg1.  arg2=memory.  Returns sum and new memory.
-  ["AtomicCompareAndSwap32", 4, HasSideEffects /*{type: "(Bool,Mem)"}*/], // if *arg0==arg1, then set *arg0=arg2. Returns true if store happens and new memory.
-  ["AtomicCompareAndSwap64", 4, HasSideEffects /*{type: "(Bool,Mem)"}*/], // if *arg0==arg1, then set *arg0=arg2. Returns true if store happens and new memory.
+  ["AtomicCAS32", 4, HasSideEffects /*{type: "(Bool,Mem)"}*/], // if *arg0==arg1, then set *arg0=arg2. Returns true if store happens and new memory.
+  ["AtomicCAS64", 4, HasSideEffects /*{type: "(Bool,Mem)"}*/], // if *arg0==arg1, then set *arg0=arg2. Returns true if store happens and new memory.
   ["AtomicAnd8", 3, HasSideEffects, t.addr], // *arg0 &= arg1.  arg2=memory.  Returns memory.
   ["AtomicOr8", 3, HasSideEffects, t.addr], // *arg0 |= arg1.  arg2=memory.  Returns memory.
 

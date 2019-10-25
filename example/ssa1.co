@@ -67,20 +67,22 @@
 // lol = 9223372036854775807
 
 
-fun foo(x, a, b int) {
-  type T1<A,B> {
-    a A
-    b B
-  }
-  _ = x < a && b > a      // (assign _ (ANDAND (LSS x a) (GTR b a)))
-  _ = T1<int,f32>(1, 2.0) // (assign _ (call (type tuple<int,f32>) ()))
-  _ = T2<int,f32>(1, 2.0) // (assign _ (call (type tuple<int,f32>) ()))
-}
+// fun foo(x, a, b int) {
+//   type T1<A,B> {
+//     a A
+//     b B
+//   }
+//   _ = x < a && b > a      // (assign _ (ANDAND (LSS x a) (GTR b a)))
+//   _ = T1<int,f32>(1, 2.0) // (assign _ (call (type tuple<int,f32>) ()))
+//   _ = T2<int,f32>(1, 2.0) // (assign _ (call (type tuple<int,f32>) ()))
+// }
 
-type T2<A,B> {
-  a A
-  b B
-}
+// type T2<A,B> {
+//   a A
+//   b B
+// }
+
+
 
 // fun foo(x, _, y int) int {
 //   z int = 0
@@ -96,25 +98,24 @@ type T2<A,B> {
 // }
 
 
-// fun half(x int) int {
-//   x / 2
-// }
+fun half(x int) int {
+  x / 2
+}
 
-// fun foo(x, _, y int) int {
-//   a = x + y
-//   d = half(a + 1)
-//   // if x > y {
-//   //   x *= 2
-//   // } else {
-//   //   y *= 2
-//   // }
-//   if x > y {
-//     while x > y {
-//       x *= 2
-//     }
-//   }
-//   x + y + a + d
-// }
+fun foo(x, _, y int) int {
+  a = x + y
+  d = half(a + 1)
+  if x > y {
+    while x > y {
+      x *= 2
+    }
+  }
+  x + y + a + d
+}
+
+fun main int {
+  foo(0xA, 0xB, 0xC)  // 10, 11, 12
+}
 
 // fun foo(x, _, y int) int {
 //   a = x + y

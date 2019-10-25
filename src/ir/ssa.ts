@@ -529,6 +529,7 @@ export interface NamedValueEnt {
 
 
 export class Fun {
+  id     :int      // function identifier (unique within package)
   config :Config
   entry  :Block
   blocks :Block[]
@@ -540,7 +541,13 @@ export class Fun {
   bid    :ID = 0  // block ID allocator
   vid    :ID = 0  // value ID allocator
 
-  consts :Map<Op,Map<Num,Value>> | null = null  // constants cache
+  // constants cache
+  consts :Map<Op,Map<Num,Value>> | null = null
+
+  // implementation statistics
+  ncalls    :int = 0  // number of function calls that this function makes
+  // nglobalw :int = 0  // number of writes to globals (0 = pure)
+  stacksize :int = 0  // size of stack frame in bytes (aligned)
 
   // map from LocalSlot to set of Values that we want to store in that slot.
   namedValues = new Map<string,NamedValueEnt>()
@@ -555,7 +562,8 @@ export class Fun {
   _cachedSdom      :BlockTree|null = null // cached dominator tree
 
 
-  constructor(config :Config, type :FunType, name :ByteStr|null, nargs :int) {
+  constructor(id :int, config :Config, type :FunType, name :ByteStr|null, nargs :int) {
+    this.id = id
     this.config = config
     this.entry = new Block(BlockKind.Plain, this.bid++, this)
     this.blocks = [this.entry]
@@ -734,7 +742,11 @@ export class Fun {
   }
 
   toString() {
-    return this.name.toString()
+    let s = this.name.toString()
+    if (this.id >= 0) {
+      s += "#" + this.id
+    }
+    return s
   }
 }
 
@@ -742,20 +754,27 @@ export class Fun {
 // Pkg represents a package with functions and data
 //
 export class Pkg {
-  // data :Uint8Array   // data  TODO wrap into some simple linear allocator
-  funs = new Map<ByteStr,Fun>()   // functions mapped by name
+  funs :Fun[] = []      // functions indexed by funid
   init :Fun|null = null // init functions (merged into one)
 
-  // mainFun returns the main function of the package, if any
+
+  addFun(f :Fun) {
+    assert(this.funs[f.id] === undefined)
+    this.funs[f.id] = f
+  }
+
+
+  // mainFun returns the "main" function of the package, if any.
   //
   mainFun() :Fun|null {
-    for (let fn of this.funs.values()) {
-      if (byteStr_main.equals(fn.name)) {
-        return fn
+    for (let f of this.funs) {
+      if (byteStr_main.equals(f.name)) {
+        return f
       }
     }
     return null
   }
+
 }
 
 

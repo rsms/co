@@ -37,14 +37,11 @@ function fmtaux(_f :IRFmt, v :Value, opi :OpInfo) :string {
   case AuxType.String:        // aux is a string
   case AuxType.Sym:           // aux is a symbol (a *gc.Node for locals or an *obj.LSym for globals)
   case AuxType.Type:          // aux is a type
-  case AuxType.CCop:          // aux is a ssa.Op that represents a flags-to-bool conversion (e.g. LessThan)
     aux = true
     break
 
   case AuxType.SymOff:        // aux is a symbol, auxInt is an offset
-  case AuxType.SymValAndOff:  // aux is a symbol, auxInt is a ValAndOff
   case AuxType.SymInt32:      // aux is a symbol, auxInt is a 32-bit integer
-  case AuxType.TypeSize:      // aux is a type, auxInt is a size, must have Aux.(Type).Size() == AuxInt
     auxInt = true
     aux = true
     break
@@ -182,10 +179,18 @@ function printblock(f :IRFmt, b :Block, indent :string) {
 
 
 function printfun(f :IRFmt, fn :Fun) {
+  let attrs :string[] = []
+  if (fn.ncalls == 0) {
+    attrs.push(f.style.pink("nocall"))
+  }
   f.println(
-    f.style.white(fn.toString()) +
+    `fun ${fn.id}` +
     " " +
-    f.style.purple(`<(${fn.type.args.join(' ')})->${fn.type.result}>`)
+    f.style.white(fn.name.toString()) +
+    " " +
+    f.style.purple(`<(${fn.type.args.join(' ')})->${fn.type.result}>`) +
+    ` [${fn.stacksize}]` +
+    (attrs.length > 0 ? " " + attrs.join(" ") : "")
   )
   for (let b of fn.blocks) {
     printblock(f, b, /*indent*/'  ')

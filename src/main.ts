@@ -1,6 +1,8 @@
 import { stdoutStyle, stdoutSupportsStyle } from './termstyle'
 import * as api from "./api"
 import * as cli from "./cli"
+import * as asm from "./asm/asm"
+import { VirtualMachine } from "./vm/vm"
 
 import './all_tests'
 
@@ -70,15 +72,20 @@ async function main(argv :string[]) :Promise<int> {
     let flags = api.IRBuilderFlags.Comments
     let irpkg = chost.compilePackage(pkg, target, printDiag, flags)
 
-    // Run in development VM
+    // Assemble into covm objects
+    banner(`asm`)
+    let obj = new asm.Obj(target)
+    for (let f of irpkg.funs) {
+      obj.addFun(f)
+    }
+    obj.seal(0)
+    console.log(obj.writeStr())
+
+    // // Run in development VM
     // banner(`vm`)
-    // const vm = new IRVirtualMachine(irb.pkg, diagh)
-    // let mainfun = irb.pkg.mainFun() || null
-    // if (mainfun) {
-    //   vm.execFun(mainfun)
-    // } else {
-    //   console.warn('no main function found in package -- not executing')
-    // }
+    // const vm = new VirtualMachine()
+    // let res = await vm.runPkg(irpkg)
+    // print("main return value:", repr(res))
 
   } catch (error) {
     if (NODEJS) { throw error }

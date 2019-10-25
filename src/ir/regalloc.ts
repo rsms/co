@@ -8,6 +8,7 @@ import { IntGraph } from '../intgraph'
 import { Op } from './op'
 import { ops, opinfo } from "./ops"
 import { BlockTree } from "./blocktree"
+// import { printir } from './repr'
 import {
   Register,
   Reg,
@@ -18,9 +19,11 @@ import {
   nilRegInfo,
 } from './reg'
 
-// import { printir } from './repr'
-import { debuglog as dlog } from '../util'
-// const dlog = function(..._ :any[]){} // silence dlog
+// set to true to enable debugging output
+const DEBUG_REGALLOC = DEBUG && false
+
+import { debuglog as dlog_ } from '../util'
+const dlog = DEBUG_REGALLOC ? dlog_ : function(..._ :any[]){}
 
 const allocatorCache = new Map<Config,RegAllocator>()
 let allocator :RegAllocator|null = null
@@ -339,7 +342,7 @@ export class RegAllocator {
     // process.exit(0)
 
     // debug valstate
-    if (DEBUG) {
+    if (DEBUG_REGALLOC) {
       dlog(`\nvalstate:`)
       for (let vs of a.values) {
         if (vs) {
@@ -362,7 +365,7 @@ export class RegAllocator {
     let ig = a.buildInterferenceGraph()
 
     // debug log state of interference graph
-    if (DEBUG) {
+    if (DEBUG_REGALLOC) {
       let ifstr = ig.fmt()
       let vizurl = (
         'https://rsms.me/co/doc/chaitin/?'+
@@ -626,7 +629,7 @@ export class RegAllocator {
     }
 
     // print usermap
-    if (DEBUG) {
+    if (DEBUG_REGALLOC) {
       let mv = Array.from(m)
       let dependants = mv.map(([, us]) => Array.from(us).join(", "))
       let longestLeft = dependants.reduce((a, v) => Math.max(a, v.length), 0)
@@ -657,7 +660,7 @@ export class RegAllocator {
     // general-purpose and floating-point registers.
     let gpk = countRegs(this.config.gpRegMask)
     // let fpk = countRegs(this.config.fpRegMask)
-    gpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
+    // gpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
     // fpk = 4 // DEBUG XXX OVERRIDE test/dev spilling
 
     let multiPass = true

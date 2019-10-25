@@ -452,21 +452,21 @@ class CHost implements CompilerHost {
     // run IP passes separately for debugging (normally run online)
     let stopAtPass = config.arch == "generic" ? "lower" : ""
     // stopAtPass = "lowered deadcode"
-    for (let [ , f] of irpkg.funs) {
+    for (let f of irpkg.funs) {
       runIRPasses(f, config, stopAtPass, pass => {
-        if (DEBUG) {
-          print(`after ${pass.name}\n`)
-          printir(f)
-          print(
-            `━━━━━━━━━━━━━━━━━━━━━━━━` +
-            `━━━━━━━━━━━━━━━━━━━━━━━━`
-          )
-        }
+        // if (DEBUG) {
+        //   print(`after ${pass.name}\n`)
+        //   printir(f)
+        //   print(
+        //     `━━━━━━━━━━━━━━━━━━━━━━━━` +
+        //     `━━━━━━━━━━━━━━━━━━━━━━━━`
+        //   )
+        // }
       })
     }
 
     if (DEBUG) {
-      for (let [ , f] of irpkg.funs) {
+      for (let f of irpkg.funs) {
         print("")
         printir(f)
       }

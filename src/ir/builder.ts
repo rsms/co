@@ -287,13 +287,31 @@ export class IRBuilder {
     // console.log(`\n-----------------------\n${f}`)
   }
 
+
+  _funIds = new Map<ast.FunExpr,int>()
+
+  getFunId(x :ast.FunExpr) :int {
+    // function id mapping
+    const s = this
+    let id = s._funIds.get(x)
+    if (id === undefined) {
+      // allocate new funid
+      id = s._funIds.size
+      s._funIds.set(x, id)
+    }
+    return id
+  }
+
+
   fun(x :ast.FunExpr) :Fun {
     const r = this
     assert(x.body, `unresolved function ${x}`)
     assert(x.type, "unresolved function type")
 
+    let funid = r.getFunId(x)
     let funtype = x.type as FunType
     let f = new Fun(
+      funid,
       r.config,
       funtype,
       x.name ? x.name.value : null,
@@ -354,7 +372,7 @@ export class IRBuilder {
     //   "last block in function is not BlockKind.Ret")
 
     r.endFun()
-    r.pkg.funs.set(f.name, f)
+    r.pkg.addFun(f)
 
     // zero out function state in debug mode, to cause errors on access
     if (DEBUG) {
@@ -1160,11 +1178,12 @@ export class IRBuilder {
     // and implementing function resolution somehow in readGlobal et al.
 
     assert(x.receiver instanceof ast.Ident, "non-id callee not yet supported")
-    let funid = x.receiver as ast.Ident
-    assert(funid.ent, "unresolved callee")
-
-    let ft = funid.type as FunType
+    let funident = x.receiver as ast.Ident
+    let ft = funident.type as FunType
     assert(ft, "unresolved function type")
+    assert(funident.ent, "unresolved callee")
+    assert(funident.ent!.value.isFunExpr(), "call on non-function")
+    let funid = this.getFunId(funident.ent!.value as ast.FunExpr)
 
     // TODO: support other types like strings etc
     assert(ft.result.isPrimType(),
@@ -1185,7 +1204,11 @@ export class IRBuilder {
     }
 
     // generate call op
-    s.stacktop = s.b.newValue1(ops.Call, T.mem, s.stacktop, x.args.length, funid.value)
+    s.stacktop = s.b.newValue1(ops.Call, T.mem, s.stacktop, funid) // x.args.length
+
+    // register call
+    s.f.ncalls++
+    // TODO: We may want to use IntGraph to build a call graph
 
     // load return value off of the stack
     return s.stackPop(s.concreteType(ft.result as PrimType)) // == s.stacktop
