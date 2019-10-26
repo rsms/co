@@ -2,6 +2,7 @@ const fs = require('fs')
 const assert = require('assert')
 const childproc = require('child_process')
 const Path = require('path')
+const { tmpdir } = require('os')
 
 let rootdir = '.'
 
@@ -16,7 +17,7 @@ function main() {
   rootdir = Path.dirname(__dirname)
 
   process.chdir(rootdir)
-  
+
   const annotations = new Map() // file => Annotation[]
   scandir('src', annotations)
 
@@ -172,7 +173,7 @@ function scanfile(file) {
     while((m = re.exec(s)) !== null) {
       attrs[m[1]] = m[2]
     }
-    
+
     // skip past >\n
     start++
     if (source[start] == '\n') {
@@ -214,7 +215,10 @@ function wastcompile(wastfile) {
             (process.env.PATH || ''),
     })
 
-    const wasmfile = wastfile + '.wasm'
+    const basename = Path.basename(wastfile.substr(0, wastfile.length - ".wast".length))
+    let dirname = Path.relative(Path.dirname(wastfile), process.cwd())
+    dirname = dirname.replace(/[/\\/]/g, ".")
+    const wasmfile = tmpdir() + "/co." + dirname + "." + basename + '.wasm'
 
     const p = childproc.execFile(
       'wat2wasm', [wastfile, '-o', wasmfile],
@@ -234,8 +238,8 @@ function wastcompile(wastfile) {
           return reject(err)
         }
         fs.readFile(wasmfile, (err, buf) => {
-          if (err) { return reject(err) }
-          resolve(buf)
+          if (err) { reject(err) } else { resolve(buf) }
+          fs.unlink(wasmfile, ()=>{})
         })
       }
     )
