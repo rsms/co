@@ -6,7 +6,7 @@ import * as irop from "../ir/op"
 import { Config } from "../ir/config"
 import { ByteStr } from "../bytestr"
 import { t_mem } from "../ast/nodes"
-import { Int64 } from "../int64"
+import { UInt64 } from "../int64"
 
 
 export type Opcode = int   // 16-bit unsigned integer
@@ -46,8 +46,12 @@ function fmthex<T extends {toString(radix:int):string}>(n :T, z :int = 4) {
   return s
 }
 
+// prefix in text output
+const RegPrefix = ""
+const IntConstPrefix = "$"
 
 const SPACES = "                             "
+
 
 // padr pads s with padding (defaults to spaces) so that s is at least width long.
 //
@@ -118,14 +122,16 @@ export class Obj {
     let lines :string[] = []
     let entries = this.entries
     const addrw = 2
+    const spacePrefix = SPACES.substr(0, 4 + addrw*2)
     for (let i = 0, z = entries.length; i < z; i++) {
       let e = entries[i]
+      if (e.label != -1) {
+        lines.push(`${spacePrefix}  b${e.label}:`)
+      }
       let prefix = (
         e.addr >= 0 ? "0x" + fmthex(e.addr, addrw*2) + "  "
-                    : SPACES.substr(0, 4 + addrw*2) )
-      if (e.label != -1) {
-        lines.push(`${prefix}  b${e.label}:`)
-      }
+                    : spacePrefix
+      )
       lines.push(prefix + e.toString())
     }
     return lines.join("\n")
@@ -146,7 +152,10 @@ export class Obj {
     // assign addresses
     for (let i = 0, z = entries.length; i < z; i++) {
       let e = entries[i]
-      if (e.t == TINSTR) {
+      if (e.t == TFUN) {
+        // align address to target address size
+        addr = align(addr, this.target.addrSize)
+      } else if (e.t == TINSTR) {
         e.addr = addr++
         if (e.op == "CALL") {
           dlog(`TODO: resolve CALL address`)
@@ -246,16 +255,11 @@ export class Obj {
   buildImms(v :ir.Value, opinfo :irop.OpInfo) :string[] {
     let imms :string[] = []
 
-    // output register
-    if (v.reg) {
-      imms.push(v.reg.name)
-    }
-
     // inputs
     for (let a of v.args) {
       let ainfo = iropinfo[a.op]
       if (a.reg) {
-        imms.push(a.reg.name)
+        imms.push(RegPrefix + a.reg.name)
       } else if (a.aux !== null) {
         // then it must be a memory operand
         assert(ainfo.type === t_mem,
@@ -264,34 +268,32 @@ export class Obj {
       }
     }
 
-    function floatTo64Bits(f :number) :ArrayLike<int> {
-      return new Uint32Array(new Float64Array([f]).buffer)
-    }
-
     // add aux
     switch (opinfo.aux) {
       case irop.AuxType.None:
         break
 
-      case irop.AuxType.Bool:          // auxInt is 0/1 for false/true
+      case irop.AuxType.Bool:          // auxInt is 1/0 for true/false
       case irop.AuxType.Int8:          // auxInt is an 8-bit integer
       case irop.AuxType.Int16:         // auxInt is a 16-bit integer
       case irop.AuxType.Int32:         // auxInt is a 32-bit integer
       case irop.AuxType.Int64:         // auxInt is a 64-bit integer
-        imms.push(v.auxInt.toString(10))
+        imms.push(IntConstPrefix + v.auxInt.toString(10))
         break
 
       case irop.AuxType.Float32:       // auxInt is a float32
-      case irop.AuxType.Float64: {      // auxInt is a float64
-        let low_high = floatTo64Bits(v.aux as any as number)
-        imms.push("0x" + fmthex(low_high[0], 8) + fmthex(low_high[1], 4))
+      case irop.AuxType.Float64: {     // auxInt is a float64
+        let i = UInt64.fromFloat64Cast(v.auxInt as number)
+        imms.push(IntConstPrefix + "0x" + i.toString(16))
         break
       }
 
       case irop.AuxType.SymOff:        // aux is a symbol, auxInt is an offset
       case irop.AuxType.SymInt32:      // aux is a symbol, auxInt is a 32-bit integer
-        // TODO symbol
-        imms.push(v.auxInt.toString(10))
+        if (v.aux) {
+          dlog(`TODO: imm symbol v=${v} aux=${v.aux}`)
+        }
+        imms.push(IntConstPrefix + v.auxInt.toString(10))
         break
 
       // TODO
@@ -299,6 +301,13 @@ export class Obj {
       case irop.AuxType.String:        // aux is a string
       case irop.AuxType.Sym:           // aux is a symbol
         break
+    }
+
+    // output register
+    if (v.reg) {
+      imms.push(RegPrefix + v.reg.name)
+    } else {
+      dlog(`TODO: memory output. e.g. 0x10(SP) v=${v}`)
     }
 
     // if (opinfo.aux != irop.AuxType.None) {
@@ -366,13 +375,15 @@ export class Obj {
 
         if (nextb === thenb) {
           // if false goto elseb; cont thenb
-          o.addBranchNeg(elseb.id, ctrlReg.name, `if !${b.control} ? b${elseb.id} : b${thenb.id}`)
+          o.addBranchNeg(elseb.id, RegPrefix + ctrlReg.name,
+                         `if !${b.control} ? b${elseb.id} : b${thenb.id}`)
         } else if (nextb === elseb) {
           // if true goto thenb; cont elseb
-          o.addBranch(thenb.id, ctrlReg.name, `if ${b.control} ? b${thenb.id} : b${elseb.id}`)
+          o.addBranch(thenb.id, RegPrefix + ctrlReg.name,
+                      `if ${b.control} ? b${thenb.id} : b${elseb.id}`)
         } else {
           // if true goto thenb; goto elseb
-          o.addBranch(thenb.id, ctrlReg.name, `if ${b.control} ? b${thenb.id} ...`)
+          o.addBranch(thenb.id, RegPrefix + ctrlReg.name, `if ${b.control} ? b${thenb.id} ...`)
           o.addJump(elseb.id, `... : b${elseb.id}`)
         }
         break
@@ -393,6 +404,24 @@ export class Obj {
   }
 
 }
+
+
+// align rounds up n to closest boundary w (w must be a power of two)
+//
+// E.g.
+//   align(0, 4) => 0
+//   align(1, 4) => 4
+//   align(2, 4) => 4
+//   align(3, 4) => 4
+//   align(4, 4) => 4
+//   align(5, 4) => 8
+//   ...
+//
+function align(n :int, w :int) :int {
+  assert((w & (w - 1)) == 0, `alignment ${w} not a power of two`)
+  return (n + (w - 1)) & ~(w - 1)
+}
+
 
 
 
