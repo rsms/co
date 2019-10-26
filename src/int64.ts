@@ -60,6 +60,7 @@ export interface Int64 {
   toInt32() :int
   toUInt32() :int
   toFloat64() :number
+  toFloat64Cast() :number
   toBytesLE() :Uint8Array
   toBytesBE() :Uint8Array
   toString(radix? :int) :string // radix defaults to 10
@@ -77,6 +78,7 @@ export interface Int64Cons {
   fromInt32(v :int) :Int64
   fromFloat64(v :number) :Int64
   maybeFromFloat64(v :number) :Int64|null
+  fromFloat64Cast(f :number) :UInt64
   fromStr(str :string, radix :int) :Int64
   fromByteStr(b :ArrayLike<byte>, radix :int) :Int64
   fromByteStr0(b :ArrayLike<byte>, radix :int, start :int, end :int) :Int64
@@ -85,6 +87,12 @@ export interface Int64Cons {
 }
 
 // ===========================================================================
+
+// TODO: consider using BigInt when available in the JS runtime.
+
+// data used for float cast
+let floatEncF64a = new Float64Array(1)
+let floatEncU32a = new Uint32Array(floatEncF64a.buffer)
 
 // WebAssembly routines for envs that support it
 interface Uint64Wasm {
@@ -95,6 +103,8 @@ interface Uint64Wasm {
   rem_s(alo :int, ahi :int, dlo: int, dhi :int) :int  // returns lower
   popcnt(lo :int, hi :int) :int
   get_high() :int
+  // f64_cast(f :number) :int
+  // cast_f64(lo :int, hi :int) :number
 }
 
 var wasm :Uint64Wasm
@@ -105,16 +115,16 @@ try {
     127,127,1,127,3,8,7,0,1,2,2,2,2,2,6,6,1,127,1,65,0,11,7,59,7,8,103,101,
     116,95,104,105,103,104,0,0,3,109,117,108,0,2,5,100,105,118,95,115,0,3,5,
     100,105,118,95,117,0,4,5,114,101,109,95,115,0,5,5,114,101,109,95,117,0,6,
-    6,112,111,112,99,110,116,0,1,10,218,1,7,4,0,35,0,11,16,1,1,126,32,0,173,
-    32,1,173,66,32,134,132,123,167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,
-    132,32,2,173,32,3,173,66,32,134,132,126,33,4,32,4,66,32,135,167,36,0,32,4,
-    167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,
-    134,132,127,33,4,32,4,66,32,135,167,36,0,32,4,167,11,38,1,1,126,32,0,173,
-    32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,134,132,128,33,4,32,4,66,
-    32,135,167,36,0,32,4,167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,
-    2,173,32,3,173,66,32,134,132,129,33,4,32,4,66,32,135,167,36,0,32,4,167,11,
-    38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,134,
-    132,130,33,4,32,4,66,32,135,167,36,0,32,4,167,11
+    6,112,111,112,99,110,116,0,1,10,216,1,7,4,0,35,0,11,14,0,32,0,173,32,1,
+    173,66,32,134,132,123,167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,
+    32,2,173,32,3,173,66,32,134,132,126,33,4,32,4,66,32,135,167,36,0,32,4,167,
+    11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,134,
+    132,127,33,4,32,4,66,32,135,167,36,0,32,4,167,11,38,1,1,126,32,0,173,32,1,
+    173,66,32,134,132,32,2,173,32,3,173,66,32,134,132,128,33,4,32,4,66,32,135,
+    167,36,0,32,4,167,11,38,1,1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,
+    32,3,173,66,32,134,132,129,33,4,32,4,66,32,135,167,36,0,32,4,167,11,38,1,
+    1,126,32,0,173,32,1,173,66,32,134,132,32,2,173,32,3,173,66,32,134,132,130,
+    33,4,32,4,66,32,135,167,36,0,32,4,167,11
     //!</wasmdata>
   ])), {}).exports as any as Uint64Wasm
 } catch (_) {
@@ -386,6 +396,14 @@ class Int64Base {
     return (this._low >= 0) ? this._low : _TWO_PWR_32_DBL + this._low
   }
 
+  // toFloat64Cast reinterprets/casts the integer as a 64-bit IEEE 754 floating point number
+  //
+  toFloat64Cast() :number {
+    floatEncU32a[0] = this._low
+    floatEncU32a[1] = this._high
+    return floatEncF64a[0]
+  }
+
   // toBytesLE encodes this integer in little-endian byte order
   //
   toBytesLE() :Uint8Array {
@@ -632,6 +650,10 @@ export class SInt64 extends Int64Base implements Int64 {
       ).neg()
     }
     return new SInt64((v % _TWO_PWR_32_DBL) | 0, (v / _TWO_PWR_32_DBL) | 0)
+  }
+
+  static fromFloat64Cast(_ :number) :UInt64 {
+    return U64_ZERO  // replaced later
   }
 
   // fromStr returns a SInt64 representing of the given string,
@@ -898,6 +920,11 @@ export class UInt64 extends Int64Base {
     return new UInt64(v % _TWO_PWR_32_DBL, v / _TWO_PWR_32_DBL)
   }
 
+  static fromFloat64Cast(f :number) :UInt64 {
+    floatEncF64a[0] = f
+    return new UInt64(floatEncU32a[0], floatEncU32a[1])
+  }
+
   // fromStr returns a UInt64 representing of the given string,
   // interpreted in radix.
   //
@@ -1052,16 +1079,28 @@ if (wasm != null) {
     // in debug builds, include the fallback implementations
     // as undocumented properties so that we can tests them
 
-    let SInt64x = SInt64.prototype as any
-    let UInt64x = UInt64.prototype as any
+    let SInt64p = SInt64.prototype as any
+    let UInt64p = UInt64.prototype as any
+    // let UInt64c = UInt64 as any
 
-    SInt64x._js_mul = SInt64.prototype.mul
-    SInt64x._js_div = SInt64.prototype.div
-    UInt64x._js_div = UInt64.prototype.div
-    SInt64x._js_mod = SInt64.prototype.mod
-    UInt64x._js_mod = UInt64.prototype.mod
-    SInt64x._js_popcnt = Int64Base.prototype.popcnt
+    SInt64p._js_mul = SInt64.prototype.mul
+    SInt64p._js_div = SInt64.prototype.div
+    UInt64p._js_div = UInt64.prototype.div
+    SInt64p._js_mod = SInt64.prototype.mod
+    UInt64p._js_mod = UInt64.prototype.mod
+    SInt64p._js_popcnt = Int64Base.prototype.popcnt
+    // UInt64c._js_fromFloat64Cast = UInt64.fromFloat64Cast
+    // UInt64p._js_toFloat64Cast = UInt64.prototype.toFloat64Cast
   }
+
+  // f64 cast disabled as JS implementation is fine as is
+  // UInt64.fromFloat64Cast = function fromFloat64Cast(f :number) :UInt64 {
+  //   let low = wasm.f64_cast(f)
+  //   return new UInt64(low, wasm.get_high())
+  // }
+  // Int64Base.prototype.toFloat64Cast = function toFloat64Cast() {
+  //   return wasm.cast_f64(this._low, this._high)
+  // }
 
   SInt64.prototype.mul = function mul(m :Int64) :SInt64 {
     let low = wasm.mul(this._low, this._high, m._low, m._high)
@@ -1107,6 +1146,8 @@ if (wasm != null) {
 
 SInt64.prototype.shr = Int64Base.prototype.shr_s
 UInt64.prototype.shr = Int64Base.prototype.shr_u
+
+SInt64.fromFloat64Cast = UInt64.fromFloat64Cast
 
 const S64_TWO_PWR_24 = new SInt64((1 << 24) | 0, 0)
 

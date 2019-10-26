@@ -12,7 +12,7 @@ import {
 
 TEST('basic', () => {
   let s, u
-  
+
   s = new SInt64(0xFFFFFFFF | 0, 0x7FFFFFFF | 0)
   assertEq(s.toFloat64(), 9223372036854775807)
   assertEq(s.toString(10), "9223372036854775807")
@@ -28,7 +28,7 @@ TEST('basic', () => {
 
 TEST('constants', () => {
   let s, u
-  
+
   s = new SInt64(0xFFFFFFFF | 0, 0x7FFFFFFF | 0)
   assert(s.constructor === SInt64.MAX.constructor)
   assert(s.eq(SInt64.MAX))
@@ -204,7 +204,7 @@ TEST('fromInt32', () => {
 
   s = SInt64.fromInt32(0x7FFFFFFF)
   assertEq(s.toString(10), '2147483647')
-  
+
   s = SInt64.fromInt32(0xFFFFFFFF)
   assertEq(s.toString(10), '-1')
 
@@ -359,17 +359,37 @@ TEST('maybeFromFloat64/u', () => {
 })
 
 
+TEST('float64cast', () => {
+  let u :UInt64, f :number
+  let fin = 3.141592653589793 // ~PI
+
+  // main implementation (possibly wasm)
+  u = UInt64.fromFloat64Cast(fin)
+  assertEq(u.toString(16), "400921fb54442d18")
+  assertEq(u.toFloat64Cast(), fin)
+
+  const UInt64c = UInt64 as any
+  if (UInt64c._js_fromFloat64Cast) {
+    // JS implementation
+    const UInt64p = UInt64.prototype as any
+    u = UInt64c._js_fromFloat64Cast(fin)
+    assertEq(u.toString(16), "400921fb54442d18")
+    assertEq(UInt64p._js_toFloat64Cast.call(u), fin)
+  }
+})
+
+
 TEST('sign-conv', () => {
   let s, u
 
   s = SInt64.fromFloat64(-1)
   assertEq(s.toFloat64(), -1)
   assertEq(s.toString(10), '-1')
-  
+
   u = s.toUnsigned()
   assertEq(u.toFloat64(), 0xFFFFFFFFFFFFFFFF)
   assertEq(u.toString(16), 'ffffffffffffffff')
-  
+
   s = u.toSigned()
   assertEq(s.toFloat64(), -1)
   assertEq(s.toString(10), '-1')

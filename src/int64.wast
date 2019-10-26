@@ -15,8 +15,30 @@
     (get_global $high)
   )
 
+  ;; (func $f64_cast (param $f f64) (result i32)
+  ;;   ;; f64 -> i64
+  ;;   (local $result i64)
+  ;;   (set_local $result
+  ;;              (i64.reinterpret/f64 (get_local $f)) )
+  ;;   (set_global $high
+  ;;               (i32.wrap/i64
+  ;;                 (i64.shr_s (get_local $result)
+  ;;                            (i64.const 32) ) ) )
+  ;;   (i32.wrap/i64 (get_local $result))
+  ;; )
+
+  ;; (func $cast_f64 (param $xl i32) (param $xh i32) (result f64)
+  ;;   ;; i64 -> f64
+  ;;   (f64.reinterpret/i64
+  ;;     (i64.or
+  ;;       (i64.extend_u/i32 (get_local $xl))
+  ;;       (i64.shl (i64.extend_u/i32 (get_local $xh)) (i64.const 32))
+  ;;     )
+  ;;   )
+  ;; )
+
   (func $popcnt (param $xl i32) (param $xh i32) (result i32)
-    (local $result i64)
+    ;; (local $result i64)
     ;;
     ;; i32(popcnt((u64(xl) | (u64(xh) << 32))))
     ;;
